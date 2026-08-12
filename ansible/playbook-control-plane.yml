@@ -50,6 +50,46 @@
         filename: docker
         state: present
 
+    # caios_server has a 20 GB root disk with ~12 GB free, and a 125 GB volume
+    # already mounted at /mnt. The control-plane images (Keycloak, Vault, PAPI,
+    # dashboard, Caddy) plus build layers will not fit comfortably on root, so
+    # point Docker at the big disk before installing it — moving data-root
+    # afterwards means copying or losing whatever is already there.
+    #
+    # Note this deliberately does NOT repartition or reformat. /mnt is ext4 and
+    # stays ext4: XFS is only needed on Nomad *client* nodes, where Docker
+    # enforces a per-container disk quota. Nothing on the control plane does.
+    - name: Check that /mnt is the mounted data volume
+      ansible.builtin.command: findmnt -no SOURCE,FSTYPE /mnt
+      register: mnt_check
+      changed_when: false
+      failed_when: false
+
+    - name: Report the data volume
+      ansible.builtin.debug:
+        msg: >-
+          {{ '/mnt is ' ~ mnt_check.stdout ~ ' — Docker will store images there.'
+             if mnt_check.rc == 0
+             else '/mnt is NOT a separate mount. Docker will use the root disk, which has little free space. Attach and mount a volume first.' }}
+
+    - name: Create the Docker data directory on the volume
+      ansible.builtin.file:
+        path: /mnt/docker
+        state: directory
+        mode: "0711"
+      when: mnt_check.rc == 0
+
+    - name: Point Docker's storage at the volume
+      ansible.builtin.copy:
+        content: |
+          {
+            "data-root": "/mnt/docker"
+          }
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+      when: mnt_check.rc == 0
+      register: docker_daemon_conf
+
     - name: Install Docker Engine and the Compose plugin
       ansible.builtin.apt:
         name:
@@ -66,6 +106,21 @@
         name: docker
         state: started
         enabled: true
+
+    - name: Restart Docker if its storage location changed
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+      when: docker_daemon_conf is defined and docker_daemon_conf.changed
+
+    - name: Confirm where Docker is storing data
+      ansible.builtin.command: docker info -f '{{ "{{" }}.DockerRootDir{{ "}}" }}'
+      register: docker_root
+      changed_when: false
+
+    - name: Report Docker's storage location
+      ansible.builtin.debug:
+        msg: "Docker root directory: {{ docker_root.stdout }}"
 
     - name: Let the login user run docker without sudo
       ansible.builtin.user:

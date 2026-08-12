@@ -21,15 +21,60 @@ Next action is Stage 1, which needs SSH keys distributed and volumes confirmed.
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
-**Blocking Stage 1:**
+**Blocking Stage 1 — one thing, ten minutes:**
 
-1. An SSH key on `caios_server` whose public half is on the other four nodes.
-   Right now `~/.ssh/` here holds only `authorized_keys` — no private key — so
-   Ansible cannot reach anything.
-2. Confirmation that the three site nodes have a **second volume** attached.
-   `caios_server` shows only `/dev/vda`; the site nodes need `/dev/vdb`.
+Install the cluster public key on the other four nodes. It needs a credential
+only on your laptop, so it cannot be done from here. Step by step in
+`docs/ssh-setup.md`; verify with `bash scripts/check-ssh.sh`.
 
-Neither is a code change. Both are OpenStack or shell tasks.
+That same check also reports each site node's disk layout, which answers the
+second prerequisite: confirming their `/mnt` holds nothing worth keeping before
+the Nomad playbook reformats it.
+
+---
+
+## 2026-08-12 — Stage 0: SSH, disks, and a correction
+
+**Correction: the second volume was already there.** An earlier note said
+`caios_server` had no data volume. That was wrong — it came from truncated
+command output. Every instance has a **125 GB volume at `/dev/vdb`, formatted
+ext4, mounted at `/mnt`**. That is why this repository lives at `/mnt/CAIOS`.
+
+This changes the disk plan and surfaces a hazard:
+
+- **`caios_server` keeps `/mnt` as ext4, untouched.** Nothing on the control
+  plane needs per-container disk quotas. `playbook-control-plane.yml` simply
+  points Docker's storage at `/mnt/docker`, which matters because the root disk
+  has only ~12 GB free and the control-plane images will not fit there.
+- **The three site nodes get `/mnt` repartitioned and reformatted as XFS**, at
+  `/mnt/data`. This is required — Docker's `storage-opt` disk limits only work
+  on XFS, and the cluster test asserts the device path `/dev/vdb1` literally.
+- **That step erases `/mnt` on those nodes.** `caios_server` is deliberately
+  absent from the `nomad_volume` inventory group, with a warning at the group
+  saying why. One typo there would delete this repository.
+
+**SSH.** `caios_server` had no private key at all — only `authorized_keys` — so
+it could accept connections but never make one. Generated a dedicated cluster
+keypair here (`~/.ssh/caios_cluster`) rather than copying a personal key onto a
+shared node: it is scoped to this cluster and revocable by deleting four lines.
+
+Installing its public half is the one step that cannot be automated from here,
+because it needs a credential only on your laptop. `docs/ssh-setup.md` covers
+both routes; `scripts/check-ssh.sh` verifies the result using the cluster key
+alone, with agent forwarding and passwords disabled, so a pass means Ansible
+will work unattended.
+
+Ran it: all four nodes answer at the network level and reject the key, which is
+exactly the expected state. Network connectivity is confirmed; only
+authorisation is missing.
+
+**Repository made private-safe.** Rewrote git history to purge the four internal
+documents from all thirteen commits, and force-pushed. Verified zero occurrences
+across every remaining ref; the files are still on disk. Full backup taken first
+at `/home/ubuntu/caios-backup-20260812-0416.bundle`. Hardened `.gitignore` with
+catch-all rules for credentials, OpenStack RC files, private keys, Terraform
+state and internal notes, so the next sensitive file is ignored by default
+rather than by memory.
 
 ---
 

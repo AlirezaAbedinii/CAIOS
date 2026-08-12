@@ -59,9 +59,8 @@ compose/generated/
 # ---------------------------------------------------------------------------
 # Local-only working documents.
 #
-# These stay on disk and are shared between the two of us by other means; they
-# are not in the public repository because they contain internal framing —
-# grant context, supervisor questions, team size and budget.
+# Internal framing — grant context, supervisor questions, team size, budget.
+# Kept on disk, shared between us directly, never committed.
 #
 # The technical content that outlives them lives in README.md, docs/scope.md,
 # docs/infrastructure.md, docs/decisions.md and docs/runbook.md.
@@ -70,3 +69,36 @@ CLAUDE.md
 docs/context.md
 docs/questions-for-supervisor.md
 docs/phase-plan.md
+
+# Catch-all for internal notes: anything ending in .local.md, and a private/
+# directory for whatever does not fit a rule above. Prefer these over
+# remembering to add each new file.
+*.local.md
+private/
+notes/
+
+# ---------------------------------------------------------------------------
+# Credentials and infrastructure detail.
+#
+# The repo is deliberately free of anything that grants access. Real values
+# live in configs/env/caios.env (gitignored) or ansible-vault.
+# ---------------------------------------------------------------------------
+*.kubeconfig
+*.ovpn
+clouds.yaml
+*openrc*
+*-openrc.sh
+id_rsa*
+id_ed25519*
+*.ppk
+known_hosts
+authorized_keys
+*.token
+*.secret
+*credentials*
+*.tfstate
+*.tfstate.*
+
+# Anything the tooling writes with real values in it
+compose/generated/
+configs/env/caios.env

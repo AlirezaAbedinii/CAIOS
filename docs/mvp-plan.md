@@ -80,9 +80,11 @@ IPs. Fill them into `ansible/inventory/hosts.ini` and
 Goal: a job deployed by hand is reachable over HTTPS at its own subdomain.
 
 - [x] Node addresses confirmed and written into the inventory and caios.env
-- [ ] **Distribute an SSH key**: generate one on caios_server, add the public
-      half to the other four nodes. Ansible cannot reach anything without it.
-- [ ] **Confirm each site node has a second volume** visible as `/dev/vdb`
+- [x] Cluster SSH key generated on caios_server (`~/.ssh/caios_cluster`)
+- [ ] **Install its public half on the other four nodes** — `docs/ssh-setup.md`,
+      ten minutes, needs your laptop's key. Verify: `bash scripts/check-ssh.sh`
+- [ ] **Confirm the site nodes' `/mnt` holds nothing of value** — the Nomad
+      playbook reformats that volume. `check-ssh.sh` reports the contents.
 - [ ] Create the four security groups (`scripts/openstack-security-groups.sh`
       prints the exact commands; nothing runs without approval)
 - [ ] `ansible-galaxy install grycap.docker`

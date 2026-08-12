@@ -85,8 +85,17 @@ certificates to talk to Nomad. On this node those certificates already exist at
 port 4646 across the network. That removes a whole class of debugging, and it
 frees a node to be a third hospital site.
 
-**Measured specs:** 3 vCPU, 34 GB RAM, 20 GB disk (`/dev/vda` only), one
-`NVIDIA H100L-1-12C` (a 12 GB slice of an H100), Ubuntu 22.04.5.
+**Measured specs:** 3 vCPU, 34 GB RAM, 20 GB root disk plus a 125 GB volume at
+`/mnt`, one `NVIDIA H100L-1-12C` (a 12 GB slice of an H100), Ubuntu 22.04.5.
+
+Two consequences:
+
+- The root disk has only ~12 GB free, which will not hold the control-plane
+  images. `playbook-control-plane.yml` points Docker's storage at `/mnt` before
+  installing it — moving it afterwards means copying or losing data.
+- **`/mnt` on this node must never be reformatted.** This repository lives at
+  `/mnt/CAIOS`. `caios_server` is deliberately absent from the `nomad_volume`
+  inventory group for that reason.
 
 > 3 vCPU is on the small side for five containers plus two cluster servers.
 > Workable, but if the control plane feels sluggish this is the first thing to
@@ -118,11 +127,23 @@ stands for a hospital, holds its own slice of the data, and trains locally —
 the model weights travel, the data does not. Three separate machines make that
 structurally true rather than a claim on a slide.
 
-**Each needs a second volume attached, which Ansible formats XFS.** Docker's
-per-container disk limits require XFS, and the cluster test suite asserts the
-device path `/dev/vdb` literally. `caios_server` shows only `/dev/vda`, so it is
-worth confirming the site nodes actually have a second disk before running the
-Nomad playbook — if they do not, this is an OpenStack task first.
+**Each has a second volume, and Ansible will reformat it.** These instances ship
+with a 125 GB volume at `/dev/vdb`, already formatted ext4 and already mounted at
+`/mnt`. For the three site nodes, `playbook-nomad.yml` repartitions it, formats
+it **XFS**, and mounts it at `/mnt/data`.
+
+That step **erases whatever is on `/mnt`** on those nodes. Confirm they hold
+nothing of value first — the check is in `ansible/inventory/hosts.ini`.
+
+Why XFS rather than leaving it alone: Docker limits how much disk each container
+can use via `storage-opt`, and that only works on XFS with project quotas. Without
+it a single runaway deployment fills the node. The cluster test suite also asserts
+the device path `/dev/vdb1` literally, so a node left as-is is marked failed and
+receives no work.
+
+**This applies only to Nomad client nodes.** `caios_server` keeps its `/mnt` as
+ext4, untouched — nothing on the control plane needs per-container quotas, and
+this repository lives there.
 
 ### 192.168.104.188 — the sixth instance
 

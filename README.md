@@ -23,6 +23,7 @@ simulated hospital sites where the data never leaves each site.
 | See what has actually been done so far | [docs/progress.md](docs/progress.md) |
 | Understand Nomad, Consul and Traefik | [docs/concepts.md](docs/concepts.md) |
 | Operate or debug a running cluster | [docs/runbook.md](docs/runbook.md) |
+| Give the cluster SSH access to itself | [docs/ssh-setup.md](docs/ssh-setup.md) |
 
 ---
 
@@ -32,9 +33,8 @@ Everything below the first step is written and committed. The first step is the 
 thing blocking.
 
 ```bash
-# 0. Fill in the five node IPs and the two floating IPs
-cp configs/env/caios.env.template configs/env/caios.env
-$EDITOR configs/env/caios.env ansible/inventory/hosts.ini
+# 0. One-time: give caios_server SSH access to the others (docs/ssh-setup.md)
+bash scripts/check-ssh.sh
 
 # 1. Pin and fetch upstream (read-only, into vendor/)
 bash scripts/clone-vendor.sh
@@ -48,9 +48,11 @@ bash scripts/render-configs.sh
 # 4. Wildcard certificate for deployments
 bash scripts/make-traefik-certs.sh
 
-# 5. Cluster
+# 5. Cluster.  WARNING: playbook-nomad.yml reformats /dev/vdb on the three
+#    site nodes, erasing their /mnt. See ansible/inventory/hosts.ini.
 cd ansible
 ansible-galaxy install grycap.docker
+ansible-playbook playbook-control-plane.yml   # Docker on caios_server
 ansible-playbook playbook-consul.yml
 ansible-playbook playbook-nomad.yml
 cd ..

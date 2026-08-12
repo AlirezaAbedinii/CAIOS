@@ -1,0 +1,50 @@
+# Upstream clones — read-only, never edited, never committed
+vendor/
+
+# Secrets. Real values live here; committed files carry placeholders only.
+.env
+*.env
+!*.env.template
+!template.env
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*_token
+*-token
+vault-init.json
+ansible-vault-pass*
+
+# Certificate bundles produced by scripts/make-traefik-certs.sh
+certs/
+*.zip
+
+# Datasets — public data, but too big to track
+data/
+demo/data/
+*.nii
+*.nii.gz
+*.dcm
+*.npz
+
+# Ansible / SSH runtime
+# NOTE: ansible/inventory/ IS tracked. Private IPs are not secrets and both
+# engineers need the same inventory. Passwords go in ansible-vault, never here.
+*.retry
+ssh/config
+
+# Python / Node
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+dist/
+
+# Editors / OS
+.DS_Store
+.idea/
+*.swp

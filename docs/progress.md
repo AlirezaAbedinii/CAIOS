@@ -103,9 +103,13 @@ through OpenVPN and a jumpserver. Reworked accordingly:
 | `caios_site_c` | 192.168.104.7 | GPU compute — "Hospital C" |
 | *unassigned* | 192.168.104.188 | Sixth instance, deliberately left out until identified |
 
-**Measured on `caios_server`:** 3 vCPU, 34 GB RAM, 20 GB disk, one
-`NVIDIA H100L-1-12C` (12 GB slice), Ubuntu 22.04.5. Two things follow: no node
-can host CVAT (~72 GB in one place), and no second volume is attached here.
+**Measured on `caios_server`:** 3 vCPU, 34 GB RAM, 20 GB root disk, one
+`NVIDIA H100L-1-12C` (12 GB slice), Ubuntu 22.04.5. No node can host CVAT, which
+needs ~72 GB of RAM in one place.
+
+> *Corrected the same day:* this entry originally said no second volume was
+> attached. There is one — 125 GB at `/dev/vdb`, mounted at `/mnt`. See the
+> entry above.
 
 **`configs/env/caios.env` created** with the real addresses and freshly generated
 secrets, mode `600`, confirmed gitignored. Rendering verified end to end.

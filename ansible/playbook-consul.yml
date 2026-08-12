@@ -1,12 +1,59 @@
 ---
-# CAIOS entrypoint for the upstream Consul playbook.
+# CAIOS: install Consul on all five nodes.
 #
-# Wrapper rather than calling vendor/ directly, for two reasons:
-#   1. Ansible loads group_vars/ adjacent to the *playbook*. Keeping the
-#      entrypoint here is what makes ansible/group_vars/all.yml take effect
-#      instead of the vendored IFCA defaults.
-#   2. vendor/ is read-only. We never run out of it or edit it.
+#   cd ansible && ansible-playbook playbook-consul.yml
 #
-# Run from the ansible/ directory:
-#   ansible-playbook playbook-consul.yml
-- import_playbook: ../vendor/ai4-ansible/playbook-consul.yaml
+# This mirrors vendor/ai4-ansible/playbook-consul.yaml rather than importing it.
+#
+# WHY NOT import_playbook
+# -----------------------
+# Ansible loads group_vars/ relative to the *playbook's own directory*. With
+# `import_playbook: ../vendor/...`, that directory becomes vendor/ai4-ansible/,
+# so upstream's IFCA group_vars won and every one of our settings was silently
+# ignored — the first run created certificates under an "ifca-imagine"
+# datacenter. Nothing errored; it just built the wrong cluster.
+#
+# Defining the play here keeps the playbook directory at ansible/, so
+# ansible/group_vars/all.yml is what applies. The role itself still comes from
+# vendor/ via roles_path, and is never edited.
+
+- name: Install Consul
+  hosts: consul
+  become: true
+
+  pre_tasks:
+    - name: "Safety check: this playbook builds a cluster from scratch"
+      ansible.builtin.assert:
+        that:
+          - from_scratch_cluster_installation
+        fail_msg: "ABORTING FROM-SCRATCH CONSUL INSTALLATION"
+        success_msg: "INSTALLING CONSUL FROM SCRATCH"
+
+    # Guards against the failure above recurring silently. If these are not our
+    # values, group_vars is not being read and the run must stop.
+    - name: "Safety check: our variables are actually in effect"
+      ansible.builtin.assert:
+        that:
+          - consul_dc_name == "caios"
+          - nomad_region == "global"
+        fail_msg: >-
+          group_vars/all.yml is not being applied — got
+          consul_dc_name={{ consul_dc_name }}, nomad_region={{ nomad_region }}.
+          Expected caios/global. Run this playbook from the ansible/ directory.
+        success_msg: "Using CAIOS variables (datacenter={{ consul_dc_name }})"
+
+
+    - name: "Safety check: no unfilled placeholders in group_vars"
+      ansible.builtin.assert:
+        that:
+          - "'<' not in (consul_public_ip | string)"
+          - "'<' not in (ansible_master.ip | string)"
+        fail_msg: >-
+          group_vars/all.yml still contains template placeholders
+          (consul_public_ip={{ consul_public_ip }}). Consul clients would try to
+          resolve that literal string as a hostname, join nothing, and leave a
+          single-node cluster that looks healthy from the server.
+        success_msg: "Addresses look real (consul_public_ip={{ consul_public_ip }})"
+  roles:
+    - role: consul
+      when: from_scratch_cluster_installation

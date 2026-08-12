@@ -1,10 +1,72 @@
 ---
-# CAIOS entrypoint for the upstream Nomad playbook.
-# See playbook-consul.yml for why this wrapper exists.
+# CAIOS: install Nomad on all five nodes, and deploy Traefik.
 #
-# Run from the ansible/ directory, AFTER playbook-consul.yml has succeeded:
-#   ansible-playbook playbook-nomad.yml
+#   cd ansible && ansible-playbook playbook-nomad.yml
 #
-# This playbook also deploys Traefik (as a Nomad job on caios_edge) and creates
-# the Nomad namespaces listed in group_vars/all.yml.
-- import_playbook: ../vendor/ai4-ansible/playbook-nomad.yaml
+# Run AFTER playbook-consul.yml has succeeded.
+#
+# Mirrors vendor/ai4-ansible/playbook-nomad.yaml rather than importing it — see
+# playbook-consul.yml for why (importing shifts which group_vars Ansible reads,
+# and upstream's IFCA values silently win).
+#
+#   !!  This playbook REFORMATS /dev/vdb on every host in the nomad_volume
+#       group: caios_site_a, caios_site_b, caios_site_c. Their /mnt is erased.
+#       Verified empty on 2026-08-12 — only lost+found.
+#
+#       caios_server is NOT in that group and must never be added: this
+#       repository lives on its volume at /mnt/CAIOS.
+#
+# It also installs the NVIDIA container toolkit on GPU clients. The NVIDIA
+# *driver* role that grycap.docker pulls in as a dependency is shadowed by our
+# stub at roles/NVIDIA.nvidia_driver — without it, upstream would install a
+# public driver over the vGPU guest driver and reboot the node.
+
+- name: Install Nomad
+  hosts: nomad
+  become: true
+
+  pre_tasks:
+    - name: "Safety check: this playbook builds a cluster from scratch"
+      ansible.builtin.assert:
+        that:
+          - from_scratch_cluster_installation
+        fail_msg: "ABORTING FROM-SCRATCH NOMAD INSTALLATION"
+        success_msg: "INSTALLING NOMAD FROM SCRATCH"
+
+    - name: "Safety check: our variables are actually in effect"
+      ansible.builtin.assert:
+        that:
+          - consul_dc_name == "caios"
+          - nomad_region == "global"
+        fail_msg: >-
+          group_vars/all.yml is not being applied — got
+          consul_dc_name={{ consul_dc_name }}, nomad_region={{ nomad_region }}.
+          Expected caios/global. Run this playbook from the ansible/ directory.
+        success_msg: "Using CAIOS variables (region={{ nomad_region }})"
+
+
+    - name: "Safety check: no unfilled placeholders in group_vars"
+      ansible.builtin.assert:
+        that:
+          - "'<' not in (consul_public_ip | string)"
+          - "'<' not in (ansible_master.ip | string)"
+        fail_msg: >-
+          group_vars/all.yml still contains template placeholders
+          (consul_public_ip={{ consul_public_ip }}). Consul clients would try to
+          resolve that literal string as a hostname, join nothing, and leave a
+          single-node cluster that looks healthy from the server.
+        success_msg: "Addresses look real (consul_public_ip={{ consul_public_ip }})"
+    - name: "Safety check: the control-plane node is not in nomad_volume"
+      ansible.builtin.assert:
+        that:
+          - "'caios_server' not in (groups['nomad_volume'] | default([]))"
+        fail_msg: >-
+          caios_server is in the nomad_volume group. This playbook would
+          reformat its /dev/vdb, destroying /mnt/CAIOS. Remove it from that
+          group in inventory/hosts.ini before continuing.
+        success_msg: "Control-plane volume is not in scope for reformatting"
+      run_once: true
+
+  roles:
+    - role: nomad
+      when: from_scratch_cluster_installation

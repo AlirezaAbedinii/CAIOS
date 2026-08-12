@@ -1,0 +1,60 @@
+---
+# STUB. Deliberately shadows the Ansible Galaxy role of the same name.
+#
+# WHY THIS EXISTS
+# ---------------
+# `grycap.docker` declares a hard role dependency:
+#
+#     dependencies:
+#       - role: 'NVIDIA.nvidia_driver'
+#         nvidia_driver_branch: "{{ docker_nvidia_driver_version }}"
+#         when: docker_nvidia_support | bool
+#
+# and ai4-ansible's nomad role sets docker_nvidia_support=true on every GPU
+# client. So the upstream driver role runs on our three site nodes whether we
+# want it or not — role dependencies cannot be skipped with tags or variables.
+#
+# What the real role does, with no check for an existing driver:
+#   1. unloads nouveau
+#   2. apt-installs nvidia-driver-<branch> from Canonical's repositories
+#   3. REBOOTS the node
+#
+# Why that is dangerous here: these are vGPU guests (NVIDIA H100L-1-12C). The
+# working driver is 580.105.08, installed with NVIDIA's .run installer and
+# therefore invisible to dpkg — `dpkg -l | grep -c nvidia` returns 0. apt would
+# cheerfully install the older public 550 driver alongside it, which does not
+# support vGPU, and then reboot. All three GPU nodes would come back without
+# working GPUs, at the point in the schedule where that is most expensive.
+#
+# So: verify rather than install. If a node ever genuinely lacks a driver, this
+# fails loudly and says what to do, instead of silently doing the wrong thing.
+#
+# The container toolkit is NOT stubbed out. grycap.docker installs
+# nvidia-container-toolkit separately (tasks/docker_nvidia.yml), that part is
+# correct and still runs, and it is what actually gives containers GPU access.
+
+- name: "Confirm the NVIDIA driver is already present (stub — no install)"
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version,name --format=csv,noheader
+  register: caios_nvidia_smi
+  changed_when: false
+  failed_when: false
+
+- name: "Fail clearly if no working driver was found"
+  ansible.builtin.fail:
+    msg: |
+      No working NVIDIA driver on {{ inventory_hostname }}.
+
+      This stub role deliberately does not install one, because these nodes run
+      a vGPU guest driver that is not managed by apt, and the upstream role
+      would replace it with an incompatible public driver and reboot.
+
+      Install the correct vGPU guest driver on this node by hand, confirm
+      `nvidia-smi` works, then re-run.
+
+      To use the real upstream role instead, remove
+      ansible/roles/NVIDIA.nvidia_driver/ and understand what it will do first.
+  when: caios_nvidia_smi.rc != 0
+
+- name: "Report the driver in use"
+  ansible.builtin.debug:
+    msg: "GPU OK on {{ inventory_hostname }}: {{ caios_nvidia_smi.stdout }}"

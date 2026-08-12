@@ -1,0 +1,87 @@
+---
+# CAIOS: wipe Consul and Nomad back to nothing, so the install playbooks can
+# run from a clean slate.
+#
+#   cd ansible && ansible-playbook playbook-reset-cluster.yml
+#
+#   !!  DESTRUCTIVE. Removes all Consul and Nomad state, configuration and
+#       certificates on every node, and every running Nomad job with them.
+#       It does NOT touch /mnt, Docker images, or this repository.
+#
+# When you need it: Consul and Nomad both refuse to start if their datacenter
+# or region changes while old state exists on disk. So a first run with wrong
+# variables cannot simply be corrected by re-running with the right ones —
+# the stale data has to go first.
+#
+# Safe to run against a cluster that was never installed; every task is
+# conditional on the thing existing.
+
+- name: Reset Consul and Nomad
+  hosts: nomad:consul
+  become: true
+
+  tasks:
+
+    - name: Stop the services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - nomad
+        - consul
+      failed_when: false          # not installed yet is fine
+
+    - name: Remove state, configuration and certificates
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ consul_data_dir }}"     # /opt/consul  — raft state, the DC name
+        - "{{ consul_config_dir }}"   # /etc/consul.d — config and certs
+        - "{{ nomad_data_dir }}"      # /opt/nomad
+        - "{{ nomad_config_dir }}"    # /etc/nomad.d
+      # NOTE: deliberately omits mount_dir (/mnt/data) and /mnt. On the site
+      # nodes Nomad's data_dir points at the volume, which the nomad playbook
+      # reformats anyway; on caios_server /mnt holds this repository.
+
+    # These matter more than they look. The role guards ACL bootstrap with
+    # `creates: {{ path }}consul_bootstrap`, so a leftover file makes it skip
+    # bootstrapping entirely and then reuse a token that no longer exists in the
+    # wiped raft store. Every subsequent ACL call fails, and the visible symptom
+    # is a timeout waiting for an agent token file — nowhere near the cause.
+    - name: Find generated certificates, tokens and keys in the home directory
+      ansible.builtin.find:
+        paths: "{{ path }}"
+        patterns:
+          - "consul_bootstrap"
+          - "consul_keygen"
+          - "*_consul_token"
+          - "consul_replication_token"
+          - "*consul*.pem"
+          - "*nomad*.pem"
+          - "nomad_*"
+        file_type: any
+      register: caios_stale_artifacts
+
+    - name: Remove them
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ caios_stale_artifacts.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Remove fetched certificates and tokens from the Ansible controller
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ path }}{{ consul_dc_name }}"
+        - "{{ path }}ifca-imagine"     # leftovers from a run before group_vars applied
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} reset. Re-run playbook-consul.yml, then playbook-nomad.yml."

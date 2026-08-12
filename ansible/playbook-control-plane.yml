@@ -79,6 +79,16 @@
         mode: "0711"
       when: mnt_check.rc == 0
 
+    # Must exist before the config is written: Docker is not installed yet, and
+    # the package would otherwise create this directory only at install time —
+    # after the point where we need the setting in place.
+    - name: Create Docker's configuration directory
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        mode: "0755"
+      when: mnt_check.rc == 0
+
     - name: Point Docker's storage at the volume
       ansible.builtin.copy:
         content: |

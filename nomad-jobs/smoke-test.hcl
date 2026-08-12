@@ -2,13 +2,16 @@
 CAIOS Stage 1 gate: prove a job can be scheduled AND reached over HTTPS at its
 own subdomain, before PAPI exists to blame.
 
-  export BASE_DOMAIN=pacs-deployments.<CAIOS_EDGE_IP>.sslip.io
-  nomad job run -var-file=/dev/null nomad-jobs/smoke-test.hcl
+  # NOTE the value: "deployments.<ip>.sslip.io", WITHOUT the "pacs-" prefix.
+  # The service tag below prepends ${meta.domain}- itself (meta.domain is "pacs"),
+  # so including it here produces smoke.pacs-pacs-deployments... and a 404 from
+  # Traefik. This must match lb.domain in configs/papi/main.yaml exactly.
+  export BASE_DOMAIN=deployments.<CAIOS_EDGE_IP>.sslip.io
 
-  (or, without HCL variables:)
-  sed "s|BASE_DOMAIN_PLACEHOLDER|$BASE_DOMAIN|" nomad-jobs/smoke-test.hcl | nomad job run -
+  sed "s|BASE_DOMAIN_PLACEHOLDER|$BASE_DOMAIN|" nomad-jobs/smoke-test.hcl \
+    | nomad job run -
 
-Then open:  https://smoke.<BASE_DOMAIN>
+Then open:  https://smoke.pacs-$BASE_DOMAIN
 
 This job deliberately mirrors the constraints in PAPI's own templates
 (etc/modules/nomad.hcl). If this job schedules and answers, a real deployment

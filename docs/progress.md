@@ -5,10 +5,10 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 1 nearly complete.** Consul, Nomad and Traefik are running
-across all five nodes. One step remains before the gate: run `ai4-nomad_tests`
-to flip each compute node's `meta.status` from `test` to `ready`, without which
-no deployment can be scheduled.
+**Where we are: Stage 1 complete.** The cluster is live and proven — a job
+deployed by hand is reachable over HTTPS at its own subdomain with a verified
+certificate, and all four nodes are marked ready for work. Next is Stage 2:
+Keycloak and Vault.
 
 ---
 
@@ -17,7 +17,7 @@ no deployment can be scheduled.
 | Stage | What it delivers | State |
 |---|---|---|
 | 0 — Local scaffold | Every config, script and patch, written and self-tested | **Done** |
-| 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **In progress** — all services up; nodes need marking ready |
+| 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **Done** — gate passed |
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | Not started |
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | Not started |
 | 4 — Federated learning | Training across three sites | Not started |
@@ -25,9 +25,56 @@ no deployment can be scheduled.
 
 **Nothing is blocking.** Next actions, in order:
 
-1. Run the patched `ai4-nomad_tests` so compute nodes reach `meta.status=ready`.
-2. Deploy `nomad-jobs/smoke-test.hcl` and open it over HTTPS — the Stage 1 gate.
-3. Stage 2: Keycloak and Vault.
+1. Stage 2 — bring up Keycloak and Vault, create the realm and demo users,
+   and get a token PAPI will accept.
+2. Stage 3 — PAPI and the dashboard.
+
+---
+
+## 2026-08-12 — STAGE 1 GATE PASSED
+
+A container scheduled by Nomad, routed by Traefik, reached over HTTPS at its own
+subdomain with a **verified** certificate:
+
+```
+$ curl https://smoke.pacs-deployments.192.168.104.105.sslip.io
+HTTP 200   TLS verify: 0 (0 = certificate verified)
+
+Server address: 172.17.0.3:80
+Server name: 9eb2dfd5d032
+```
+
+All four nodes report `meta.status=ready`. The cluster can now schedule work.
+
+**The certificate needed rework.** The original wildcard was a bare self-signed
+leaf — `CA:FALSE` — which nothing can be configured to trust: not curl, not
+Python's `requests`, not a browser's "always trust". That is survivable until
+something automated checks HTTPS, and `ai4-nomad_tests` does exactly that,
+raising "Invalid SSL certificates". Since that suite is also the only thing that
+marks nodes ready, an untrustable certificate blocked the entire cluster.
+
+Replaced with a proper two-tier setup: a local CA (`~/caios-ca.pem`, 10 years)
+signing the wildcard. One file to trust, in one place. The CA is installed in the
+system trust store for curl, passed to Python tooling via `REQUESTS_CA_BUNDLE`,
+and can be imported into a browser once to remove warnings entirely — a
+noticeably better demo experience than clicking through a warning screen.
+
+**The gate proved more than it looks.** For that request to return 200, all of
+this had to be working: Nomad placed the job against four constraints; Docker
+pulled and ran it; Consul registered the service and its Traefik tags; Traefik
+read those tags and built a route; sslip.io resolved the wildcard hostname; and
+the TLS chain validated. A single 200 covers the whole path.
+
+**One mistake worth recording**, because it will recur: the first attempt
+returned 404. The job template builds its hostname as
+`<name>.${meta.domain}-<BASE_DOMAIN>`, and `meta.domain` is already `pacs` — so
+passing `pacs-deployments...` as the base produced
+`smoke.pacs-pacs-deployments...`. The base domain must be
+`deployments.<ip>.sslip.io`, matching `lb.domain` in `configs/papi/main.yaml`
+exactly. Noted in the job file itself now.
+
+`scripts/run-cluster-tests.sh` captures the full invocation — namespaces, base
+domain and CA bundle — so nobody has to reconstruct it.
 
 ---
 

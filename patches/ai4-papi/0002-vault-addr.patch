@@ -1,0 +1,28 @@
+--- a/ai4papi/routers/v1/secrets.py	2026-08-12 02:53:38.945707461 +0000
++++ b/ai4papi/routers/v1/secrets.py	2026-08-12 02:53:53.769742892 +0000
+@@ -2,6 +2,8 @@
+ Manage user secrets with Vault
+ """
+ 
++import os
++
+ import hvac
+ import hvac.exceptions
+ from fastapi import APIRouter, Depends
+@@ -17,7 +19,15 @@
+ )
+ security = HTTPBearer()
+ 
+-VAULT_ADDR = "https://secrets.services.ai4os.eu:8200/"
++# [CAIOS] Upstream points at AI4EOSC's Vault, whose JWT backend trusts their
++# Keycloak and not ours. This is on the critical path of the headline demo:
++# deploying the federated server calls create_secret() and
++# create_vault_token() before Nomad is ever contacted, so an unreachable or
++# untrusting Vault fails the FL deployment with an error that looks nothing
++# like a Vault problem.
++VAULT_ADDR = os.environ.get(
++    "VAULT_ADDR", "https://secrets.services.ai4os.eu:8200/"
++)
+ VAULT_AUTH_PATH = "jwt-keycloak"
+ VAULT_ROLE = ""
+ VAULT_MOUNT_POINT = "/secrets/"

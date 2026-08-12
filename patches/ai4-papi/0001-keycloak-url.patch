@@ -1,0 +1,24 @@
+--- a/ai4papi/auth.py	2026-08-12 02:53:38.945707461 +0000
++++ b/ai4papi/auth.py	2026-08-12 02:53:53.769742892 +0000
+@@ -21,13 +21,20 @@
+  button where you can copy paste your token. So you will be able to access authenticated methods from the interface.
+ """
+ 
++import os
+ import re
+ 
+ from fastapi import HTTPException
+ import jwt
+ 
+ 
+-KEYCLOAK_URL = "https://login.cloud.ai4eosc.eu/realms/ai4eosc"
++# [CAIOS] Upstream hardcodes the AI4EOSC realm here. PAPI validates every
++# token's signature and issuer against this URL, so pointing it at our own
++# Keycloak is the difference between authentication working and every request
++# returning 401. Default kept so an unconfigured checkout behaves as upstream.
++KEYCLOAK_URL = os.environ.get(
++    "KEYCLOAK_URL", "https://login.cloud.ai4eosc.eu/realms/ai4eosc"
++).rstrip("/")
+ jwk_client = jwt.PyJWKClient(f"{KEYCLOAK_URL}/protocol/openid-connect/certs")
+ 
+ AI4OS_LEVELS = ["ap-a", "ap-a1", "ap-b", "ap-u", "ap-d"]

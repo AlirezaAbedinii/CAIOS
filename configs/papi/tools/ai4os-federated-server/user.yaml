@@ -1,0 +1,161 @@
+---
+# User customizable configuration to make a deployment in Nomad.
+# Additional non-customizable values (eg. ports) are hardcoded in `job.nomad`.
+
+# All conf parameters follow the same structure:
+# varname:
+#  name: name of the parameter to be displayed to end user (mandatory)
+#  value: (default) value of the parameter (mandatory)
+#  options: restricted set of values that the parameter can take (optional)
+#  description: some comments on the parameter to be displayed to the end user (optional)
+
+general:
+  title:
+    name: Deployment title
+    value: ''
+    description: Provide short title for this deployment (less than 45 characters). Useful when you have lots of different active deployments.
+
+  desc:
+    name: Deployment description
+    value: ''
+    description: Provide some additional extended information about this deployment.
+
+  co2:
+    name: CO2 emissions monitoring
+    value: False
+    options: [True, False]
+
+  docker_image:
+    name: Docker image
+    value: 'ai4oshub/ai4os-federated-server'
+    description: Docker image to be used. For example `deephdc/deep-oc-image-classification-tf`.
+
+  docker_tag:
+    name: Docker tag
+    value: 'latest'
+    description: Docker tag to use. Tags are module dependent. You should choose the appropriate tag for your selected hardware (eg. use a `gpu`-like tag if you plan to run on GPUs).
+    # [CAIOS] Upstream lists only 'latest'. The 'tokens' image exists on Docker
+    # Hub and is documented in the tool's own README: it issues a per-client
+    # authentication token, which is what lets us say "each hospital gets its
+    # own revocable credential". Requires Vault to be reachable (see
+    # compose/docker-compose.yml).
+    options: ['latest', 'tokens']
+
+  service:
+    name: Service to run
+    # [CAIOS] Default changed from 'fedserver' to 'jupyter'. 'fedserver'
+    # auto-starts the server and gives no window into it; with JupyterLab we
+    # run server.py in front of the audience and they watch the rounds print.
+    # A silent black box is a bad demo.
+    value: 'jupyter'
+    description: When selecting FedServer, you won't be able to use JupyterLab/VScode, and vice versa. If you want to have access to both services at the same time, your best option is to deploy with JupyterLab/VScode. Then, open a terminal window and run FedServer yourself by typing `cd federated-server/fedserver` and then `python3 server.py`. You can also modify `server.py` different federation options than the ones initially selected at creation time.
+    options: ['fedserver', 'jupyter', 'vscode']
+
+  jupyter_password:
+    name: IDE password
+    value: ''
+    description: Select a password for your IDE (JupyterLab or VS Code). It should have at least 9 characters.
+
+hardware:
+  cpu_num:
+    name: Number of CPUs
+    value: 1
+    range: [1, 2]
+
+  ram:
+    name: RAM memory (in MB)
+    value: 2000
+    range: [2000, 8000]
+
+  disk:
+    name: Disk memory (in MB)
+    value: 1000
+    range: [1000, 2000]
+
+flower:
+  rounds:
+    name: Number of rounds
+    value: 5
+    range: [1, null]
+    description: Number of repetitions of the training.
+
+  metric:
+    name: Evaluation metric
+    value: 'accuracy'
+    description: Metric that will be used for monitoring and validating the process. It will be aggregated according with the different clients. More than one metric can be included.
+
+  min_fit_clients:
+    name: Number of minimum clients (fit)
+    # [CAIOS] Default raised from 2 to 3: we have three sites and the demo
+    # should not start aggregating before all three have reported.
+    value: 3
+    range: [2, null]
+    description: Minimum number of clients required for training the model.
+
+  min_available_clients:
+    name: Number of minumum clients (available)
+    # [CAIOS] Raised to 3 to match min_fit_clients (three hospital sites).
+    value: 3
+    range: [2, null]
+    description: Minimum number of clients required in the FL process.
+
+  strategy:
+    name: Federated aggregation strategy
+    value: 'Federated Averaging (FedAvg)'
+    description: Aggregation function or strategy that will be applied for aggregating the models received from the clients. <a href="https://github.com/ai4os/ai4os-federated-server" target="_blank">Check the different options with their references.</a>
+    options: [
+        'Federated Averaging (FedAvg)', # fedavg
+        'FedProx strategy (FedProx)', # fedprox
+        'Federated Optimization with Adam (FedAdam)', # fedadam
+        'Federated Median (FedMedian)', # fedmedian
+        'Federated Averaging with Momentum (FedAvgM)', # fedavgm
+        'Adaptive Federated Optimization (FedOpt)', # fedopt
+        'Adaptive Federated Optimization using Yogi (FedYogi)', # fedyogi
+        'FedAvgOpt', # fedavgopt
+      ]
+
+  mu:
+    name: Mu
+    value: 1
+    range: [0, null]
+    description: In the FedProx strategy, weight of the proximal term used in the optimization.
+
+  fl:
+    name: Learning rate
+    value: 1
+    range: [0, null]
+    description: In the FedAvgM strategy, server-side learning rate for the optimization.
+
+  momentum:
+    name: Momentum
+    value: 0
+    range: [0, null]
+    description: In the FedAvgM strategy, server-side momentum factor.
+
+  dp:
+    name: Differential privacy
+    value: False
+    options: [True, False]
+
+  mp:
+    name: Metric privacy
+    value: False
+    options: [True, False]
+
+  noise_mult:
+    name: Noise multiplier
+    value: 1
+    range: [0.00001, null]
+    description: Noise multiplier for the Gaussian mechanism.
+
+  sampled_clients:
+    name: Number of sampled clients
+    value: 2
+    range: [2, null]
+    description: Number of clients sampled on each FL round.
+
+  clip_norm:
+    name: Clipping norm
+    value: 0.1
+    range: [0.1, null]
+    description: Threshold value for the clipping.

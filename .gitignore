@@ -1,6 +1,10 @@
 # Upstream clones — read-only, never edited, never committed
 vendor/
 
+# Patched copies of upstream, produced by scripts/apply-patches.sh.
+# Regenerated on demand; the patches in patches/ are the source of truth.
+build/
+
 # Secrets. Real values live here; committed files carry placeholders only.
 .env
 *.env

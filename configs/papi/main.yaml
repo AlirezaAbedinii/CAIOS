@@ -1,0 +1,53 @@
+---
+# CAIOS configuration for PAPI.
+#
+# Copied from vendor/ai4-papi/etc/main.yaml at e80a2b7 and rewritten for a
+# single VO. Mounted over /srv/ai4-papi/etc/main.yaml by compose/docker-compose.yml.
+#
+# ${CAIOS_FIP1} is substituted at container start from configs/env/caios.env.
+# If you are reading this before the IPs are known, that is why they are not
+# literal.
+
+self:  # info about the API endpoint
+
+  domain: https://api.${CAIOS_FIP1}.sslip.io
+
+auth:
+
+  CORS_origins:  # allows requests to the API from these domains
+
+    - https://dashboard.${CAIOS_FIP1}.sslip.io
+    - http://localhost:8080          # local dashboard development
+    - ${DASHBOARD_URL}               # expanded by PAPI from the environment
+
+  VO:  # Virtual Organizations
+    # MVP: one VO. V1 splits this into three (one per hospital site) so that a
+    # site's login can only deploy to its own node. See docs/mvp-plan.md.
+    - vo.caios.ca
+
+nomad:
+
+  namespaces:  # map VO to Nomad namespace
+    # Must match nomad_namespaces in ansible/group_vars/all.yml, and must match
+    # the meta.namespace tag on the compute nodes. A mismatch here produces
+    # jobs that queue forever with no error anywhere.
+    vo.caios.ca: caios
+
+lb:  # load balancer, Traefik
+
+  domain:  # each VO accesses deployments through their domain
+    # Deployments resolve as: <service>-<uuid>.<meta.domain>-<this value>
+    # meta.domain is `pacs`, set per node in ansible/inventory/hosts.ini, so a
+    # Jupyter IDE lands at ide-a1b2c3.pacs-deployments.<FIP2>.sslip.io
+    #
+    # Note this is caios_edge's IP (Traefik), not caios_server's.
+    vo.caios.ca: deployments.${CAIOS_FIP2}.sslip.io
+
+# oscar: removed. We are not running OSCAR serverless inference (D-09).
+# PAPI tolerates its absence; the dashboard hides the corresponding features.
+
+mlflow:
+  # Not deployed for MVP. Left pointing at nothing rather than at AI4EOSC's
+  # instance, so the dashboard cannot send our users to somebody else's MLflow.
+  # V1 stretch goal replaces this with our own.
+  vo.caios.ca: ''

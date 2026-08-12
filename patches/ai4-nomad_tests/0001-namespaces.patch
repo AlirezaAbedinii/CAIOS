@@ -1,0 +1,79 @@
+--- a/ai4_nomad_tests/conf.py	2026-08-12 02:54:35.409845846 +0000
++++ b/ai4_nomad_tests/conf.py	2026-08-12 02:54:35.465845987 +0000
+@@ -2,6 +2,7 @@
+ Manage configuration
+ """
+ 
++import os
+ from pathlib import Path
+ from string import Template
+ 
+@@ -23,8 +24,18 @@
+ 
+ NOMAD_JOBS = {j.stem: load_nomad_job(jobs_pth / j) for j in jobs_pth.glob("**/*.hcl")}
+ 
++# [CAIOS] Upstream hardcodes the AI4EOSC namespaces and their base domains.
++# With a namespace that is not in that list, the intersection computed in
++# tests/node/cpu.py is empty, the Traefik reachability half of the test
++# silently checks nothing, and the node is still marked ready. Since this
++# suite is the ONLY thing that sets meta.status=ready -- which every PAPI job
++# template requires -- a cluster can pass its own tests and then reject every
++# real deployment. Driven from the environment instead:
++#
++#   AI4_NAMESPACES=caios
++#   AI4_BASE_DOMAIN=deployments.<traefik-ip>.sslip.io
+ DOMAINS = {
+-    "ai4eosc": "deployments.cloud.ai4eosc.eu",
+-    "imagine": "deployments.cloud.imagine-ai.eu",
+-    "tutorials": "deployments.cloud.ai4eosc.eu",
++    ns.strip(): os.environ.get("AI4_BASE_DOMAIN", "deployments.cloud.ai4eosc.eu")
++    for ns in os.environ.get("AI4_NAMESPACES", "ai4eosc,imagine,tutorials").split(",")
++    if ns.strip()
+ }
+--- a/ai4_nomad_tests/tests/node/cpu.py	2026-08-12 02:54:35.409845846 +0000
++++ b/ai4_nomad_tests/tests/node/cpu.py	2026-08-12 02:54:35.465845987 +0000
+@@ -82,7 +82,8 @@
+         )
+ 
+     # Retrieve supported domains
+-    namespaces = ["ai4eosc", "imagine", "tutorials"]
++    # [CAIOS] was a hardcoded list; now follows conf.DOMAINS
++    namespaces = list(DOMAINS.keys())
+     namespaces[:] = [i for i in namespaces if i in n["Meta"]["namespace"]]
+     domains = [f"{n['Meta']['domain']}-{DOMAINS[i]}" for i in namespaces]
+ 
+--- a/ai4_nomad_tests/tests/node/common.py	2026-08-12 02:54:35.409845846 +0000
++++ b/ai4_nomad_tests/tests/node/common.py	2026-08-12 02:54:35.465845987 +0000
+@@ -4,6 +4,7 @@
+ 
+ from rich import print
+ 
++from ai4_nomad_tests.conf import DOMAINS
+ from ai4_nomad_tests.nomad_utils import Nomad
+ 
+ 
+@@ -29,9 +30,13 @@
+     assert n["Meta"]["domain"], "Domain should not be empty"
+ 
+     # Check namespace metadata
+-    namespaces = ["ai4eosc", "imagine", "tutorials"]
++    # [CAIOS] namespaces now follow conf.DOMAINS. The assertion was also a
++    # no-op upstream: a non-empty list is always truthy, so `assert [...]`
++    # passed for any value. Uses any() so a node tagged with a namespace we do
++    # not serve actually fails instead of being marked ready.
++    namespaces = list(DOMAINS.keys())
+     assert "namespace" in n["Meta"]
+-    assert [i in n["Meta"]["namespace"] for i in namespaces], (
++    assert any(i in n["Meta"]["namespace"] for i in namespaces), (
+         "Namespace metadata incorrect: \n"
+         f"Provided: {n['Meta']['namespace']} \n"
+         f"Allowed: {namespaces}"
+@@ -43,6 +48,7 @@
+     assert "tags" in n["Meta"]
+     assert "type" in n["Meta"]
+     assert n["Meta"]["type"] in ntypes
+-    assert [i in n["Meta"]["tags"] for i in tags], (
++    # [CAIOS] same no-op assertion bug as above.
++    assert any(i in n["Meta"]["tags"] for i in tags), (
+         f"Incorrect `tags` metadata: \nProvided: {n['Meta']['tags']} \nAllowed: {tags}"
+     )

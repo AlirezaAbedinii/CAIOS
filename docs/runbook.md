@@ -124,8 +124,81 @@ no certificate.
 
 ### Browser warns the certificate is not trusted
 
-Expected on MVP — self-signed wildcard (D-12). Click through once. Fixed in V1
-by a real domain.
+Expected until you install our CA — see "Trusting the CAIOS certificate on your
+own machine" below. Clicking through works fine in the meantime. A real domain
+in V1 removes the step entirely.
+
+---
+
+## Trusting the CAIOS certificate on your own machine
+
+Optional. Without it everything works, you just click past a browser warning on
+every CAIOS page. With it, no warnings anywhere — worth doing before recording
+anything.
+
+**What you are copying:** `~/caios-ca.pem` on `caios_server`. This is the
+*public* half of our local certificate authority. It is meant to be distributed
+and is safe to email, paste or commit anywhere. The private half is
+`~/caios-ca.key`, which never leaves that node.
+
+### Where to run the copy
+
+The file already exists on `caios_server`. There is nothing to copy *there* —
+run these **on your own laptop**, after connecting to the VPN.
+
+If you reach the cluster directly once on the VPN:
+
+```bash
+scp ubuntu@192.168.104.181:~/caios-ca.pem .
+```
+
+If you go through a jumpserver, hop through it:
+
+```bash
+scp -J <user>@<jumpserver> ubuntu@192.168.104.181:~/caios-ca.pem .
+```
+
+### If scp is awkward, just copy the text
+
+A CA certificate is a small block of base64. This is often the fastest route,
+and it avoids working out the jump path entirely. On `caios_server`:
+
+```bash
+cat ~/caios-ca.pem
+```
+
+Select the output, including both `-----BEGIN CERTIFICATE-----` and
+`-----END CERTIFICATE-----` lines, and save it on your laptop as
+`caios-ca.pem`.
+
+### Then install it
+
+| Where | How |
+|---|---|
+| **macOS** | Double-click the file → Keychain Access → find "CAIOS Local CA" → Get Info → Trust → "When using this certificate: Always Trust" |
+| **Firefox** | Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import → tick "Trust this CA to identify websites" |
+| **Chrome / Edge (macOS)** | Uses the system keychain — do the macOS step above |
+| **Chrome / Edge (Windows)** | Double-click → Install Certificate → Local Machine → "Trusted Root Certification Authorities" |
+| **Linux (system-wide)** | `sudo cp caios-ca.pem /usr/local/share/ca-certificates/caios-ca.crt && sudo update-ca-certificates` |
+
+Firefox is worth calling out: it keeps its **own** trust store and ignores the
+operating system's, so installing system-wide is not enough for it.
+
+### Check it worked
+
+```bash
+curl -sS -o /dev/null -w "HTTP %{http_code}  TLS verify %{ssl_verify_result}\n" https://smoke.pacs-deployments.192.168.104.105.sslip.io
+```
+
+`TLS verify 0` means the chain validated. (That URL only exists while a test
+deployment is running — any CAIOS deployment hostname works.)
+
+### Already done for you
+
+`caios_server` itself trusts the CA — `scripts/make-traefik-certs.sh` installed
+it into the system store. Python tooling gets it through `REQUESTS_CA_BUNDLE`,
+which `scripts/run-cluster-tests.sh` sets. Nothing on the cluster needs this
+step; it is purely for browsers on your own machine.
 
 ---
 

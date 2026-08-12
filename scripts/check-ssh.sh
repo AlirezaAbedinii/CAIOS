@@ -49,10 +49,12 @@ for entry in "${NODES[@]}"; do
         echo "OK"
         # Disk layout: the site nodes need /dev/vdb, which Ansible will reformat.
         echo "$out" | sed -n '2,/---/p' | grep -v '^---$' | sed 's/^/                                 disk: /'
-        contents="$(echo "$out" | sed -n '/^---$/,$p' | tail -n +2)"
+        # lost+found is created by mkfs on every ext4 filesystem, so a volume
+        # containing only that has never been written to.
+        contents="$(echo "$out" | sed -n '/^---$/,$p' | tail -n +2 | grep -v '^lost+found$')"
         if [[ -n "$contents" ]]; then
             echo "                                 /mnt contains: $(echo "$contents" | tr '\n' ' ')"
-            echo "                                 ^ playbook-nomad.yml ERASES /mnt on site nodes"
+            echo "                                 ^ CHECK THIS. playbook-nomad.yml erases /mnt on site nodes."
         else
             echo "                                 /mnt is empty — safe to reformat"
         fi

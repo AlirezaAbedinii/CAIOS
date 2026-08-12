@@ -5,8 +5,10 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: MVP Stage 0 complete. Nothing installed on the nodes yet.**
-Next action is Stage 1, which needs SSH keys distributed and volumes confirmed.
+**Where we are: Stage 0 complete and Stage 1 unblocked. Nothing installed on the
+nodes yet.** SSH works to all four nodes; every data volume is confirmed empty
+and safe to reformat. Next action is installing Ansible and running the cluster
+playbooks.
 
 ---
 
@@ -21,15 +23,50 @@ Next action is Stage 1, which needs SSH keys distributed and volumes confirmed.
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
-**Blocking Stage 1 — one thing, ten minutes:**
+**Nothing is blocking.** Both Stage 1 prerequisites are met:
 
-Install the cluster public key on the other four nodes. It needs a credential
-only on your laptop, so it cannot be done from here. Step by step in
-`docs/ssh-setup.md`; verify with `bash scripts/check-ssh.sh`.
+| Prerequisite | State |
+|---|---|
+| SSH from `caios_server` to all four nodes | Done — verified with the cluster key alone |
+| Site node volumes safe to reformat | Confirmed — all four `/mnt` are empty |
 
-That same check also reports each site node's disk layout, which answers the
-second prerequisite: confirming their `/mnt` holds nothing worth keeping before
-the Nomad playbook reformats it.
+Next: install Ansible, then `playbook-control-plane.yml`, `playbook-consul.yml`,
+`playbook-nomad.yml`.
+
+---
+
+## 2026-08-12 — Stage 1 unblocked: SSH working, all volumes confirmed empty
+
+**SSH access is done.** The cluster key now reaches all four nodes.
+`scripts/check-ssh.sh` passes using that key alone, with agent forwarding and
+password authentication disabled — so Ansible will work unattended, not only
+while someone is logged in.
+
+**The disk question is settled, and the answer is the easy one.** Every node has
+the same layout: a 20 GB root disk plus a 125 GB volume at `/dev/vdb`, ext4,
+mounted at `/mnt`. On all four, `/mnt` contains only `lost+found` — the directory
+`mkfs` creates on every ext4 filesystem, meaning nothing has ever been written
+there.
+
+So the reformat that `playbook-nomad.yml` performs on the three site nodes
+destroys nothing. **No action needed, and nothing to preserve.**
+
+Improved `check-ssh.sh` to recognise `lost+found` as empty. It was previously
+reporting a bare volume as "contains files", which is a warning that trains you
+to ignore warnings.
+
+**Nothing has been installed yet, and nothing has been damaged.** The hazard
+noted in the previous entry is a property of a playbook we have not run — it
+matters when we run it, not before.
+
+**Ansible is not yet installed** on `caios_server`. That is the next step, along
+with the cluster playbooks themselves.
+
+**`docs/concepts.md` substantially expanded** — from three tools to sixteen,
+grouped into cluster / installation / platform / identity / AI, with a contents
+list. Ansible gets the fullest treatment, including the idea that makes it click
+(describe the end state, not the steps), what our four file types each do, how to
+read its output, and the one sharp edge: it reformats disks without asking.
 
 ---
 

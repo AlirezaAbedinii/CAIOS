@@ -3,13 +3,13 @@
 
 Host caios_server
     User ubuntu
-    Hostname <FIP1>
+    Hostname <CTRL_IP>
     IdentityFile ~/.ssh/<your-key>.pem
     ForwardAgent yes
 
 Host caios_edge
     User ubuntu
-    Hostname <FIP2>
+    Hostname <EDGE_IP>
     IdentityFile ~/.ssh/<your-key>.pem
 
 # The three compute nodes have no public IP. Reach them through the bastion.

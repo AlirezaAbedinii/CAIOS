@@ -1,211 +1,236 @@
 # Infrastructure
 
-How the five Compute Canada nodes are used, and why. Read this with
-`docs/mvp-plan.md`, which says *when* each piece gets built.
+How the Compute Canada nodes are used, and why. Read this with
+`docs/mvp-plan.md`, which says *when* each piece gets built, and
+`docs/concepts.md` if Nomad, Consul and Traefik are unfamiliar.
 
 ---
 
 ## The short version
 
-Five nodes, all with GPUs. Three of them do the actual AI work and become the
-three "hospital sites" in the federated learning demo. One runs the cluster
-brain plus every web service. One is the front door.
+Five nodes, all with GPUs, all on Arbutus, all on the private subnet
+`192.168.104.0/24`. Three of them do the actual AI work and become the three
+"hospital sites" in the federated learning demo. One runs the cluster brain plus
+every web service. One is the front door.
 
-Only **two floating (public) IPs** are needed. Everything else is private and
-reached by SSH through node 1.
+**Nothing here has a public IP.** Access is OpenVPN → jumpserver → SSH.
 
 ```
-                    INTERNET
-                        |
-        +---------------+----------------+
-        |                                |
-   FIP #1                            FIP #2
-        |                                |
-+-------v---------+            +---------v---------+
-| 1. caios_server |            |  2. caios_edge    |
-|-----------------|            |-------------------|
-| Consul server   |            | Traefik           |
-| Nomad server    |            |  (as a Nomad job) |
-| SSH bastion     |            | Nomad CPU client  |
-|                 |            |                   |
-| Docker Compose: |            | Serves:           |
-|  - Keycloak     |            |  *.pacs-          |
-|  - Vault        |            |  deployments.<..> |
-|  - PAPI         |            |                   |
-|  - Dashboard    |            | Ports 80/443      |
-|  - Caddy (TLS)  |            |  + 8002/8003      |
-+--------+--------+            +---------+---------+
-         |                               |
-         |     private cluster network   |
-         +----+-------------+------------+----+
-              |             |                 |
-     +--------v----+ +------v------+ +--------v----+
-     | 3. site_a   | | 4. site_b   | | 5. site_c   |
-     |-------------|  |------------| |-------------|
-     | Nomad GPU   | | Nomad GPU   | | Nomad GPU   |
-     | client      | | client      | | client      |
-     |             | |             | |             |
-     | "Hospital A"| |"Hospital B" | |"Hospital C" |
-     +-------------+ +-------------+ +-------------+
+        You  --OpenVPN-->  jumpserver  --SSH-->  the cluster
+                                                      |
+        +---------------------------------------------+
+        |                                             |
++-------v-------------------+          +--------------v------------+
+| caios_server              |          | caios_edge                |
+| 192.168.104.181           |          | 192.168.104.105           |
+|---------------------------|          |---------------------------|
+| Consul server             |          | Traefik (as a Nomad job)  |
+| Nomad server              |          | Nomad CPU client          |
+| Ansible control node      |          |                           |
+|                           |          | Serves every deployment:  |
+| Docker Compose:           |          |   *.pacs-deployments      |
+|   Keycloak   (login)      |          |   .192.168.104.105        |
+|   Vault      (secrets)    |          |   .sslip.io               |
+|   PAPI       (the API)    |          |                           |
+|   Dashboard  (the UI)     |          | Ports 80/443, 8002/8003   |
+|   Caddy      (TLS)        |          |                           |
++-------------+-------------+          +-------------+-------------+
+              |                                      |
+              |        private cluster network       |
+              +------+--------------+----------------+
+                     |              |                |
+          +----------v--+  +--------v----+  +--------v----+
+          | caios_site_a|  | caios_site_b|  | caios_site_c|
+          | .104.20     |  | .104.145    |  | .104.7      |
+          |-------------|  |-------------|  |-------------|
+          | Nomad GPU   |  | Nomad GPU   |  | Nomad GPU   |
+          | client      |  | client      |  | client      |
+          |             |  |             |  |             |
+          | "Hospital A"|  | "Hospital B"|  | "Hospital C"|
+          +-------------+  +-------------+  +-------------+
+
+          192.168.104.188 — sixth instance, unassigned. See below.
 ```
 
 ---
 
 ## Node by node
 
-### 1. `caios_server` — the brain and the front door for services
+### `caios_server` — 192.168.104.181 — the brain and the web services
 
-**Public IP: yes (floating IP #1). This is also the SSH bastion.**
+This is the node we work from. Ansible runs here; it reaches the others directly
+across the private subnet, so there is no bastion hop in the automation.
 
-Runs two separate things that happen to live on the same box:
+Two separate things live here:
 
-*The cluster control plane* — Consul server and Nomad server. This is what
-decides where jobs run. It is **not** a Nomad client, so no user workload ever
-lands here; it stays responsive.
+**The cluster control plane** — Consul server and Nomad server. This decides
+where jobs run. It is deliberately **not** a Nomad client, so no user workload
+ever lands on it and it stays responsive.
 
-*The web services*, as plain Docker Compose (decision D-03 — far easier to debug
-in three weeks than running them as Nomad jobs):
+**The web services**, as plain Docker Compose (D-03 — far easier to debug in
+three weeks than running them as Nomad jobs):
 
 | Service | What it does |
 |---|---|
 | Keycloak | Login. Issues the tokens PAPI checks. |
-| Vault | Stores per-deployment secrets. **Required by the FL server** — see below. |
-| PAPI | The control plane API. The only thing holding Nomad credentials. |
+| Vault | Stores per-deployment secrets. Required by the FL server. |
+| PAPI | The control-plane API. The only thing holding Nomad credentials. |
 | Dashboard | The Angular web UI. Talks only to PAPI. |
-| Caddy | TLS termination and routing for the four hostnames above. |
+| Caddy | TLS termination for the four hostnames. |
 
-**Why services live here and not on their own node:** PAPI needs mTLS
+**Why the services live here rather than on their own node:** PAPI needs mTLS
 certificates to talk to Nomad. On this node those certificates already exist at
-`/etc/nomad.d/certs/` because Ansible put them there, and PAPI can reach Nomad
-at `127.0.0.1:4646`. Putting PAPI anywhere else means copying certificates
-around and opening port 4646 across the network. This removes a whole class of
-Phase-3 debugging, and it frees a node to be a third hospital site.
+`/etc/nomad.d/certs/`, put there by Ansible, and Nomad answers on
+`127.0.0.1:4646`. Anywhere else means copying certificates around and opening
+port 4646 across the network. That removes a whole class of debugging, and it
+frees a node to be a third hospital site.
 
-### 2. `caios_edge` — the front door for deployments
+**Measured specs:** 3 vCPU, 34 GB RAM, 20 GB disk (`/dev/vda` only), one
+`NVIDIA H100L-1-12C` (a 12 GB slice of an H100), Ubuntu 22.04.5.
 
-**Public IP: yes (floating IP #2).**
+> 3 vCPU is on the small side for five containers plus two cluster servers.
+> Workable, but if the control plane feels sluggish this is the first thing to
+> look at. It does not need its GPU.
 
-Runs Traefik, which is what gives every deployment its own subdomain. Traefik
-runs *as a Nomad job*, not as Compose — the Ansible role deploys it and pins it
-to this node, because DNS points here.
+### `caios_edge` — 192.168.104.105 — the front door for deployments
 
-It is also registered as the cluster's **CPU client**. This is not optional:
-`ai4-ansible` requires at least one CPU client and the Traefik node is it.
+Runs **Traefik**, which is what gives every deployment its own web address.
+Traefik runs *as a Nomad job*, not as Compose — Ansible deploys it and pins it
+to this node, because every deployment hostname resolves to this node's IP.
 
-Its GPU sits idle. That is the price of having a dedicated ingress node, and
-it is worth paying — Traefik going down takes the whole demo with it.
+It is also the cluster's **CPU client**. Not optional: `ai4-ansible` requires at
+least one, and this is it.
 
-> Note: this node can never run user deployments. Ansible tags it
-> `meta.type = traefik`, and every PAPI job template requires
-> `meta.type = compute`. That is by design.
+Its GPU sits idle. That is the price of a dedicated ingress node, and it is
+worth paying — if Traefik goes down, nothing is reachable.
 
-### 3-5. `caios_site_a`, `caios_site_b`, `caios_site_c` — the three hospitals
+> This node can never run user deployments. Ansible tags it
+> `meta.type = traefik`, and every deployment requires `meta.type = compute`.
+> By design.
 
-**Public IP: no.** Reached by SSH through node 1.
+### `caios_site_a/b/c` — .20, .145, .7 — the three hospitals
 
-Nomad GPU clients. These run everything a user deploys: dev environments,
-model inference, the federated learning clients.
+Nomad GPU clients. These run everything a user deploys: dev environments, model
+inference, the federated learning clients.
 
-**These three nodes are the demo.** The whole federated learning story is that
-each one stands for a hospital, holds its own slice of the data, and trains
-locally — the model weights travel, the data does not. Three separate nodes make
-that structurally true rather than a claim on a slide.
+**These three nodes are the demo.** The federated learning story is that each
+stands for a hospital, holds its own slice of the data, and trains locally —
+the model weights travel, the data does not. Three separate machines make that
+structurally true rather than a claim on a slide.
 
-Each needs an **attached volume, formatted XFS**. This is not optional either:
-Docker's disk limits require XFS, and without it nodes fill with images and jobs
-fail in confusing ways. Ansible formats and mounts it, but the volume must be
-attached in OpenStack first, and it must show up as `/dev/vdb` — the cluster
-test suite asserts exactly that.
+**Each needs a second volume attached, which Ansible formats XFS.** Docker's
+per-container disk limits require XFS, and the cluster test suite asserts the
+device path `/dev/vdb` literally. `caios_server` shows only `/dev/vda`, so it is
+worth confirming the site nodes actually have a second disk before running the
+Nomad playbook — if they do not, this is an OpenStack task first.
+
+### 192.168.104.188 — the sixth instance
+
+Six addresses were provided; the node count was given as five. This one is left
+out of the cluster until we know what it is.
+
+- **A lot of RAM (≥72 GB)?** It becomes the CVAT host, and annotation goes back
+  into the demo.
+- **Another GPU node like the others?** It becomes a fourth compute client, or a
+  spare to swap in if one fails.
+- **The jumpserver?** It stays out entirely.
+
+Nothing depends on the answer, so this is not blocking.
 
 ---
 
-## Two public IPs, four hostnames
+## Addresses
 
-Everything the outside world touches resolves to one of two addresses.
+Every hostname derives from two IPs, both set in `configs/env/caios.env`.
 
-| Hostname | Points at | Serves |
+| Hostname | Resolves to | Serves |
 |---|---|---|
-| `dashboard.<FIP1>.sslip.io` | node 1 | The web UI |
-| `api.<FIP1>.sslip.io` | node 1 | PAPI |
-| `auth.<FIP1>.sslip.io` | node 1 | Keycloak |
-| `vault.<FIP1>.sslip.io` | node 1 | Vault (admin only) |
-| `*.pacs-deployments.<FIP2>.sslip.io` | node 2 | **Every user deployment** |
+| `dashboard.192.168.104.181.sslip.io` | caios_server | The web UI |
+| `api.192.168.104.181.sslip.io` | caios_server | PAPI |
+| `auth.192.168.104.181.sslip.io` | caios_server | Keycloak |
+| `vault.192.168.104.181.sslip.io` | caios_server | Vault (admin only) |
+| `*.pacs-deployments.192.168.104.105.sslip.io` | caios_edge | **Every deployment** |
 
-### About that wildcard, and your question on ports
+### Why hostnames at all, when everything is private
 
-You asked whether we can just expose a port on one instance instead of dealing
-with a domain. Short answer: not really, and here is the honest reason.
+Because the platform gives **every deployment its own web address**, and Traefik
+decides which container a request belongs to by reading the `Host:` header — not
+by port number. Start a Jupyter workspace and it appears at
+`ide-a1b2c3.pacs-deployments...`; its API at `api-a1b2c3.pacs-deployments...`.
+With one port and no hostnames there is nowhere to route.
 
-The platform gives **every deployment its own hostname**. Start a Jupyter
-workspace and it comes up at `ide-a1b2c3.pacs-deployments.<...>`; its API is at
-`api-a1b2c3.pacs-deployments.<...>`. This is not a preference we can configure
-away — it is how Traefik decides which of the many running containers your
-request belongs to. Traefik routes on the `Host:` header, not on port numbers.
-With one port and no hostnames, there is nowhere to route to.
+**We do not need to buy a domain or configure any DNS.** `sslip.io` is a free
+public DNS service that resolves any name ending in an IP address back to that
+IP — including private ones. Verified from the node:
 
-**But we do not need to buy a domain to get started.** For the MVP we use
-`sslip.io`, a free public DNS service that resolves any hostname ending in an IP
-address back to that IP. `api-a1b2c3.pacs-deployments.206.12.1.2.sslip.io`
-resolves to `206.12.1.2`, with no DNS account, no zone access, and nothing to
-request from anyone. Wildcards work because arbitrary prefixes are allowed.
+```
+dashboard.192.168.104.181.sslip.io  ->  192.168.104.181
+```
 
-The one thing it cannot give us is a trusted TLS certificate. Let's Encrypt
-issues wildcard certificates only via DNS-01, which needs API control of the
-zone — and we do not control `sslip.io`. So:
+Arbitrary prefixes work, so the wildcard works. No account, no zone, nothing to
+request.
 
-- **MVP:** self-signed wildcard certificate. Everything works; the browser shows
-  a warning on first visit that you click past once per session.
-- **V1:** a real domain (about $15/year) plus a Let's Encrypt wildcard. Same
-  configuration, two values changed, no rework.
+**Two caveats.**
 
-The browser warning is the *only* thing the domain buys us — but it is the one
-thing a recorded walkthrough cannot have. That is why "buy a domain" is the
-first item in `docs/questions-for-supervisor.md`. It is cheap, it has a lead
-time, and it should be started tomorrow rather than in week three.
+1. Each engineer's machine must be on the VPN *and* must not have a resolver
+   that discards private-IP DNS answers. Some routers and corporate resolvers do
+   this as "DNS rebinding protection". If a hostname fails to resolve on your
+   laptop but works on the node, that is the cause — the fallback is a handful
+   of `/etc/hosts` entries.
+2. No trusted TLS certificate. Let's Encrypt issues wildcards only via DNS-01,
+   which needs control of the zone, and we do not control `sslip.io`. So MVP
+   uses a self-signed wildcard and the browser shows a warning you click past
+   once. V1 swaps in a real domain; two values change and nothing else.
+
+### The thing worth raising with the supervisor
+
+**Nobody outside the VPN can see any of this.** That is fine for building, and
+fine for a recorded walkthrough. It rules out a live demo to external reviewers
+unless one of these happens:
+
+- a **floating IP** is assigned to `caios_edge` and `caios_server` (Arbutus has
+  them; they are quota-limited and have to be requested), or
+- reviewers are given VPN access, which is unlikely to be acceptable, or
+- the demo is **recorded**, which we planned to do anyway as insurance.
+
+The cheapest safe answer is: record it, and request a floating IP in parallel in
+case a live demo is wanted. Requesting one costs an email and has a lead time;
+discovering the need in week three does not end well.
 
 ---
 
 ## Security groups
 
-Four groups. Upstream documents a fifth (`Federation`) for multi-site clusters;
-we are a single site, so we skip it deliberately.
+All nodes are in one OpenStack project on one subnet, so the rules are simpler
+than the upstream guide assumes — there is no public exposure to defend.
 
 | Group | Applied to | Rules |
 |---|---|---|
-| `default` | all nodes | Egress all; ICMP; TCP 22 from admin IPs; intra-group TCP/UDP |
-| `caios_consul` | all nodes | TCP 8300, 8301, 8302, 8500-8503, 8600; UDP 8301, 8302, 8600; TCP 21000-21255 — **cluster subnet only** |
-| `caios_nomad` | all nodes | TCP 4646, 4647, 4648; UDP 4648 — cluster subnet only. Upstream opens 4646 to the world; we do not need to, because PAPI reaches Nomad over loopback. |
-| `caios_traefik` | node 2 | TCP 80, 443 from anywhere; **TCP 8002-8003 from anywhere (NVFLARE)**; TCP 8081 subnet only |
+| `default` | all | Egress all; ICMP; TCP 22; intra-project traffic |
+| `caios_consul` | all | TCP 8300, 8301, 8302, 8500-8503, 8600; UDP 8301, 8302, 8600; TCP 21000-21255 |
+| `caios_nomad` | all | TCP 4646, 4647, 4648; UDP 4648 |
+| `caios_traefik` | caios_edge, caios_server | TCP 80, 443; **TCP 8002-8003 (NVFLARE)**; TCP 8081 |
 
-Node 1 additionally needs TCP 80 and 443 from anywhere, for the dashboard and
-API. Add it to `caios_traefik` or give it its own rule — either is fine.
+Scope every rule to the subnet `192.168.104.0/24`. `scripts/openstack-security-groups.sh`
+prints the commands; it only creates them with `--apply`.
 
----
-
-## What happens when the sixth node arrives
-
-You mentioned you can add a node with 72 GB of RAM. That node is for **CVAT**,
-the annotation tool, which is a single Nomad job containing 22 containers that
-must all land on the same machine and together ask for about 71 GB of RAM. No
-node in the current layout can host it.
-
-It joins as a fourth compute client, tagged the same way as nodes 3-5. Nothing
-about the existing setup changes. Until it exists, CVAT stays out of the demo —
-it is beat 4 of 7 and roughly three minutes, so its absence costs us little.
+If intra-project traffic is already unrestricted on Arbutus, most of this is a
+no-op — but it is worth applying anyway so the cluster does not depend on a
+default that could change.
 
 ---
 
-## How the pieces actually talk
+## How the pieces talk
 
 Worth internalising, because it explains most failures:
 
 1. The **browser** only ever talks to the dashboard and, through it, to PAPI.
-2. **PAPI** is the only component that holds Nomad credentials. If PAPI is
-   misconfigured the dashboard still renders perfectly and every button fails
-   quietly. When something looks broken in the UI, check PAPI first.
+2. **PAPI** is the only component holding Nomad credentials. Misconfigure it and
+   the dashboard still renders perfectly while every button fails quietly. When
+   something looks broken in the UI, check PAPI first.
 3. **Nomad** decides which node runs a job, using constraints on node metadata.
    A node missing a tag looks completely healthy and silently never receives
-   work. This is the single most common cause of "why is my job stuck pending".
-4. **Traefik** learns about running jobs through Consul, and routes to them by
+   work. The top cause of "why is my job stuck pending".
+4. **Traefik** learns about running jobs through Consul and routes to them by
    hostname. If a deployment is running but unreachable, the problem is Consul
    or Traefik, not Nomad.

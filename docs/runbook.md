@@ -10,23 +10,23 @@ not been run against real hardware. Correct them the moment reality disagrees.
 
 ## Addresses
 
-Fill in once the floating IPs are known. Everything derives from these two.
+Everything derives from the two IPs in `configs/env/caios.env`.
 
 | What | Where |
 |---|---|
-| Dashboard | `https://dashboard.<FIP1>.sslip.io` |
-| API (PAPI) | `https://api.<FIP1>.sslip.io` — Swagger at `/docs` |
-| Login (Keycloak) | `https://auth.<FIP1>.sslip.io` |
-| Vault | `https://vault.<FIP1>.sslip.io` |
-| Deployments | `https://<service>-<uuid>.pacs-deployments.<FIP2>.sslip.io` |
-| Nomad UI | `https://<FIP1>:4646` (subnet only; tunnel through the bastion) |
+| Dashboard | `https://dashboard.192.168.104.181.sslip.io` |
+| API (PAPI) | `https://api.192.168.104.181.sslip.io` — Swagger at `/docs` |
+| Login (Keycloak) | `https://auth.192.168.104.181.sslip.io` |
+| Vault | `https://vault.192.168.104.181.sslip.io` |
+| Deployments | `https://<service>-<uuid>.pacs-deployments.192.168.104.105.sslip.io` |
+| Nomad UI | `https://192.168.104.181:4646` (subnet only) |
 
 ---
 
 ## Everyday commands
 
 ```bash
-ssh caios_server                    # bastion; every other node is behind it
+# We work from caios_server (192.168.104.181). Others: ssh 192.168.104.105 etc.
 bash scripts/verify-cluster.sh      # first move when anything is stuck
 cd compose && docker compose --env-file ../configs/env/caios.env ps
 docker compose logs -f papi         # PAPI is the usual culprit
@@ -71,7 +71,7 @@ perfect-looking UI in which nothing works.
 
 ```bash
 docker compose logs --tail=100 papi
-curl -sk https://api.<FIP1>.sslip.io/v1/catalog/modules | head -c 300
+curl -sk https://api.192.168.104.181.sslip.io/v1/catalog/modules | head -c 300
 ```
 
 If PAPI is not running at all, check `IS_PROD` first. Its Dockerfile sets

@@ -21,13 +21,13 @@ cd "$ROOT"
 ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — see configs/env/caios.env.template"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
-: "${CAIOS_FIP2:?CAIOS_FIP2 (Traefik node floating IP) is empty}"
+: "${CAIOS_EDGE_IP:?CAIOS_EDGE_IP (Traefik node floating IP) is empty}"
 
 # Must match `domain=` in ansible/inventory/hosts.ini and lb.domain in
 # configs/papi/main.yaml. A deployment resolves as:
 #   <service>-<uuid>.<meta.domain>-<lb.domain>
 # so the wildcard covers one label, not a nested subdomain.
-BASE="pacs-deployments.${CAIOS_FIP2}.sslip.io"
+BASE="pacs-deployments.${CAIOS_EDGE_IP}.sslip.io"
 OUT="${TRAEFIK_CERT_OUT:-$HOME}"
 NAME="caios-deployments"
 WORK="$(mktemp -d)"

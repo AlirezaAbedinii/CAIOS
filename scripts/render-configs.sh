@@ -27,7 +27,7 @@ set -a
 source "$ENV_FILE"
 set +a
 
-for required in CAIOS_FIP1 CAIOS_FIP2; do
+for required in CAIOS_CTRL_IP CAIOS_EDGE_IP; do
     if [[ -z "${!required:-}" ]]; then
         echo "$required is empty in $ENV_FILE. Every hostname derives from it."
         exit 1
@@ -49,7 +49,7 @@ Rendered for:
   api        https://${CAIOS_API_HOST}
   auth       https://${CAIOS_AUTH_HOST}
   vault      https://${CAIOS_VAULT_HOST}
-  deployments  *.pacs-deployments.${CAIOS_FIP2}.sslip.io
+  deployments  *.pacs-deployments.${CAIOS_EDGE_IP}.sslip.io
 
 Keycloak imports the realm only on first start. If it has run before, the
 import is skipped — delete the keycloak_data volume or apply changes through

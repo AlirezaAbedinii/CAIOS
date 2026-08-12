@@ -2,7 +2,7 @@
 CAIOS Stage 1 gate: prove a job can be scheduled AND reached over HTTPS at its
 own subdomain, before PAPI exists to blame.
 
-  export BASE_DOMAIN=pacs-deployments.<CAIOS_FIP2>.sslip.io
+  export BASE_DOMAIN=pacs-deployments.<CAIOS_EDGE_IP>.sslip.io
   nomad job run -var-file=/dev/null nomad-jobs/smoke-test.hcl
 
   (or, without HCL variables:)

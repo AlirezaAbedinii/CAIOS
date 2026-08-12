@@ -140,8 +140,8 @@ services:
       NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}
       NOMAD_CLIENT_KEY: ${NOMAD_CLIENT_KEY}
       DASHBOARD_URL: ${DASHBOARD_URL}
-      CAIOS_FIP1: ${CAIOS_FIP1}
-      CAIOS_FIP2: ${CAIOS_FIP2}
+      CAIOS_CTRL_IP: ${CAIOS_CTRL_IP}
+      CAIOS_EDGE_IP: ${CAIOS_EDGE_IP}
     volumes:
       # Mounted over main_TMP.yaml, not main.yaml. The image copies main.yaml to
       # main_tmp.yaml at build time and regenerates main.yaml from it through

@@ -133,7 +133,7 @@ Goal: log in through the browser, deploy a module, open it. No terminal.
 - [ ] Apply `patches/ai4-papi/` — Keycloak URL and Vault address
 - [ ] Copy `configs/papi/main.yaml` and `var/datacenters.csv` into place
 - [ ] `docker compose up papi` with `IS_PROD` unset
-- [ ] Verify `https://api.<FIP1>.sslip.io/docs` renders
+- [ ] Verify `https://api.<CTRL_IP>.sslip.io/docs` renders
 - [ ] Make one authenticated call with a real token
 - [ ] Build the dashboard: `docker build -f docker/Dockerfile.prod
       --build-arg TENANT=caios`

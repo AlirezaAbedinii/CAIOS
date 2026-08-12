@@ -43,7 +43,7 @@ print(d["access_token"])
 # Decode the payload to stderr so a caller capturing stdout still sees it.
 printf '%s' "$TOKEN" | cut -d. -f2 | python3 -c '
 import base64, json, sys
-raw = sys.stdin.read()
+raw = sys.stdin.read().strip()   # trailing newline breaks base64 padding
 payload = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
 roles = payload.get("realm_access", {}).get("roles", [])
 access = [r for r in roles if r.startswith("access:")]

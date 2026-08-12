@@ -5,10 +5,11 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 1 complete.** The cluster is live and proven — a job
-deployed by hand is reachable over HTTPS at its own subdomain with a verified
-certificate, and all four nodes are marked ready for work. Next is Stage 2:
-Keycloak and Vault.
+**Where we are: Stage 2 complete.** The cluster is live and proven, and the
+identity layer on top of it works — Keycloak issues tokens PAPI will accept, and
+Vault accepts those same tokens and isolates secrets per user. Next is Stage 3:
+PAPI and the dashboard, which is the first stage that produces something a
+viewer would recognise as the product.
 
 ---
 
@@ -18,16 +19,87 @@ Keycloak and Vault.
 |---|---|---|
 | 0 — Local scaffold | Every config, script and patch, written and self-tested | **Done** |
 | 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **Done** — gate passed |
-| 2 — Identity | Keycloak and Vault; a token PAPI accepts | Not started |
+| 2 — Identity | Keycloak and Vault; a token PAPI accepts | **Done** — gate passed |
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | Not started |
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
 **Nothing is blocking.** Next actions, in order:
 
-1. Stage 2 — bring up Keycloak and Vault, create the realm and demo users,
-   and get a token PAPI will accept.
-2. Stage 3 — PAPI and the dashboard.
+1. Stage 3 — build and start PAPI, point it at Nomad, Keycloak and Vault, then
+   build the CAIOS dashboard and click through it in a browser.
+2. Stage 4 — federated learning across the three sites.
+
+---
+
+## 2026-08-12 — STAGE 2 GATE PASSED: identity and secrets
+
+Keycloak and Vault are running, and a real user token passes every check PAPI
+will make:
+
+```
+=== 1. Keycloak issues a token ===
+  [ ok ] required claims (sub, iss, name, email)
+  [ ok ] audience includes 'account'
+  [ ok ] carries an access:<vo>:<level> role
+         issuer: https://auth.192.168.104.181.sslip.io/realms/caios
+=== 2. Vault accepts the same token ===
+  [ ok ] Vault issued a token
+=== 3. Secrets work at the paths PAPI actually uses ===
+  [ ok ] wrote a secret        [ ok ] read it back
+  [ ok ] another user is denied (HTTP 403)
+```
+
+Four demo users exist — one researcher and one per hospital site — each holding
+`access:vo.caios.ca:ap-u`, the role name PAPI actually parses.
+
+### The bug that would have cost a day
+
+The realm listed the client's scopes explicitly and **omitted `basic`**. In
+Keycloak 26 that scope carries the `sub` protocol mapper, and PAPI requires
+`sub` on every token and uses it as the user identity for Vault secret paths.
+
+The resulting tokens looked completely healthy — right issuer, right audience,
+name, email, roles all present — and PAPI would have rejected every one of them
+with a 401 saying nothing about which claim was missing. It only surfaced
+because the check decodes and inspects each required claim by name rather than
+asserting "a token came back".
+
+Fixed in the template with a comment explaining why the scope is not optional.
+
+### Three other things worth recording
+
+**Keycloak refuses to import an annotated realm file.** It rejects any field it
+does not recognise, so our `_comment` keys failed the whole import with
+"Unrecognized field". Rather than strip the documentation, `render-configs.sh`
+now removes `_comment*` keys on the way out — the template stays annotated, the
+artefact stays valid.
+
+**Keycloak now runs on Postgres, not its built-in file database.** The first
+failed import corrupted the H2 store badly enough that Keycloak would not start
+at all ("Database is already closed") and its volume had to be deleted.
+Identity is the one service whose failure takes the whole demo with it, and a
+real database costs one container.
+
+**Vault could not fetch the realm's discovery document.** Its container has no
+reason to trust our CA, so the HTTPS fetch failed with a TLS error that reads
+like a network problem. Fixed by passing the CA inline through
+`oidc_discovery_ca_pem` — nothing has to be mounted.
+
+### Certificates: one authority for everything
+
+Caddy's automatic HTTPS cannot work here — it uses Let's Encrypt, which must
+reach the host from the public internet, and every node is behind the VPN. Its
+fallback is an internal CA, which would have meant a *second* authority to
+distribute.
+
+Instead the control plane now serves a certificate issued from the same CA as
+the deployment wildcard. Import `caios-ca.pem` once and the dashboard, the API,
+Keycloak, Vault and every deployment are all trusted.
+
+`scripts/check-identity.sh` re-runs the whole verification, and belongs after
+any change to the realm, to Vault, or to the addresses — all three have to agree
+on the issuer string exactly.
 
 ---
 

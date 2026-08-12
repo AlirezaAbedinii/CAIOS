@@ -44,9 +44,18 @@ vault auth list -format=json | grep -q '"jwt-keycloak/"' \
     || vault auth enable -path=jwt-keycloak jwt
 
 echo "==> trusting $ISSUER"
-vault write auth/jwt-keycloak/config \
-    oidc_discovery_url="$ISSUER" \
-    default_role="caios"
+# Vault fetches the realm's OIDC discovery document over HTTPS, and that
+# certificate is signed by our own CA — which the Vault container has no reason
+# to trust. Without oidc_discovery_ca_pem it fails with a TLS verification error
+# that reads like a network problem. The PEM is passed inline, so nothing has to
+# be mounted into the container.
+CA_PEM="$(cat "${CAIOS_CA_CRT:-$HOME/caios-ca.pem}")"
+
+docker exec -i -e VAULT_ADDR -e VAULT_TOKEN caios_vault \
+    vault write auth/jwt-keycloak/config \
+        oidc_discovery_url="$ISSUER" \
+        oidc_discovery_ca_pem="$CA_PEM" \
+        default_role="caios"
 
 echo "==> policy caios-user"
 # Templated so each user can only reach their own subtree. The alias name is

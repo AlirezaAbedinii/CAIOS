@@ -16,10 +16,10 @@ name: caios
 services:
 
   # --------------------------------------------------------------------------
-  # Caddy — TLS termination and routing for the four public hostnames.
-  # Attempts Let's Encrypt automatically per hostname (HTTP-01, which works for
-  # named hosts even on sslip.io) and falls back to its internal CA if that
-  # fails. Deployment wildcards are Traefik's job on caios_edge, not ours.
+  # Caddy — TLS termination and routing for the four control-plane hostnames.
+  # Serves a certificate issued from our own CA; automatic HTTPS is off because
+  # Let's Encrypt cannot reach a private subnet. Deployment wildcards are
+  # Traefik's job on caios_edge, not ours.
   # --------------------------------------------------------------------------
   caddy:
     image: caddy:2-alpine
@@ -28,6 +28,10 @@ services:
     network_mode: host
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Issued from our own CA by scripts/make-control-plane-cert.sh.
+      # Caddy's automatic HTTPS cannot work on a private subnet — see the
+      # Caddyfile for why.
+      - ./certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:
@@ -35,9 +39,10 @@ services:
       CAIOS_API_HOST: ${CAIOS_API_HOST}
       CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
       CAIOS_VAULT_HOST: ${CAIOS_VAULT_HOST}
+    # Only Keycloak. Caddy must be able to run before PAPI and the dashboard
+    # are built — a proxy to a missing upstream returns 502, which is a much
+    # better failure mode than the whole ingress refusing to start.
     depends_on:
-      - dashboard
-      - papi
       - keycloak
 
   # --------------------------------------------------------------------------
@@ -45,6 +50,27 @@ services:
   # this realm, so its public URL must match exactly what PAPI is configured
   # with, including scheme. A mismatch produces 401 on everything.
   # --------------------------------------------------------------------------
+  # Postgres behind Keycloak. Not gold-plating: the built-in file database
+  # corrupted the first time a realm import failed mid-write, leaving Keycloak
+  # unable to start at all ("Database is already closed") and needing its volume
+  # deleted. Identity is the one service whose failure takes the whole demo with
+  # it, and a proper database costs one container.
+  keycloak_db:
+    image: postgres:16-alpine
+    container_name: caios_keycloak_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: caios_keycloak
@@ -53,12 +79,18 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_DB: dev-file            # MVP only. V1: postgres, if this is kept.
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       KC_HOSTNAME: https://${CAIOS_AUTH_HOST}
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
+    depends_on:
+      keycloak_db:
+        condition: service_healthy
     volumes:
       # Rendered by scripts/render-configs.sh — the template carries
       # ${CAIOS_DASHBOARD_HOST} in its redirect URIs, and Keycloak does not
@@ -182,6 +214,7 @@ services:
       - papi
 
 volumes:
+  keycloak_db_data:
   caddy_data:
   caddy_config:
   keycloak_data:

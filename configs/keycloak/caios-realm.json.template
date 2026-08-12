@@ -56,8 +56,9 @@
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "https://${CAIOS_DASHBOARD_HOST}/*##http://localhost:8080/*"
       },
-      "_comment_scopes": "offline_access is requested by the dashboard (auth.config.ts scope list) to obtain a refresh token. profile and email are required: PAPI rejects any token missing the `name` or `email` claim.",
+      "_comment_scopes": "The `basic` scope is NOT optional and is easy to miss. In Keycloak 26 it carries the `sub` protocol mapper, and PAPI requires `sub` on every token (auth.py `require`) and uses it as the user identity for Vault secret paths. Listing defaultClientScopes explicitly without it produces tokens that look complete — correct issuer, name, email, roles — and are rejected by PAPI with no clue why. profile and email supply `name` and `email`; roles supplies realm_access. offline_access is optional and requested by the dashboard for a refresh token.",
       "defaultClientScopes": [
+        "basic",
         "web-origins",
         "acr",
         "profile",

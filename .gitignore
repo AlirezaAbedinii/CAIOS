@@ -22,8 +22,10 @@ secrets/
 vault-init.json
 ansible-vault-pass*
 
-# Certificate bundles produced by scripts/make-traefik-certs.sh
+# Certificates produced by scripts/make-*-cert*.sh. Regenerable; the CA that
+# signs them lives outside the repo in ~/caios-ca.*
 certs/
+compose/certs/
 *.zip
 
 # Datasets — public data, but too big to track

@@ -36,11 +36,27 @@ done
 
 mkdir -p compose/generated/keycloak
 
+# Keycloak's realm importer rejects any field it does not recognise, and fails
+# the whole import with "Unrecognized field". That makes an annotated template
+# impossible to import directly. So the comments live in the template, where
+# they are useful, and are stripped here on the way out.
 envsubst < configs/keycloak/caios-realm.json.template \
-    > compose/generated/keycloak/caios-realm.json
+    | python3 -c '
+import json, sys
+
+def strip(o):
+    if isinstance(o, dict):
+        return {k: strip(v) for k, v in o.items() if not k.startswith("_comment")}
+    if isinstance(o, list):
+        return [strip(v) for v in o]
+    return o
+
+json.dump(strip(json.load(sys.stdin)), sys.stdout, indent=2)
+' > compose/generated/keycloak/caios-realm.json
+
 python3 -c "import json,sys; json.load(open(sys.argv[1]))" \
     compose/generated/keycloak/caios-realm.json
-echo "  compose/generated/keycloak/caios-realm.json"
+echo "  compose/generated/keycloak/caios-realm.json (comments stripped for Keycloak)"
 
 cat <<EOF
 

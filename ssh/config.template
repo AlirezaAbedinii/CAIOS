@@ -1,0 +1,38 @@
+# Copy to ~/.ssh/config and fill in the two floating IPs.
+# Both engineers need this; every node except caios_server is private.
+
+Host caios_server
+    User ubuntu
+    Hostname <FIP1>
+    IdentityFile ~/.ssh/<your-key>.pem
+    ForwardAgent yes
+
+Host caios_edge
+    User ubuntu
+    Hostname <FIP2>
+    IdentityFile ~/.ssh/<your-key>.pem
+
+# The three compute nodes have no public IP. Reach them through the bastion.
+# Replace with the actual private subnet, e.g. 192.168.1.*
+Host <PRIVATE_SUBNET>.*
+    User ubuntu
+    IdentityFile ~/.ssh/<your-key>.pem
+    ProxyJump caios_server
+
+Host caios_site_a
+    User ubuntu
+    Hostname <IP_SITE_A>
+    IdentityFile ~/.ssh/<your-key>.pem
+    ProxyJump caios_server
+
+Host caios_site_b
+    User ubuntu
+    Hostname <IP_SITE_B>
+    IdentityFile ~/.ssh/<your-key>.pem
+    ProxyJump caios_server
+
+Host caios_site_c
+    User ubuntu
+    Hostname <IP_SITE_C>
+    IdentityFile ~/.ssh/<your-key>.pem
+    ProxyJump caios_server

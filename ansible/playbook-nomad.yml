@@ -1,0 +1,10 @@
+---
+# CAIOS entrypoint for the upstream Nomad playbook.
+# See playbook-consul.yml for why this wrapper exists.
+#
+# Run from the ansible/ directory, AFTER playbook-consul.yml has succeeded:
+#   ansible-playbook playbook-nomad.yml
+#
+# This playbook also deploys Traefik (as a Nomad job on caios_edge) and creates
+# the Nomad namespaces listed in group_vars/all.yml.
+- import_playbook: ../vendor/ai4-ansible/playbook-nomad.yaml

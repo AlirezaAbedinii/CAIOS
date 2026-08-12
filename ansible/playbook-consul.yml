@@ -1,0 +1,12 @@
+---
+# CAIOS entrypoint for the upstream Consul playbook.
+#
+# Wrapper rather than calling vendor/ directly, for two reasons:
+#   1. Ansible loads group_vars/ adjacent to the *playbook*. Keeping the
+#      entrypoint here is what makes ansible/group_vars/all.yml take effect
+#      instead of the vendored IFCA defaults.
+#   2. vendor/ is read-only. We never run out of it or edit it.
+#
+# Run from the ansible/ directory:
+#   ansible-playbook playbook-consul.yml
+- import_playbook: ../vendor/ai4-ansible/playbook-consul.yaml

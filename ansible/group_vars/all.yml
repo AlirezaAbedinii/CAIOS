@@ -1,0 +1,124 @@
+---
+# CAIOS cluster variables.
+#
+# Copied from vendor/ai4-ansible/group_vars/all.yml at e8991f2 and edited.
+# Every line marked [CAIOS] differs from upstream; the reason is given.
+# Do not edit the vendored copy — this file is the one Ansible reads.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory/hosts.ini \
+#       vendor/ai4-ansible/playbook-consul.yaml
+# (ansible.cfg points group_vars here.)
+
+# -- Ansible
+# [CAIOS] The Ansible master is caios_server itself; we run playbooks from there.
+ansible_master: { name: caios_server, ip: <FIP1> }
+
+# -- Security
+#########################################################
+########## WARNING: DO NOT SET THIS VARIABLE ############
+from_scratch_cluster_installation: true
+#########################################################
+
+# -- Admin
+add_new_nodes: true
+
+
+# -- General
+username: ubuntu
+path: "/home/ubuntu/"
+path_system: /etc/systemd/system/
+path_bin: /usr/bin/
+
+# -- Common
+# [CAIOS] Our Consul server is caios_server. One server only — this is a
+# single-site cluster, not a federation, so there is nothing to replicate to.
+consul_public_ip: "<FIP1>"
+consul_servers_ip: !unsafe ["<FIP1>"]
+my_ip: "{{ ansible_host }}"
+environment_file: /etc/environment
+hosts: /etc/hosts
+new_certs: "caios-federation-certificates"
+# [CAIOS] was ifca-ai4eosc
+primary_datacenter: "caios"
+
+# -- Alloy / Loki logs
+# [CAIOS] Off. Upstream ships logs to AI4EOSC's Loki, which is not ours.
+alloy_enabled: false
+alloy_loki_url: ""
+alloy_loki_user: ""
+alloy_loki_password: ''
+alloy_loki_tenant_id: "default"
+
+# -- Volumes-docker
+disks_path: /dev/
+mount_dir: /mnt/data
+docker_config: /etc/docker/
+# [CAIOS] was https://repo.ifca.es:5000 — IFCA's private registry mirror, which
+# is unreachable for us and would be injected into every client's daemon.json
+# as a registry-mirror, silently slowing or failing image pulls.
+docker_registry: https://registry-1.docker.io
+grub_path: /etc/default/grub
+
+# -- Traefik
+traefik_certs_dir: /etc/nomad.d/traefik-certs
+# [CAIOS] Basename (no .zip) of the certificate bundle that
+# scripts/make-traefik-certs.sh writes to /home/ubuntu/ on the Ansible master.
+# The zip must contain exactly two files, named domain.key and domain.pem —
+# the role copies them by those names and warns (does not fail) if absent.
+traefik_certs: caios-deployments
+# [CAIOS] TODO: real address before any Let's Encrypt use. Unused while we are
+# on self-signed certificates.
+traefik_letsencrypt_email: admin@example.com
+
+# -- Nomad
+nomad_version: 1.11.3
+nomad_data_dir: /opt/nomad
+nomad: "{{ path_bin }}nomad"
+nomad_config_dir: /etc/nomad.d
+nomad_config: "{{ nomad_config_dir }}/"
+nomad_certs_dir: "{{ nomad_config_dir }}/certs"
+nomad_certs: "{{ nomad_certs_dir }}/"
+nomad_fetched_dir: "{{ path }}{{ consul_dc_name }}/nomad_fetched"
+nomad_fetched: "{{ nomad_fetched_dir }}/"
+# [CAIOS] TODO: move to ansible-vault before this cluster is reachable from
+# anywhere untrusted. This is the password on the Nomad UI .p12 certificate.
+nomad_ui_passwd: CHANGEME
+# [CAIOS] One namespace for MVP. V1 splits this into caios_site_a/b/c so that
+# each site's login can only deploy to its own node (see docs/mvp-plan.md).
+nomad_namespaces:
+  - caios
+nomad_nvidia_plugin_version: 1.0.0
+gpu_plugin_dir: plugins
+nomad_reserved_memory_mb: 4096
+nomad_username: nomad
+nomad_cni_version: 1.0.0
+# [CAIOS] was ai4os. MUST be "global": every PAPI job template hardcodes
+# `region = "global"`, and a job submitted to a region that does not exist is
+# rejected by Nomad. This one costs a day to find at the Stage 3 gate.
+nomad_region: global
+# [CAIOS] Left as upstream ships it. ai4-nomad_tests overwrites status to
+# "ready" per node once the node passes; PAPI's job templates constrain on
+# meta.status=ready, so nothing deploys until that test has run.
+nomad_client_meta: { "status": "test" }
+docker_nvidia_driver_version: 550
+
+# -- Consul
+consul_version: 1.21.1
+consul_data_dir: /opt/consul
+consul: "{{ path_bin }}consul"
+consul_config_dir: /etc/consul.d
+consul_config: "{{ consul_config_dir }}/"
+consul_certs_dir: "{{ consul_config_dir }}/certs"
+consul_certs: "{{ consul_certs_dir }}/"
+consul_fetched_dir: "{{ path }}{{ consul_dc_name }}/consul_fetched"
+consul_fetched: "{{ consul_fetched_dir }}/"
+# [CAIOS] was ifca-imagine. This value becomes the Nomad datacenter name on
+# EVERY agent (roles/nomad/templates/nomad.j2 line 1), the Traefik job name,
+# and the node name prefix. It must match nomad_dc in the inventory, and it
+# must match the `name` column in configs/papi/var/datacenters.csv or the
+# Statistics page places the cluster at latitude 0, longitude 0.
+consul_dc_name: caios
+consul_policies_dir: "{{ consul_config }}policies"
+consul_policies: "{{ consul_policies_dir }}/"
+consul_username: consul

@@ -1,8 +1,7 @@
 # MVP and V1 plan
 
-This replaces `docs/phase-plan.md` as the working plan. The phase plan stays as
-the reference for the full 21-day shape; this document is what we actually
-execute against, split so that there is something demonstrable early.
+The working plan, split so that there is something demonstrable early.
+`docs/scope.md` states what is in and out; this says in what order.
 
 **Guiding rule:** anything that adds real complexity without visibly improving
 the demo gets deferred to V1 or cut. Where something is deferred, there is a
@@ -51,7 +50,7 @@ live cluster data
 
 OSCAR · Harbor · Jenkins · drift monitoring · provenance · low-code pipelines ·
 carbon accounting · real PACS/DICOM integration. Unchanged from
-`docs/context.md` §2 — these go on a roadmap slide.
+`docs/scope.md` — these go on a roadmap slide.
 
 ---
 
@@ -62,7 +61,7 @@ before a single command runs against a node.
 
 - [x] Repo scaffold and `.gitignore`
 - [x] `docs/infrastructure.md` — the five-node design
-- [x] `docs/questions-for-supervisor.md` — for tomorrow's meeting
+- [x] `docs/scope.md` and `docs/concepts.md`
 - [x] `ansible/inventory/hosts.ini` + `group_vars/all.yml` with our overrides
 - [x] `configs/papi/` — `main.yaml`, `datacenters.csv`, `.env.template`
 - [x] `configs/dashboard/` — CAIOS tenant config and theme

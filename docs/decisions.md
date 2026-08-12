@@ -145,8 +145,8 @@ kept, Vault and Keycloak both move off dev-mode storage.
 Which imaging modality would land best? Currently planning around public brain MRI.
 Swapping is cheap now and expensive once the FL demo is built around it.
 
-See `docs/questions-for-supervisor.md` for these written up for the meeting, each with
-its default and the cost of deciding late.
+Each of these has a default recorded above or in `docs/scope.md`, so none of them
+blocks work. They are tracked because deciding some of them late is expensive.
 
 ---
 
@@ -156,4 +156,4 @@ its default and the cost of deciding late.
 
 **2026-08-12** — Verified all six upstream repositories at HEAD. Recorded D-10 through
 D-18, revised D-02, D-04 and D-06, and closed Q-01. Corrections to `CLAUDE.md` and
-`docs/context.md` made in the same change. Scaffold for MVP Stage 0 committed.
+the project notes made in the same change. Scaffold for MVP Stage 0 committed.

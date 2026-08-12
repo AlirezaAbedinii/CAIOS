@@ -55,3 +55,18 @@ dist/
 
 # Rendered from templates by scripts/render-configs.sh
 compose/generated/
+
+# ---------------------------------------------------------------------------
+# Local-only working documents.
+#
+# These stay on disk and are shared between the two of us by other means; they
+# are not in the public repository because they contain internal framing —
+# grant context, supervisor questions, team size and budget.
+#
+# The technical content that outlives them lives in README.md, docs/scope.md,
+# docs/infrastructure.md, docs/decisions.md and docs/runbook.md.
+# ---------------------------------------------------------------------------
+CLAUDE.md
+docs/context.md
+docs/questions-for-supervisor.md
+docs/phase-plan.md

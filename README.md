@@ -19,8 +19,10 @@ simulated hospital sites where the data never leaves each site.
 | Understand the five nodes and how they fit together | [docs/infrastructure.md](docs/infrastructure.md) |
 | Know what we are building and in what order | [docs/mvp-plan.md](docs/mvp-plan.md) |
 | Know why something is the way it is | [docs/decisions.md](docs/decisions.md) |
-| Brief the supervisor, or answer their questions | [docs/questions-for-supervisor.md](docs/questions-for-supervisor.md) |
-| Work on this as an agent or a new engineer | [CLAUDE.md](CLAUDE.md) |
+| Know exactly what is in MVP and what is V1 | [docs/scope.md](docs/scope.md) |
+| See what has actually been done so far | [docs/progress.md](docs/progress.md) |
+| Understand Nomad, Consul and Traefik | [docs/concepts.md](docs/concepts.md) |
+| Operate or debug a running cluster | [docs/runbook.md](docs/runbook.md) |
 
 ---
 

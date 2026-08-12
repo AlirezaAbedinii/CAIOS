@@ -1,0 +1,193 @@
+---
+# CAIOS: put the compute nodes' data disks into the shape ai4-ansible expects.
+#
+#   cd ansible && ansible-playbook playbook-prepare-volumes.yml
+#
+# Run ONCE, before playbook-nomad.yml.
+#
+#   !!  DESTRUCTIVE. Erases /dev/vdb on caios_site_a, caios_site_b and
+#       caios_site_c. Verified empty (lost+found only) on 2026-08-12.
+#       caios_server is excluded and asserted against — this repository lives
+#       on its /mnt.
+#
+# WHY THIS IS NEEDED
+# ------------------
+# These instances ship an OpenStack *ephemeral* disk: 125 GB at /dev/vdb, ext4
+# written directly to the whole device with no partition table, labelled
+# ephemeral0, and mounted at /mnt by a cloud-init fstab entry.
+#
+# ai4-ansible's volume task assumes a raw, unpartitioned, empty disk. Against
+# ours it does this:
+#
+#   1. `parted state=info` reports partition table type "loop" and one
+#      pseudo-partition — the filesystem filling the device.
+#   2. So `when: vol_info.partitions | length == 0` is false, and the real
+#      partition is never created.
+#   3. It then runs mkfs.xfs on /dev/vdb1, which does not exist.
+#      --> "Device /dev/vdb1 not found."
+#
+# There is a second bug behind that one, which bites even on a genuinely blank
+# disk: `vol_info` is registered *before* partitioning, so on a disk with zero
+# partitions the role creates /dev/vdb1 and then skips making a filesystem on
+# it (`when: vol_info.partitions | length > 0` is still false), and the mount
+# fails. Upstream presumably works around it by running the playbook twice.
+#
+# So we lay the disk out ourselves, once, and the role's tasks then find
+# everything already correct and become no-ops.
+#
+# WHY XFS: Docker's storage-opt per-container disk limits require XFS with
+# project quotas, and ai4-nomad_tests asserts the device path /dev/vdb1
+# literally. A node left as ext4-on-raw-device is marked failed and gets no work.
+
+- name: Prepare compute node data volumes
+  hosts: nomad_volume
+  become: true
+
+  vars:
+    caios_device: "/dev/{{ vol_name | default('vdb') }}"
+    caios_partition: "/dev/{{ vol_name | default('vdb') }}1"
+
+  pre_tasks:
+    - name: "Safety check: never the control-plane node"
+      ansible.builtin.assert:
+        that:
+          - inventory_hostname != 'caios_server'
+        fail_msg: >-
+          Refusing to touch caios_server's disk — this repository lives on it at
+          /mnt/CAIOS.
+
+    - name: "Safety check: the device exists"
+      ansible.builtin.stat:
+        path: "{{ caios_device }}"
+      register: caios_dev_stat
+
+    - name: "Fail if the device is missing"
+      ansible.builtin.fail:
+        msg: "{{ caios_device }} does not exist on {{ inventory_hostname }}."
+      when: not caios_dev_stat.stat.exists
+
+    # Last line of defence. We verified these volumes hold only lost+found, but
+    # this playbook is re-runnable and the disks may not be empty next time.
+    - name: "Check what is on the volume"
+      ansible.builtin.find:
+        paths: "{{ mount_dir_current | default('/mnt') }}"
+        excludes: "lost+found"
+        file_type: any
+      register: caios_vol_contents
+      failed_when: false
+
+    - name: "Refuse to erase a volume with data on it"
+      ansible.builtin.fail:
+        msg: |
+          {{ caios_device }} on {{ inventory_hostname }} is not empty:
+          {{ caios_vol_contents.files | map(attribute='path') | list | join(', ') }}
+
+          Move anything you need off it, or pass -e caios_force_wipe=true if you
+          are certain it is disposable.
+      when:
+        - caios_vol_contents.matched | default(0) > 0
+        - not (caios_force_wipe | default(false) | bool)
+
+  tasks:
+
+    - name: Install filesystem tools
+      ansible.builtin.apt:
+        name:
+          - parted
+          - xfsprogs
+        state: present
+        update_cache: true
+
+    # The cloud-init entry mounts the raw device at /mnt. It has to go before we
+    # repartition, or the next boot tries to mount a device that no longer holds
+    # a filesystem. Nomad's data lives at /mnt/data instead, and the role adds
+    # its own entry for that.
+    - name: Remove the cloud-init fstab entry for the raw device
+      ansible.posix.mount:
+        path: /mnt
+        state: absent_from_fstab
+
+    - name: Unmount the raw device
+      ansible.posix.mount:
+        path: /mnt
+        state: unmounted
+
+    # Unmounting in the host namespace is not enough. Snap packages run in their
+    # own mount namespaces, created at snap start — and the LXD snap ships
+    # enabled by default on Ubuntu cloud images. Its namespace was created while
+    # /dev/vdb was mounted at /mnt, so it still holds a reference:
+    #
+    #   nsenter --mount=/run/snapd/ns/lxd.mnt findmnt | grep vdb
+    #   /dev/vdb  ├─/mnt
+    #
+    # That stale reference keeps the device claimed. Writes still work — `dd` to
+    # the partition succeeds — but mkfs opens with O_EXCL and fails with
+    # "Device or resource busy", which reads like something is actively using
+    # the disk when nothing is.
+    #
+    # Rebooting is the deterministic fix: the fstab entry is already gone, so
+    # the node comes back with nothing holding the device and no namespace to
+    # inherit a stale mount from. These nodes are empty, so it costs a minute.
+    - name: Reboot to clear stale mount-namespace references to the device
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+        msg: "CAIOS: preparing data volume"
+
+    - name: Erase existing filesystem signatures
+      ansible.builtin.command: "wipefs --all --force {{ caios_device }}"
+      register: caios_wipe
+      changed_when: caios_wipe.stdout | length > 0
+
+    - name: Create a GPT partition spanning the disk
+      community.general.parted:
+        device: "{{ caios_device }}"
+        number: 1
+        state: present
+        part_type: primary
+        label: gpt
+        align: optimal
+        part_start: "0%"
+        part_end: "100%"
+        name: "{{ partition_name | default('part1') }}"
+
+    - name: Wait for the kernel to expose the new partition
+      ansible.builtin.wait_for:
+        path: "{{ caios_partition }}"
+        timeout: 30
+
+    # wait_for returns as soon as the device node appears, but udev is still
+    # probing it at that moment and holds it open — mkfs then fails with
+    # "Device or resource busy". Settling first, and retrying, makes this
+    # deterministic rather than a race we lose most of the time.
+    - name: Let udev finish probing the new partition
+      ansible.builtin.command: udevadm settle --timeout=30
+      changed_when: false
+
+    - name: Create the XFS filesystem
+      community.general.filesystem:
+        fstype: xfs
+        dev: "{{ caios_partition }}"
+        force: true          # the device was just wiped; nothing to preserve
+      register: caios_mkfs
+      retries: 5
+      delay: 3
+      until: caios_mkfs is succeeded
+
+    # pquota is the point of the exercise: it is what lets Docker enforce a
+    # per-container disk limit. Without it, one runaway deployment fills the node.
+    - name: Mount it at the location Nomad will use
+      ansible.posix.mount:
+        path: "{{ mount_dir }}"
+        src: "{{ caios_partition }}"
+        fstype: xfs
+        opts: defaults,pquota
+        state: mounted
+
+    - name: Report
+      ansible.builtin.command: "findmnt -no SOURCE,TARGET,FSTYPE,OPTIONS {{ mount_dir }}"
+      register: caios_final
+      changed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ caios_final.stdout }}"

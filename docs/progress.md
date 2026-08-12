@@ -5,10 +5,10 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 0 complete and Stage 1 unblocked. Nothing installed on the
-nodes yet.** SSH works to all four nodes; every data volume is confirmed empty
-and safe to reformat. Next action is installing Ansible and running the cluster
-playbooks.
+**Where we are: Stage 1 nearly complete.** Consul, Nomad and Traefik are running
+across all five nodes. One step remains before the gate: run `ai4-nomad_tests`
+to flip each compute node's `meta.status` from `test` to `ready`, without which
+no deployment can be scheduled.
 
 ---
 
@@ -17,21 +17,109 @@ playbooks.
 | Stage | What it delivers | State |
 |---|---|---|
 | 0 — Local scaffold | Every config, script and patch, written and self-tested | **Done** |
-| 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | Not started |
+| 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **In progress** — all services up; nodes need marking ready |
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | Not started |
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | Not started |
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
-**Nothing is blocking.** Both Stage 1 prerequisites are met:
+**Nothing is blocking.** Next actions, in order:
 
-| Prerequisite | State |
-|---|---|
-| SSH from `caios_server` to all four nodes | Done — verified with the cluster key alone |
-| Site node volumes safe to reformat | Confirmed — all four `/mnt` are empty |
+1. Run the patched `ai4-nomad_tests` so compute nodes reach `meta.status=ready`.
+2. Deploy `nomad-jobs/smoke-test.hcl` and open it over HTTPS — the Stage 1 gate.
+3. Stage 2: Keycloak and Vault.
 
-Next: install Ansible, then `playbook-control-plane.yml`, `playbook-consul.yml`,
-`playbook-nomad.yml`.
+---
+
+## 2026-08-12 — Stage 1: Consul, Nomad and Traefik are live
+
+**The cluster is up.** Five Consul members, Nomad server leading with region
+`global` and datacenter `caios`, four Nomad clients ready, and the Traefik job
+already running.
+
+```
+Consul   5 members alive          datacenter caios
+Nomad    1 server (leader)        region global
+         4 clients ready          3 GPU compute + 1 traefik
+Jobs     traefik-caios running    docuum running
+Namespace  caios                  created
+```
+
+GPU nodes check out completely: `NVIDIA H100L-1-12C` detected as a Nomad device,
+the `nvidia` Docker runtime present, `/dev/vdb1` mounted, 44.7 GB per core
+(the test needs >5), 4096 MB reserved.
+
+**One step left before the Stage 1 gate:** every compute node still reports
+`meta.status=test`. That is the value Ansible ships, and only `ai4-nomad_tests`
+changes it to `ready` — which every PAPI deployment requires. Next action.
+
+### Four real problems, and what each cost
+
+**1. `import_playbook` silently loaded the wrong variables.** Ansible resolves
+`group_vars/` relative to the playbook's own directory. Importing
+`vendor/ai4-ansible/playbook-consul.yaml` therefore made *upstream's* IFCA
+settings win, and every one of ours was ignored — the first run happily built an
+`ifca-imagine` cluster and reported success. Replaced both wrappers with plays
+that call the vendored roles directly, and added asserts on `consul_dc_name` and
+`nomad_region` so it cannot recur quietly.
+
+**2. `group_vars` still held `<CTRL_IP>` placeholders** from the earlier variable
+rename. Consul clients tried to resolve that literal string as a hostname,
+joined nothing, and left a one-node cluster that looked perfectly healthy from
+the server. Added a placeholder guard to both playbooks.
+
+**3. Re-running after a reset failed nowhere near its cause.** The role guards
+ACL bootstrap with a `creates:` file check, so a leftover file made it skip
+bootstrapping and reuse a token that no longer existed in the wiped raft store.
+Every later ACL call failed, and the visible symptom was a timeout waiting for an
+agent token file. `playbook-reset-cluster.yml` now clears those artifacts.
+
+**4. The data volumes were the wrong shape, twice over.** These are OpenStack
+*ephemeral* disks: 125 GB at `/dev/vdb`, ext4 written straight to the device with
+no partition table, mounted at `/mnt` by cloud-init.
+
+- `parted` reports that as partition table type `loop` with one pseudo-partition,
+  so upstream's `when: partitions | length == 0` never fires, no real partition
+  is created, and it then runs `mkfs.xfs` on a `/dev/vdb1` that does not exist.
+- There is a second bug behind it that bites even on a blank disk: `vol_info` is
+  registered *before* partitioning, so the filesystem step is skipped on the same
+  run that creates the partition. Upstream presumably works around it by running
+  the playbook twice.
+- Then `mkfs` failed with "Device or resource busy" while `fuser`, `lsof` and
+  `dmsetup` all showed nothing holding the device — and a raw `dd` to it
+  succeeded. The cause: **the LXD snap's mount namespace**, created while
+  `/dev/vdb` was mounted at `/mnt`, still held a reference. `mkfs` opens with
+  `O_EXCL` and fails; `dd` does not and works.
+
+`playbook-prepare-volumes.yml` now lays the disks out correctly in one pass —
+drop the cloud-init fstab entry, reboot to clear stale namespace references,
+wipe, partition, format XFS, mount at `/mnt/data` with `prjquota`. All three
+site nodes are done and the role's own volume tasks are now no-ops.
+
+### GPU drivers: the hazard was real
+
+`grycap.docker` declares `NVIDIA.nvidia_driver` as a **hard role dependency**,
+and role dependencies cannot be skipped with tags or variables. The real role
+apt-installs a public NVIDIA driver and reboots, with no check for an existing
+one.
+
+These nodes run driver **580.105.08 installed via NVIDIA's `.run` installer**, so
+`dpkg` knows nothing about it — `dpkg -l | grep -c nvidia` returns 0. apt would
+have installed the older public 550 driver over a working vGPU stack and
+rebooted all three GPU nodes.
+
+Our stub at `ansible/roles/NVIDIA.nvidia_driver/` verifies instead of installing,
+and `ansible.cfg` puts our roles first so it shadows the Galaxy one. The
+container toolkit still installs normally — confirmed by the `nvidia` runtime
+being present and the GPU showing up as a Nomad device.
+
+### Also fixed
+
+`scripts/verify-cluster.sh` had two bugs of its own. It piped JSON into
+`python3 -` while also feeding the program in via heredoc, so the program read an
+empty stdin; and `nomad node status -json` in list form returns no `Meta` field
+at all, so metadata needs a per-node query. Both fixed — it now correctly reports
+all four constraint fields and flags the `meta.status=test` issue by name.
 
 ---
 

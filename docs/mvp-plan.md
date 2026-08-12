@@ -79,16 +79,20 @@ IPs. Fill them into `ansible/inventory/hosts.ini` and
 
 Goal: a job deployed by hand is reachable over HTTPS at its own subdomain.
 
-- [ ] Confirm both floating IPs; note them — every hostname derives from them
+- [x] Node addresses confirmed and written into the inventory and caios.env
+- [ ] **Distribute an SSH key**: generate one on caios_server, add the public
+      half to the other four nodes. Ansible cannot reach anything without it.
+- [ ] **Confirm each site node has a second volume** visible as `/dev/vdb`
 - [ ] Create the four security groups (`scripts/openstack-security-groups.sh`
       prints the exact commands; nothing runs without approval)
-- [ ] Attach one volume per site node; confirm each appears as `/dev/vdb`
-- [ ] `~/.ssh/config` with `ProxyJump` through node 1; both engineers verify
 - [ ] `ansible-galaxy install grycap.docker`
-- [ ] `bash scripts/make-traefik-certs.sh` — self-signed wildcard, packaged the
-      way the Traefik role expects
-- [ ] `ansible-playbook -i ansible/inventory/hosts.ini vendor/ai4-ansible/playbook-consul.yaml`
-- [ ] `ansible-playbook -i ansible/inventory/hosts.ini vendor/ai4-ansible/playbook-nomad.yaml`
+- [x] `bash scripts/make-traefik-certs.sh` — self-signed wildcard, packaged the
+      way the Traefik role expects. **Done** — `/home/ubuntu/caios-deployments.zip`
+- [ ] `ansible-playbook playbook-control-plane.yml` — installs Docker on
+      caios_server. Upstream never does: it installs Docker only on Nomad
+      clients, and caios_server is deliberately a server only.
+- [ ] `cd ansible && ansible-playbook playbook-consul.yml`
+- [ ] `ansible-playbook playbook-nomad.yml` — also deploys Traefik
 - [ ] `bash scripts/verify-cluster.sh` — prints every node's metadata and region
 - [ ] Run the patched `ai4-nomad_tests`; **confirm every client flips to
       `meta.status=ready`**

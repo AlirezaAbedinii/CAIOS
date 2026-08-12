@@ -1,0 +1,94 @@
+---
+# Prepare caios_server to run the Compose control plane.
+#
+#   cd ansible && ansible-playbook playbook-control-plane.yml
+#
+# Why this exists: ai4-ansible installs Docker only on Nomad *clients*
+# (roles/nomad/tasks/main.yml gates it on the nomad_clients group).
+# caios_server is a Nomad *server*, deliberately not a client, so nothing
+# upstream ever installs Docker there — and that is exactly where Keycloak,
+# Vault, PAPI, the dashboard and Caddy run.
+#
+# Safe to run before or after the Consul/Nomad playbooks. Idempotent.
+
+- name: Prepare the control-plane node
+  hosts: nomad_master
+  become: true
+
+  tasks:
+
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - python3-pip
+          - unzip          # the Traefik role unpacks the certificate bundle
+        state: present
+        update_cache: true
+
+    - name: Create the keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Docker's GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Add the Docker repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}
+          signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/ubuntu
+          {{ ansible_distribution_release }} stable
+        filename: docker
+        state: present
+
+    - name: Install Docker Engine and the Compose plugin
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Let the login user run docker without sudo
+      ansible.builtin.user:
+        name: "{{ username }}"
+        groups: docker
+        append: true
+      # Takes effect on the next login. `newgrp docker` applies it immediately.
+
+    # The Compose stack mounts these read-only so PAPI can reach Nomad over
+    # loopback. They are written by playbook-nomad.yml, so this is a check
+    # rather than a step — it fails early and clearly if run out of order.
+    - name: Check the Nomad certificates PAPI will need
+      ansible.builtin.stat:
+        path: "{{ nomad_certs }}{{ item }}"
+      register: nomad_cert_check
+      loop:
+        - nomad-ca.pem
+        - cli.pem
+        - cli-key.pem
+
+    - name: Report on the Nomad certificates
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'All Nomad certificates present — PAPI can start.'
+             if nomad_cert_check.results | map(attribute='stat.exists') | select | list | length == 3
+             else 'Nomad certificates not found yet. Expected until playbook-nomad.yml has run; PAPI will fail to reach Nomad until then.' }}

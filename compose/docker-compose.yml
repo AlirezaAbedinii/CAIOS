@@ -149,6 +149,10 @@ services:
       # overwritten a second later. WORKDIR is /home/ai4-papi, not /srv.
       - ../configs/papi/main.yaml:/home/ai4-papi/etc/main_tmp.yaml:ro
       - ../configs/papi/var/datacenters.csv:/home/ai4-papi/var/datacenters.csv:ro
+      # Our GPU reports as 'NVIDIA H100L-1-12C', a 12 GB vGPU slice, which is
+      # not in upstream's list. Without a row here the dashboard shows the
+      # model with no specs against it.
+      - ../configs/papi/var/gpu_models.csv:/home/ai4-papi/var/gpu_models.csv:ro
       - ../configs/papi/tools/ai4os-federated-server/user.yaml:/home/ai4-papi/etc/tools/ai4os-federated-server/user.yaml:ro
       # Nomad's own certificates, written by Ansible on this node.
       - /etc/nomad.d/certs:/etc/nomad.d/certs:ro

@@ -1,0 +1,183 @@
+# CAIOS control plane. Runs on caios_server (node 1).
+#
+#   cd compose && docker compose --env-file ../configs/env/caios.env up -d
+#
+# Why Compose and not Nomad jobs (D-03): these five services need to be
+# debuggable in a three-week window. `docker compose logs papi` beats chasing
+# allocations through the Nomad UI, and none of them benefit from scheduling.
+#
+# Why on the same node as the Nomad server: PAPI needs mTLS certificates to
+# reach Nomad. On this node Ansible has already written them to
+# /etc/nomad.d/certs/, and Nomad answers on 127.0.0.1:4646. Anywhere else means
+# copying certificates around and exposing 4646 across the network.
+
+name: caios
+
+services:
+
+  # --------------------------------------------------------------------------
+  # Caddy — TLS termination and routing for the four public hostnames.
+  # Attempts Let's Encrypt automatically per hostname (HTTP-01, which works for
+  # named hosts even on sslip.io) and falls back to its internal CA if that
+  # fails. Deployment wildcards are Traefik's job on caios_edge, not ours.
+  # --------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: caios_caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      CAIOS_DASHBOARD_HOST: ${CAIOS_DASHBOARD_HOST}
+      CAIOS_API_HOST: ${CAIOS_API_HOST}
+      CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
+      CAIOS_VAULT_HOST: ${CAIOS_VAULT_HOST}
+    depends_on:
+      - dashboard
+      - papi
+      - keycloak
+
+  # --------------------------------------------------------------------------
+  # Keycloak — login. PAPI validates every token's signature and issuer against
+  # this realm, so its public URL must match exactly what PAPI is configured
+  # with, including scheme. A mismatch produces 401 on everything.
+  # --------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: caios_keycloak
+    restart: unless-stopped
+    command: start --import-realm --optimized=false
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: dev-file            # MVP only. V1: postgres, if this is kept.
+      KC_HOSTNAME: https://${CAIOS_AUTH_HOST}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      # Rendered by scripts/render-configs.sh — the template carries
+      # ${CAIOS_DASHBOARD_HOST} in its redirect URIs, and Keycloak does not
+      # expand those itself.
+      - ./generated/keycloak:/opt/keycloak/data/import:ro
+      - keycloak_data:/opt/keycloak/data
+    ports:
+      - "127.0.0.1:8180:8080"
+
+  # --------------------------------------------------------------------------
+  # Vault — per-deployment secrets.
+  #
+  # Not optional, and not obvious: deploying the federated learning server makes
+  # PAPI call create_secret() and create_vault_token() BEFORE it contacts Nomad.
+  # Without a Vault that trusts our Keycloak, the headline demo fails at PAPI
+  # with an error that looks nothing like a Vault problem.
+  #
+  # Dev mode is deliberate for MVP: in-memory, auto-unsealed, root token fixed.
+  # It means a restart loses every stored secret, which for a demo is a feature
+  # (clean state) rather than a bug. V1 switches to file storage and real seals
+  # if this cluster is kept.
+  # --------------------------------------------------------------------------
+  vault:
+    image: hashicorp/vault:1.18
+    container_name: caios_vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_ROOT_TOKEN}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+
+  # --------------------------------------------------------------------------
+  # PAPI — the control plane. The only component holding Nomad credentials.
+  #
+  # When something looks broken in the dashboard, check here first: a
+  # misconfigured PAPI renders a perfect UI in which every button fails quietly.
+  # --------------------------------------------------------------------------
+  papi:
+    build:
+      context: ../build/ai4-papi          # patched copy; see patches/README.md
+      dockerfile: docker/Dockerfile
+    image: caios/papi:latest
+    container_name: caios_papi
+    restart: unless-stopped
+    # Host networking so PAPI reaches Nomad at 127.0.0.1:4646. The Nomad server
+    # certificate is issued for localhost, 127.0.0.1 and the node's private IP
+    # (see roles/nomad/tasks/generate_certificates.yml), so loopback validates
+    # correctly — no cert juggling needed.
+    network_mode: host
+    # Upstream's CMD binds 0.0.0.0:80, which would collide with Caddy on the
+    # host network AND expose PAPI directly on the public IP. Rebound to
+    # loopback:8000; Caddy is the only thing in front of it.
+    # The envsubst step is upstream's and must be kept: it is what expands the
+    # ${...} placeholders in our main.yaml.
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        unset NOMAD_NAMESPACE
+        envsubst < etc/main_tmp.yaml > etc/main.yaml
+        exec /root/.local/bin/ai4papi-run --host 127.0.0.1 --port 8000
+    environment:
+      # NOT optional, and not what CLAUDE.md's gotcha 1 implies: PAPI's own
+      # Dockerfile sets `ENV IS_PROD=True`. Leaving it "unset" in compose
+      # inherits True from the image, and PAPI then refuses to start because
+      # Harbor/Jenkins/provenance/LiteLLM tokens are missing — with an error
+      # that does not point at the cause. It has to be set to false explicitly.
+      IS_PROD: "false"
+      # Patched in — upstream hardcodes AI4EOSC's realm in auth.py.
+      KEYCLOAK_URL: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
+      # Patched in — upstream hardcodes secrets.services.ai4os.eu in secrets.py.
+      VAULT_ADDR: http://127.0.0.1:8200
+      NOMAD_ADDR: ${NOMAD_ADDR}
+      NOMAD_CACERT: ${NOMAD_CACERT}
+      NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}
+      NOMAD_CLIENT_KEY: ${NOMAD_CLIENT_KEY}
+      DASHBOARD_URL: ${DASHBOARD_URL}
+      CAIOS_FIP1: ${CAIOS_FIP1}
+      CAIOS_FIP2: ${CAIOS_FIP2}
+    volumes:
+      # Mounted over main_TMP.yaml, not main.yaml. The image copies main.yaml to
+      # main_tmp.yaml at build time and regenerates main.yaml from it through
+      # envsubst on every start — so anything mounted at main.yaml is silently
+      # overwritten a second later. WORKDIR is /home/ai4-papi, not /srv.
+      - ../configs/papi/main.yaml:/home/ai4-papi/etc/main_tmp.yaml:ro
+      - ../configs/papi/var/datacenters.csv:/home/ai4-papi/var/datacenters.csv:ro
+      - ../configs/papi/tools/ai4os-federated-server/user.yaml:/home/ai4-papi/etc/tools/ai4os-federated-server/user.yaml:ro
+      # Nomad's own certificates, written by Ansible on this node.
+      - /etc/nomad.d/certs:/etc/nomad.d/certs:ro
+    depends_on:
+      - keycloak
+      - vault
+
+  # --------------------------------------------------------------------------
+  # Dashboard — Angular SPA. Talks only to PAPI, never to Nomad.
+  #
+  # Built by scripts/build-dashboard.sh, which stages the caios tenant. The four
+  # variables below are injected at container start by the image's own entrypoint,
+  # so changing the API address or realm needs a restart, not a rebuild.
+  # --------------------------------------------------------------------------
+  dashboard:
+    image: caios/dashboard:latest
+    container_name: caios_dashboard
+    restart: unless-stopped
+    environment:
+      API_SERVER: https://${CAIOS_API_HOST}
+      ISSUER: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
+      CLIENT_ID: caios-dashboard
+      DUMMY_CLIENT_SECRET: ""
+    ports:
+      - "127.0.0.1:8081:80"
+    depends_on:
+      - papi
+
+volumes:
+  caddy_data:
+  caddy_config:
+  keycloak_data:

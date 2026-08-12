@@ -1,0 +1,72 @@
+{
+  "_comment": "CAIOS Keycloak realm. Rendered by scripts/render-configs.sh (envsubst) into compose/generated/keycloak/, which Keycloak imports on first start. Editing the rendered copy is pointless — it is regenerated.",
+
+  "realm": "caios",
+  "enabled": true,
+  "displayName": "CAIOS",
+  "displayNameHtml": "<b>CAIOS</b>",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+
+  "_comment_tokens": "PAPI validates exp on every request. 30 min is long enough that a demo walkthrough never hits a refresh mid-sentence, short enough to stay sane.",
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 7200,
+  "ssoSessionMaxLifespan": 36000,
+
+  "_comment_roles": "PAPI parses REALM roles matching `access:<vo>:<level>` (ai4papi/auth.py:63-69). The name is the entire interface — a role called 'user' or a Keycloak group conveys nothing to PAPI. Levels in ascending order: ap-a, ap-a1, ap-b, ap-u, ap-d. ap-u is the minimum for deploying anything.",
+  "roles": {
+    "realm": [
+      {
+        "name": "access:vo.caios.ca:ap-u",
+        "description": "Full platform access for the CAIOS VO. Deploy modules and tools, use storage. This is what demo researcher accounts need."
+      },
+      {
+        "name": "access:vo.caios.ca:ap-d",
+        "description": "Developer access for the CAIOS VO. Everything ap-u has, plus development features."
+      }
+    ]
+  },
+
+  "_comment_clients": "One public client for the Angular SPA. PAPI needs no client of its own: it validates tokens against the realm's public keys rather than introspecting them, so it never authenticates to Keycloak.",
+  "clients": [
+    {
+      "clientId": "caios-dashboard",
+      "name": "CAIOS Dashboard",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "_comment_redirect": "Scoped to the real dashboard origin. Never widen this to '*' — a wildcard redirect URI on a public client is how access tokens get stolen.",
+      "redirectUris": [
+        "https://${CAIOS_DASHBOARD_HOST}/*",
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "https://${CAIOS_DASHBOARD_HOST}",
+        "http://localhost:8080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://${CAIOS_DASHBOARD_HOST}/*##http://localhost:8080/*"
+      },
+      "_comment_scopes": "offline_access is requested by the dashboard (auth.config.ts scope list) to obtain a refresh token. profile and email are required: PAPI rejects any token missing the `name` or `email` claim.",
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    }
+  ]
+}

@@ -52,3 +52,6 @@ dist/
 .DS_Store
 .idea/
 *.swp
+
+# Rendered from templates by scripts/render-configs.sh
+compose/generated/

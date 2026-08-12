@@ -1,0 +1,54 @@
+# CAIOS ingress for the control plane, on caios_server.
+#
+# Caddy tries Let's Encrypt over HTTP-01 for each hostname and falls back to its
+# own internal CA if that fails. HTTP-01 works for named hosts on sslip.io; it
+# cannot do the *deployment* wildcard, which is why Traefik on caios_edge uses a
+# self-signed wildcard instead. Two different certificate stories, on purpose.
+#
+# Requires TCP 80 and 443 open to caios_server. Port 80 is not optional even if
+# you only want HTTPS — that is how the ACME challenge is answered.
+
+{
+	# Uncomment to skip Let's Encrypt entirely and use Caddy's internal CA.
+	# Faster, and avoids burning ACME rate limits while iterating.
+	# local_certs
+	email admin@example.com
+}
+
+# ---------------------------------------------------------------------------
+# Dashboard — the only hostname a demo audience ever sees.
+# ---------------------------------------------------------------------------
+{$CAIOS_DASHBOARD_HOST} {
+	encode gzip
+	reverse_proxy 127.0.0.1:8081
+}
+
+# ---------------------------------------------------------------------------
+# PAPI. CORS is handled by PAPI itself from main.yaml's CORS_origins; adding
+# headers here as well produces duplicates and browsers reject the response.
+# ---------------------------------------------------------------------------
+{$CAIOS_API_HOST} {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+}
+
+# ---------------------------------------------------------------------------
+# Keycloak. The scheme and host here must match KC_HOSTNAME and PAPI's
+# KEYCLOAK_URL exactly — the issuer claim in every token is compared literally,
+# so http vs https or a trailing slash is enough to fail every request with 401.
+# ---------------------------------------------------------------------------
+{$CAIOS_AUTH_HOST} {
+	encode gzip
+	reverse_proxy 127.0.0.1:8180 {
+		header_up X-Forwarded-Proto https
+	}
+}
+
+# ---------------------------------------------------------------------------
+# Vault UI. Admin only — nothing in the demo touches this directly.
+# TODO before this cluster is reachable from anywhere untrusted: restrict to
+# admin source IPs, or drop this block and reach Vault over the SSH tunnel.
+# ---------------------------------------------------------------------------
+{$CAIOS_VAULT_HOST} {
+	reverse_proxy 127.0.0.1:8200
+}

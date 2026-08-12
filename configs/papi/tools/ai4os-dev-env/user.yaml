@@ -1,0 +1,118 @@
+---
+# User customizable configuration to make a deployment in Nomad.
+# Additional non-customizable values (eg. ports) are hardcoded in `job.nomad`.
+
+# All conf parameters follow the same structure:
+# varname:
+#  name: name of the parameter to be displayed to end user (mandatory)
+#  value: (default) value of the parameter (mandatory)
+#  options: restricted set of values that the parameter can take (optional)
+#  description: some comments on the parameter to be displayed to the end user (optional)
+
+# CPU/RAM limits are based on the current have GPU flavours we (IFCA) have deployed:
+# * g13-gpuib-8-86:
+#     - 8 GPUs Nvidia Tesla T4
+#     - 86 VCPUs --> ~9.6 cores / gpu (reserving 10% for the node)
+#     - 351 GB RAM --> ~40 GB / gpu (reserving 10% for the node)
+# * g12-gpuib-2-64:
+#     - 2 GPUs Nvidia Tesla V100
+#     - 64 VCPUs --> ~28 cores / gpu (reserving 10% for the node)
+#     - 127 GB RAM --> ~57 GB / gpu (reserving 10% for the node)
+
+general:
+  title:
+    name: Deployment title
+    value: ''
+    description: Provide short title for this deployment (less than 45 characters). Useful when you have lots of different active deployments.
+
+  desc:
+    name: Deployment description
+    value: ''
+    description: Provide some additional extended information about this deployment.
+
+  docker_image:
+    name: Docker image
+    value: 'ai4oshub/ai4os-dev-env'
+    description: Docker image to be used.
+
+  docker_tag:
+    name: Docker tag
+    value: ''
+    description: Docker tag to use. Tags are module dependent. You should choose the appropriate tag for your selected hardware (eg. use a `gpu`-like tag if you plan to run on GPUs).
+    options: []
+
+  service:
+    name: Interactive Development Environment
+    value: 'vscode'
+    description: Select your favorite Interactive Development Environment
+    options: ['vscode', 'jupyter']
+
+  jupyter_password:
+    name: IDE password
+    value: ''
+    description: Select a password for your IDE (JupyterLab or VS Code). It should have at least 9 characters.
+
+hardware:
+  # [CAIOS] Our nodes have 3 vCPU each, against the 64-86 of the reference
+  # deployment, and Nomad reserves whole cores. With the mail sidecar patched
+  # out (patches/ai4-papi/0005) a job reserves cpu_num cores plus ~500 MHz of
+  # shared time for the UI task, so 2 fits on a 3-core node and 3 does not.
+  #
+  # Getting this wrong does not degrade performance — the job queues forever
+  # with "Dimension cpu exhausted" and never starts. Raise when the nodes grow.
+  cpu_num:
+    name: Number of CPUs
+    value: 1
+    range: [1, 2]
+
+  gpu_num:
+    name: Number of GPUs
+    value: 0
+    range: [0, 1]
+
+  gpu_type:
+    name: GPU model
+    value: ''
+    options: ['']
+    description: Fill this field only if you have a *hard* requirement for a given kind of GPU model.
+
+  ram:
+    name: RAM memory (in MB)
+    value: 8000
+    range: [2000, 40000]
+
+  disk:
+    name: Disk memory (in MB)
+    value: 10000
+    range: [1000, 50000]
+
+storage:
+  rclone_conf:
+    name: RCLONE configuration
+    value: '/srv/.rclone/rclone.conf'
+    description: rclone.conf location
+
+  rclone_url:
+    name: Storage URL
+    value: ''
+    description: Remote storage link to be accessed via rclone (webdav). For example, in Nextcloud `https://share.cloud.ai4eosc.eu/remote.php/dav/files/<USER-ID>`
+
+  rclone_vendor:
+    name: RCLONE vendor
+    value: 'nextcloud'
+    options: ['nextcloud']
+    description: RCLONE vendor (webdav)
+
+  rclone_user:
+    name: RCLONE user
+    value: ''
+    description: rclone user to access a webdav remote storage
+
+  rclone_password:
+    name: RCLONE user password
+    value: ''
+
+  datasets:
+    name: Info of the datasets you want to download
+    value: []
+    description: Each element in the list should be a dict containing "doi" and "force_pull" keys. It requires the definition of all RCLONE variables.

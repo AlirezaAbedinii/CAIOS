@@ -1,0 +1,92 @@
+---
+# Pull the container images every deployment needs, onto every compute node.
+#
+#   cd ansible && ansible-playbook playbook-prepull-images.yml
+#
+# Safe and re-runnable. Pulls only; never removes anything.
+#
+# WHY THIS IS NOT JUST A DEMO-DAY OPTIMISATION
+# --------------------------------------------
+# Several images live in AI4EOSC's registry in Europe. From Canada that link is
+# slow enough that Docker's own response-header timeout fires mid-pull:
+#
+#   Failed to pull registry.cloud.ai4eosc.eu/ai4os/deepaas_ui:latest:
+#   net/http: timeout awaiting response headers
+#
+# Nomad's image_pull_timeout is 30 minutes and is not the limit being hit — the
+# daemon's HTTP client gives up first. A manual `docker pull` on the same node
+# succeeds, because it retries. So deployments fail intermittently, and which
+# task dies depends on which pull was unlucky.
+#
+# Worse, the failing tasks are `prestart` and `poststart` sidecars, so their
+# failure kills the whole allocation — a deployment that looks like a platform
+# fault when it is really a slow download.
+#
+# Pulling ahead of time removes the timeout from the critical path entirely, and
+# makes deployments start in seconds instead of minutes.
+#
+# Run playbook-container-storage.yml FIRST. Docker 29 keeps image layers under
+# containerd's root, not Docker's data-root, so on an unfixed node these pulls
+# fill the 20 GB system disk instead of the 125 GB volume — and fail partway
+# with "No space left on device".
+
+- name: Pre-pull deployment images
+  hosts: nomad_clients
+  become: true
+  gather_facts: false
+
+  vars:
+    # Keep in step with what PAPI's job templates reference. Sidecars first:
+    # they are the ones whose failure takes an allocation down.
+    caios_images:
+      # --- module and tool sidecars (AI4EOSC registry, the slow one) ---
+      - registry.cloud.ai4eosc.eu/ai4os/deepaas_ui:latest        # "ui" task
+      - registry.cloud.ai4eosc.eu/ai4os/docker-storage:latest    # storage mount
+      - registry.cloud.ai4eosc.eu/ai4os/docker-zenodo:latest     # dataset download
+      # --- the demo workloads themselves (Docker Hub) ---
+      - ai4oshub/ai4os-demo-app:latest
+      # The dev environment has NO `latest` tag — it publishes one tag per
+      # framework (u22.04, pytorch2.1, tf2.14.0, cuda12.3.2 ...). Asking for
+      # latest fails with "not found", which reads like a network error.
+      # u22.04 is the plain base; pytorch2.1 is what the FL clients will use.
+      - ai4oshub/ai4os-dev-env:u22.04
+      - ai4oshub/ai4os-dev-env:pytorch2.1
+      - ai4oshub/ai4os-federated-server:latest
+      # `tokens` is the image that issues per-client credentials — the beat
+      # where each hospital gets its own revocable key.
+      - ai4oshub/ai4os-federated-server:tokens
+
+  tasks:
+
+    - name: Pull images
+      # Retries because the failure being worked around is a timeout, not a
+      # refusal — the same pull usually succeeds on a second attempt.
+      ansible.builtin.command: "docker pull {{ item }}"
+      loop: "{{ caios_images }}"
+      register: caios_pull
+      retries: 3
+      delay: 10
+      # Deliberately simple. An earlier version combined `until`, `changed_when`
+      # and a multi-condition `failed_when`, and when the module itself failed
+      # (the disk filled) the changed_when expression evaluated against a result
+      # that had no stdout — burying the real error under a Jinja one.
+      until: caios_pull.rc == 0
+      changed_when: "'Downloaded newer image' in (caios_pull.stdout | default(''))"
+      # A tag that does not exist is worth reporting but should not stop the
+      # other pulls — the point of this playbook is to warm as much as possible.
+      failed_when:
+        - caios_pull.rc != 0
+        - "'not found' not in (caios_pull.stderr | default(''))"
+        - "'manifest unknown' not in (caios_pull.stderr | default(''))"
+
+    - name: Count what is now cached locally
+      ansible.builtin.command: docker images --format '{{ "{{" }}.Repository{{ "}}" }}:{{ "{{" }}.Tag{{ "}}" }}'
+      register: caios_local
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ caios_images | select('in', caios_local.stdout_lines) | list | length }}
+          of {{ caios_images | length }} images cached

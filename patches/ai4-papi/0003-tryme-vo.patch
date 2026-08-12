@@ -1,0 +1,27 @@
+--- a/ai4papi/routers/v1/try_me/nomad.py	2026-08-12 22:21:42.644435140 +0000
++++ b/ai4papi/routers/v1/try_me/nomad.py	2026-08-12 22:21:51.164485805 +0000
+@@ -4,6 +4,7 @@
+ """
+ 
+ from copy import deepcopy
++import os
+ import types
+ import uuid
+ 
+@@ -25,7 +26,15 @@
+ security = HTTPBearer()
+ 
+ # (!) try-me jobs are always deployed in AI4EOSC
+-VO = "vo.ai4eosc.eu"
++#
++# [CAIOS] This is evaluated at import time, so on any deployment whose
++# main.yaml does not list "vo.ai4eosc.eu" it raises KeyError and PAPI refuses to
++# start entirely — not just the try-me feature. Fall back to the first VO the
++# deployment actually configures. Behaviour is unchanged for AI4EOSC, whose
++# first VO is vo.ai4eosc.eu.
++VO = os.environ.get("TRY_ME_VO") or next(
++    iter(papiconf.MAIN_CONF["nomad"]["namespaces"])
++)
+ NAMESPACE = papiconf.MAIN_CONF["nomad"]["namespaces"][VO]
+ 
+ # Set platform hardware requirements for try-me

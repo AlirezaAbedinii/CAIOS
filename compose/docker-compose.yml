@@ -127,6 +127,33 @@ services:
       - "127.0.0.1:8200:8200"
 
   # --------------------------------------------------------------------------
+  # Applies Vault's configuration, every time the stack starts.
+  #
+  # Dev-mode Vault keeps everything in memory, so any restart discards the auth
+  # backend, policy and role while leaving Vault looking healthy. Every login
+  # then returns "permission denied", which reaches the user as a bare HTTP 500
+  # on any deployment with nothing pointing at Vault. This ran into exactly that
+  # once; automating it removes the failure mode rather than documenting it.
+  #
+  # Idempotent, so it costs nothing on an already-configured Vault.
+  # --------------------------------------------------------------------------
+  vault_init:
+    image: hashicorp/vault:1.18
+    container_name: caios_vault_init
+    depends_on:
+      - vault
+    restart: on-failure
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: ${VAULT_ROOT_TOKEN}
+      CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+    volumes:
+      - ./vault/bootstrap.sh:/bootstrap.sh:ro
+      - ${HOME}/caios-ca.pem:/caios-ca.pem:ro
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+
+  # --------------------------------------------------------------------------
   # PAPI — the control plane. The only component holding Nomad credentials.
   #
   # When something looks broken in the dashboard, check here first: a
@@ -153,6 +180,16 @@ services:
       - /bin/bash
       - -lc
       - |
+        # Trust our CA before anything else. PAPI validates every token by
+        # fetching Keycloak's signing keys over HTTPS from our own domain, and
+        # this image has no reason to trust the certificate. Without this,
+        # every authenticated request fails with a TLS error that surfaces as a
+        # generic 401.
+        #
+        # update-ca-certificates rather than SSL_CERT_FILE: it appends to the
+        # system bundle instead of replacing it, so PAPI can still reach public
+        # hosts (GitHub for catalogue metadata, Docker Hub for image tags).
+        update-ca-certificates >/dev/null 2>&1 || true
         unset NOMAD_NAMESPACE
         envsubst < etc/main_tmp.yaml > etc/main.yaml
         exec /root/.local/bin/ai4papi-run --host 127.0.0.1 --port 8000
@@ -167,11 +204,18 @@ services:
       KEYCLOAK_URL: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
       # Patched in — upstream hardcodes secrets.services.ai4os.eu in secrets.py.
       VAULT_ADDR: http://127.0.0.1:8200
+      # Also patched in. Upstream sends an empty role name, which Vault reads as
+      # a role literally called "" rather than as its default_role, and refuses
+      # with 403 — surfacing as a bare HTTP 500 on every deployment.
+      VAULT_ROLE: caios
       NOMAD_ADDR: ${NOMAD_ADDR}
       NOMAD_CACERT: ${NOMAD_CACERT}
       NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}
       NOMAD_CLIENT_KEY: ${NOMAD_CLIENT_KEY}
       DASHBOARD_URL: ${DASHBOARD_URL}
+      # Python's requests uses certifi, not the system store, so point it at
+      # the bundle the command above refreshes.
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       CAIOS_CTRL_IP: ${CAIOS_CTRL_IP}
       CAIOS_EDGE_IP: ${CAIOS_EDGE_IP}
     volumes:
@@ -186,6 +230,14 @@ services:
       # model with no specs against it.
       - ../configs/papi/var/gpu_models.csv:/home/ai4-papi/var/gpu_models.csv:ro
       - ../configs/papi/tools/ai4os-federated-server/user.yaml:/home/ai4-papi/etc/tools/ai4os-federated-server/user.yaml:ro
+      # CPU defaults capped to what a 3-vCPU node can actually place. Upstream
+      # defaults (2 for modules, 4 for the dev environment) queue forever with
+      # "Dimension cpu exhausted" — see the note inside these files.
+      - ../configs/papi/modules-user.yaml:/home/ai4-papi/etc/modules/user.yaml:ro
+      - ../configs/papi/tools/ai4os-dev-env/user.yaml:/home/ai4-papi/etc/tools/ai4os-dev-env/user.yaml:ro
+      # Our CA, so PAPI can verify Keycloak's HTTPS certificate. Picked up by
+      # update-ca-certificates in the command above.
+      - ${HOME}/caios-ca.pem:/usr/local/share/ca-certificates/caios-ca.crt:ro
       # Nomad's own certificates, written by Ansible on this node.
       - /etc/nomad.d/certs:/etc/nomad.d/certs:ro
     depends_on:

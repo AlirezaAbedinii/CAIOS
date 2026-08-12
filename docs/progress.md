@@ -5,11 +5,10 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 2 complete.** The cluster is live and proven, and the
-identity layer on top of it works — Keycloak issues tokens PAPI will accept, and
-Vault accepts those same tokens and isolates secrets per user. Next is Stage 3:
-PAPI and the dashboard, which is the first stage that produces something a
-viewer would recognise as the product.
+**Where we are: Stage 3 part A complete.** PAPI is live and a module deploys
+through it with a real login token, runs on the cluster, and is reachable over
+HTTPS at its own address. Part B is the dashboard — the same thing from a
+browser, which is the first piece a viewer would recognise as the product.
 
 ---
 
@@ -20,15 +19,94 @@ viewer would recognise as the product.
 | 0 — Local scaffold | Every config, script and patch, written and self-tested | **Done** |
 | 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **Done** — gate passed |
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | **Done** — gate passed |
-| 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | Not started |
+| 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Part A done** — API deploys; dashboard next |
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
 **Nothing is blocking.** Next actions, in order:
 
-1. Stage 3 — build and start PAPI, point it at Nomad, Keycloak and Vault, then
-   build the CAIOS dashboard and click through it in a browser.
+1. Stage 3 part B — build the CAIOS dashboard image and click through it in a
+   browser: log in, browse the catalogue, deploy, open the running module.
 2. Stage 4 — federated learning across the three sites.
+
+---
+
+## 2026-08-12 — Stage 3, part A: PAPI is live and deploying
+
+A module deployed **through the API**, with a real Keycloak token, running on
+the cluster and reachable at its own address:
+
+```
+POST /v1/deployments/modules            HTTP 200
+  api  https://api-<uuid>.pacs-deployments...   HTTP 200  TLS verified
+  ui   https://ui-<uuid>.pacs-deployments...    HTTP 200  TLS verified
+```
+
+Unauthenticated requests get 401; authenticated ones get 200. The Statistics
+endpoint reports all four nodes, 3 GPUs and the `NVIDIA H100L-1-12C` model name
+against our own `caios` datacenter.
+
+Part B is the dashboard: the same actions from a browser instead of curl.
+
+### Two node-level problems that were not PAPI's fault
+
+**Image storage was never on the data volume.** Docker 29 uses the containerd
+image store, so image layers live under *containerd's* root, not Docker's
+`data-root`. Both ai4-ansible and our own control-plane playbook set
+`data-root` — which moves almost nothing. Images filled the 20 GB system disk
+to 84% while the 125 GB volume sat at 1%, and the next pull failed with "No
+space left on device" mid-deployment.
+
+`playbook-container-storage.yml` points containerd's root at the volume on
+every node. System disks went from 84% to 31%.
+
+> Also learned: with the containerd snapshotter, Docker's `storage-opt` disk
+> limits are **not enforced** — that is an overlay2-on-XFS feature. The XFS
+> formatting still matters because `ai4-nomad_tests` asserts it, but
+> per-container disk quotas are not actually in effect. Recorded rather than
+> fixed; enforcing them means moving the whole daemon back to overlay2.
+
+**I broke the control plane doing it.** That playbook restarts Docker and wipes
+the image store on every host it touches, and I ran it against `caios_server`
+while the control plane was live. Every container and image there went,
+including the locally built PAPI. Recovery was ~15 minutes: prune the stale
+build cache, rebuild, `up -d`.
+
+Named volumes survived — they live under Docker's data-root, not containerd's —
+so the Keycloak database, realm and users were untouched. Vault lost its
+contents, and `vault_init` reapplied its configuration by itself, which is
+exactly what it was added for.
+
+The playbook now says all of this at the top, and suggests `--limit
+nomad_clients` to leave the control plane alone.
+
+**The registry in Europe is slow enough to fail pulls.** Sidecar images come
+from AI4EOSC's registry, and from Canada Docker's HTTP client times out
+mid-pull. Because those sidecars are `prestart`/`poststart` tasks, their
+failure kills the whole allocation — a deployment that looks like a platform
+fault when it is really a slow download. `playbook-prepull-images.yml` warms
+all eight images on every node; deployments now start in seconds.
+
+### Five more upstream patches, each blocking something
+
+| Patch | Without it |
+|---|---|
+| `0003-tryme-vo` | PAPI will not start at all. A hardcoded `vo.ai4eosc.eu` is looked up at import time and raises `KeyError` on any other VO. |
+| `0004-stats-without-wattnet` | The Statistics page dies. An unguarded call to an external carbon-footprint API we do not use kills the stats refresh, and `/stats/cluster` starts returning 500 after an hour. |
+| `0004` (second half) | Every deployment fails. With footprints skipped, affinity is `None` and the deploy path multiplies it by 0.3. |
+| `0002-vault-addr` (extended) | Every deployment fails with a bare 500. Upstream sends an empty Vault role name, which Vault reads as a role literally named `""` rather than "use the default", and answers 403. |
+| `0005-skip-mail-sidecar` | Deployments die when an unused mail sidecar cannot pull, and it reserves a whole CPU core — a third of one of our nodes. |
+
+### Sizing: our nodes are small, and it shows
+
+The reference deployment has 64-86 vCPU per node. Ours have 3. Nomad reserves
+whole cores, so a 2-CPU request plus the mail sidecar's core plus the UI task's
+shared time exceeded a 3-core node, and the job queued forever with "Dimension
+cpu exhausted" — refused, not slowed.
+
+With the mail sidecar patched out, 2 CPUs fits. `configs/papi/modules-user.yaml`
+and the dev-env config now cap `cpu_num` at 2 with the reasoning inline. The
+upstream dev-env default of 4 would never have placed.
 
 ---
 

@@ -1,5 +1,5 @@
---- a/ai4papi/routers/v1/secrets.py	2026-08-12 02:53:38.945707461 +0000
-+++ b/ai4papi/routers/v1/secrets.py	2026-08-12 02:53:53.769742892 +0000
+--- a/ai4papi/routers/v1/secrets.py	2026-08-12 22:29:57.935388545 +0000
++++ b/ai4papi/routers/v1/secrets.py	2026-08-12 22:29:57.971388760 +0000
 @@ -2,6 +2,8 @@
  Manage user secrets with Vault
  """
@@ -9,20 +9,29 @@
  import hvac
  import hvac.exceptions
  from fastapi import APIRouter, Depends
-@@ -17,7 +19,15 @@
+@@ -17,9 +19,22 @@
  )
  security = HTTPBearer()
  
 -VAULT_ADDR = "https://secrets.services.ai4os.eu:8200/"
+-VAULT_AUTH_PATH = "jwt-keycloak"
+-VAULT_ROLE = ""
 +# [CAIOS] Upstream points at AI4EOSC's Vault, whose JWT backend trusts their
 +# Keycloak and not ours. This is on the critical path of the headline demo:
-+# deploying the federated server calls create_secret() and
-+# create_vault_token() before Nomad is ever contacted, so an unreachable or
-+# untrusting Vault fails the FL deployment with an error that looks nothing
-+# like a Vault problem.
++# deploying the federated server calls create_secret() and create_vault_token()
++# before Nomad is ever contacted, so an unreachable or untrusting Vault fails
++# the FL deployment with an error that looks nothing like a Vault problem.
 +VAULT_ADDR = os.environ.get(
 +    "VAULT_ADDR", "https://secrets.services.ai4os.eu:8200/"
 +)
- VAULT_AUTH_PATH = "jwt-keycloak"
- VAULT_ROLE = ""
++VAULT_AUTH_PATH = os.environ.get("VAULT_AUTH_PATH", "jwt-keycloak")
++
++# [CAIOS] Upstream sends an empty role. Vault treats that as a request for a
++# role literally named "" rather than as "use the backend's default_role", and
++# answers 403 permission denied — which surfaces from PAPI as a bare HTTP 500
++# on every deployment, with nothing pointing at Vault. Configuring the role
++# name explicitly avoids relying on that distinction at all.
++VAULT_ROLE = os.environ.get("VAULT_ROLE", "")
  VAULT_MOUNT_POINT = "/secrets/"
+ 
+ 

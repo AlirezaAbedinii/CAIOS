@@ -1,0 +1,158 @@
+---
+# Move container image storage off the small root disk onto the data volume.
+#
+#   cd ansible && ansible-playbook playbook-container-storage.yml
+#
+#   !!  Deletes cached container images and RESTARTS DOCKER on every host it
+#       touches, including caios_server. On caios_server that stops the whole
+#       Compose control plane and discards its images — including the locally
+#       built caios/papi, which then has to be rebuilt (a few minutes).
+#
+#       Named volumes survive: they live under Docker's data-root, not
+#       containerd's, so the Keycloak database is not affected. Vault is dev
+#       mode and loses its contents either way, and vault_init reapplies its
+#       configuration automatically.
+#
+#       Learned the hard way. If the control plane is running, expect to follow
+#       this with:
+#         cd compose && docker compose build papi && docker compose up -d
+#
+#       To leave the control plane alone, add:  --limit nomad_clients
+#
+# THE PROBLEM
+# -----------
+# Docker 29 uses the containerd image store (`driver-type:
+# io.containerd.snapshotter.v1`). With that, image layers live under
+# **containerd's** root, not Docker's:
+#
+#   Docker Root Dir: /mnt/data      <- what data-root sets, and what we assumed
+#   containerd root: /var/lib/containerd   <- where the images actually are
+#
+# So `data-root` — which both ai4-ansible and our own control-plane playbook set
+# — moves almost nothing. Images accumulate on the 20 GB root disk while the
+# 125 GB volume stays at 1% used.
+#
+# On these nodes that filled / to 84% after pulling a handful of images, and the
+# next pull failed with "No space left on device" — which surfaces as a
+# deployment that dies mid-pull, nowhere near the real cause.
+#
+# THE FIX
+# -------
+# Point containerd's own root at the data volume. Docker's data-root stays as it
+# is; it still holds volumes and build cache, which are small.
+#
+# WORTH KNOWING: with the containerd snapshotter, Docker's `storage-opt` size
+# limits are not supported — that is an overlay2-on-XFS feature. The XFS
+# formatting still matters for ai4-nomad_tests, which asserts it, but
+# per-container disk quotas are not actually being enforced. Noted rather than
+# fixed: enforcing them would mean switching the whole daemon back to overlay2.
+
+- name: Move container storage onto the data volume
+  hosts: nomad_clients:nomad_master
+  become: true
+
+  vars:
+    # Site nodes have the XFS volume at /mnt/data; the others still have their
+    # original volume at /mnt. Either way it is the big disk.
+    caios_data_mount: "{{ mount_dir if inventory_hostname in (groups['nomad_volume'] | default([])) else '/mnt' }}"
+    caios_containerd_root: "{{ caios_data_mount }}/containerd"
+
+  tasks:
+
+    - name: Check the data volume is actually mounted
+      ansible.builtin.command: "findmnt -no SOURCE,FSTYPE {{ caios_data_mount }}"
+      register: caios_mount
+      changed_when: false
+      failed_when: caios_mount.rc != 0
+
+    - name: Report the target
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ caios_data_mount }} is {{ caios_mount.stdout }} -> containerd root {{ caios_containerd_root }}"
+
+    - name: Read the current containerd root
+      ansible.builtin.command: containerd config dump
+      register: caios_ctr_cfg
+      changed_when: false
+
+    - name: Skip if already moved
+      ansible.builtin.meta: end_host
+      when: caios_containerd_root in caios_ctr_cfg.stdout
+
+    - name: Stop Docker and containerd
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: stopped
+      loop: [docker, docker.socket, containerd]
+      failed_when: false
+
+    - name: Create the new containerd root on the volume
+      ansible.builtin.file:
+        path: "{{ caios_containerd_root }}"
+        state: directory
+        mode: "0711"
+
+    # Deleting rather than moving: the old root is 11 GB of re-pullable image
+    # layers, and copying it would need free space we do not have on /.
+    - name: Remove the old containerd data from the root disk
+      ansible.builtin.file:
+        path: /var/lib/containerd
+        state: absent
+
+    - name: Write containerd configuration with the new root
+      ansible.builtin.copy:
+        content: |
+          # Managed by CAIOS ansible/playbook-container-storage.yml
+          #
+          # Docker 29 stores image layers under containerd's root, not Docker's
+          # data-root, so this is the setting that actually keeps images off the
+          # small root disk.
+          version = 2
+          root = "{{ caios_containerd_root }}"
+          state = "/run/containerd"
+
+          [grpc]
+            address = "/run/containerd/containerd.sock"
+        dest: /etc/containerd/config.toml
+        mode: "0644"
+        backup: true
+
+    - name: Start containerd and Docker
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: [containerd, docker]
+
+    - name: Confirm containerd is using the volume
+      ansible.builtin.shell: |
+        set -o pipefail
+        containerd config dump | grep -E "^root"
+      args:
+        executable: /bin/bash
+      register: caios_ctr_after
+      changed_when: false
+      retries: 5
+      delay: 3
+      until: caios_ctr_after.rc == 0
+
+    - name: Confirm Docker still works
+      ansible.builtin.command: docker info --format '{{ "{{" }}.DockerRootDir{{ "}}" }}'
+      register: caios_docker_after
+      changed_when: false
+      retries: 5
+      delay: 3
+      until: caios_docker_after.rc == 0
+
+    - name: Report free space regained
+      ansible.builtin.shell: "df -h / {{ caios_data_mount }} | tail -n +2"
+      args:
+        executable: /bin/bash
+      register: caios_df
+      changed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ caios_ctr_after.stdout | trim }} |
+          docker root {{ caios_docker_after.stdout }} |
+          {{ caios_df.stdout_lines | join(' / ') }}

@@ -1,0 +1,75 @@
+diff -ruN a/ai4papi/routers/v1/deployments/common.py b/ai4papi/routers/v1/deployments/common.py
+--- a/ai4papi/routers/v1/deployments/common.py	2026-08-12 22:34:42.193088122 +0000
++++ b/ai4papi/routers/v1/deployments/common.py	2026-08-12 22:34:42.221088289 +0000
+@@ -11,6 +11,14 @@
+     """
+     cluster_stats = stats.get_cluster_stats(vo)
+     for k, v in cluster_stats.datacenters.items():
++        # [CAIOS] affinity is None whenever the carbon-footprint lookup was
++        # skipped (see stats/deployments.py). Without this guard every
++        # deployment fails with "unsupported operand type(s) for *: 'NoneType'
++        # and 'float'" — a 500 during deployment caused by an optional feature
++        # we do not run.
++        if v.affinity is None:
++            continue
++
+         # Rescale affinity range from [0, 100] to [0, 30] to avoid interfering too much
+         # with other constraints/affinities.
+         affinity = int(v.affinity * 0.3)
+diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/deployments.py
+--- a/ai4papi/routers/v1/stats/deployments.py	2026-08-12 22:34:42.189088097 +0000
++++ b/ai4papi/routers/v1/stats/deployments.py	2026-08-12 22:34:42.221088289 +0000
+@@ -3,6 +3,7 @@
+ """
+ 
+ import copy
++import warnings
+ import csv
+ import time
+ from datetime import datetime, timedelta
+@@ -234,9 +235,15 @@
+                 stats.cluster.gpu_models[model_name].gpu_used += g_stats.gpu_used
+ 
+     # Compute green affinities
+-    affinities = green_director.rank(stats.datacenters.keys())
+-    for dc_name, affinity in affinities.items():
+-        stats.datacenters[dc_name].affinity = affinity
++    # [CAIOS] Made non-fatal — see the note in get_cluster_stats_bg below.
++    # Datacenters keep affinity=None when this is skipped, which
++    # deployments/common.py is patched to tolerate.
++    try:
++        affinities = green_director.rank(stats.datacenters.keys())
++        for dc_name, affinity in affinities.items():
++            stats.datacenters[dc_name].affinity = affinity
++    except Exception as e:
++        warnings.warn(f"Could not compute green affinities, skipping: {e}")
+ 
+     # Add update time
+     stats.updated_at = (
+@@ -257,10 +264,22 @@
+     datacenters_conf = copy.deepcopy(papiconf.datacenters)
+ 
+     # Retrieve datacenter footprints
+-    green_director.retrieve_footprints()
+-    for dc_name, metrics in green_director.metrics.items():
+-        if dc_name in datacenters_conf:
+-            datacenters_conf[dc_name]["footprints"] = metrics
++    #
++    # [CAIOS] Wrapped, because this is the first thing the function does and it
++    # calls an external service (api.wattnet.eu) needing a WATTNET_PASSWORD we
++    # do not have — carbon accounting is explicitly out of scope. Left
++    # unguarded it raises, the whole cluster-stats refresh dies, the cached
++    # value goes stale, and /stats/cluster returns HTTP 500 after an hour,
++    # taking out the entire Statistics page over an optional feature.
++    #
++    # Node, GPU and job statistics do not depend on any of this.
++    try:
++        green_director.retrieve_footprints()
++        for dc_name, metrics in green_director.metrics.items():
++            if dc_name in datacenters_conf:
++                datacenters_conf[dc_name]["footprints"] = metrics
++    except Exception as e:
++        warnings.warn(f"Could not retrieve carbon footprints, continuing without: {e}")
+ 
+     # Instantiate datacenters dictionary containing schemas.DatacenterStats objects
+     datacenters = {}

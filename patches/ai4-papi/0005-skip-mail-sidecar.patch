@@ -1,0 +1,46 @@
+diff -ruN a/ai4papi/routers/v1/deployments/modules.py b/ai4papi/routers/v1/deployments/modules.py
+--- a/ai4papi/routers/v1/deployments/modules.py	2026-08-12 22:40:00.479028817 +0000
++++ b/ai4papi/routers/v1/deployments/modules.py	2026-08-12 22:40:00.503028977 +0000
+@@ -365,6 +365,19 @@
+     if user_conf["general"]["service"] != "deepaas":
+         exclude_tasks.append("ui")
+ 
++    # [CAIOS] Skip the mail sidecar when no mail is configured.
++    #
++    # email-notification is a *prestart* task, so if it cannot start neither
++    # does the deployment — and it pulls from an external registry, which turns
++    # a transient network blip into a failed deployment. It also reserves a
++    # whole CPU core, which on our 3-core nodes is a third of the machine and
++    # the difference between a job placing and queueing forever.
++    #
++    # It sends "your deployment is ready" emails, using MAILING_TOKEN. With no
++    # token it could not send anything anyway, so running it is pure cost.
++    if not os.getenv("MAILING_TOKEN"):
++        exclude_tasks.append("email-notification")
++
+     tasks[:] = [t for t in tasks if t["Name"] not in exclude_tasks]
+ 
+     # Remove appropriate Traefik domains in each case (no need to remove the ports)
+diff -ruN a/ai4papi/routers/v1/deployments/tools.py b/ai4papi/routers/v1/deployments/tools.py
+--- a/ai4papi/routers/v1/deployments/tools.py	2026-08-12 22:40:00.479028817 +0000
++++ b/ai4papi/routers/v1/deployments/tools.py	2026-08-12 22:40:00.503028977 +0000
+@@ -371,6 +371,19 @@
+             # Always exclude initial 'dataset_download' task, as it is used as template
+             exclude_tasks = ["dataset_download"]
+ 
++        # [CAIOS] Skip the mail sidecar when no mail is configured.
++        #
++        # email-notification is a *prestart* task, so if it cannot start neither
++        # does the deployment — and it pulls from an external registry, which turns
++        # a transient network blip into a failed deployment. It also reserves a
++        # whole CPU core, which on our 3-core nodes is a third of the machine and
++        # the difference between a job placing and queueing forever.
++        #
++        # It sends "your deployment is ready" emails, using MAILING_TOKEN. With no
++        # token it could not send anything anyway, so running it is pure cost.
++        if not os.getenv("MAILING_TOKEN"):
++            exclude_tasks.append("email-notification")
++
+         tasks[:] = [t for t in tasks if t["Name"] not in exclude_tasks]
+ 
+     # Deploy a Federated server

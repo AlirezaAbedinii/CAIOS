@@ -1,0 +1,30 @@
+{
+    "_comment": "CAIOS tenant. Merged over _base.json at image build time: jq -s '.[0] * .[1]' _base.json caios.json > config.json. Copy this file to vendor build ctx as src/assets/config/caios.json and build with --build-arg TENANT=caios.",
+
+    "title": "CAIOS - Canadian Artificial Intelligence Operating System",
+    "voName": "vo.caios.ca",
+    "projectName": "CAIOS",
+    "projectUrl": "https://github.com/AlirezaAbedinii/CAIOS",
+    "acknowledgments": "CAIOS is a research platform for medical and neuroscience AI, built on the open-source AI4OS stack.",
+
+    "_comment_sidenav": "Overrides _base.json, which points all four of these at cloud.ai4eosc.eu. Storage and MLflow are V1; until they exist, listing them would give the demo two dead links. Add them back when they are real.",
+    "sidenavMenu": [],
+
+    "_comment_analytics": "_base.json loads https://stats.cloud.ai4eosc.eu/js/script.js, a third-party tracker that would report our demo traffic to somebody else's analytics. Blanked deliberately - do not remove these keys, the merge needs them present to override.",
+    "analytics": {
+        "src": "",
+        "domain": ""
+    },
+
+    "_comment_footer": "Upstream links point at AI4EOSC's status page, terms and privacy policy. Ours point at the project repo until we have our own.",
+    "footerLinks": [
+        {
+            "name": "SIDENAV.PROJECT-PAGE",
+            "url": "https://github.com/AlirezaAbedinii/CAIOS"
+        },
+        {
+            "name": "SIDENAV.DOCUMENTATION",
+            "url": "https://docs.ai4os.eu/"
+        }
+    ]
+}

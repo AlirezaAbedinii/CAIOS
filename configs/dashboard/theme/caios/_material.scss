@@ -1,0 +1,249 @@
+// CAIOS theme. Seeded from vendor/ai4-dashboard/src/theme/kmd4eosc/ and
+// recoloured. Referenced by variables.scss via `@import 'material'`.
+@use '@angular/material' as mat;
+
+// show label for more dense inputs as well
+.mat-mdc-text-field-wrapper:not(.mdc-text-field--outlined)
+    .mat-mdc-floating-label {
+    display: inline !important;
+}
+
+@include mat.elevation-classes();
+@include mat.app-background();
+
+$caios-palette-primary: (
+    50: #e0f4f7,
+    100: #b3e4ea,
+    200: #80d2dc,
+    300: #4dc0ce,
+    400: #26b3c4,
+    500: #12b5cb,
+    600: #0fa1b5,
+    700: #0b8b9c,
+    800: #087584,
+    900: #044f5c,
+    A100: #b3e4ea,
+    A200: #80d2dc,
+    A400: #12b5cb,
+    A700: #0b7e8f,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #ffffff,
+        500: #ffffff,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+/* For use in src/lib/core/theming/_palette.scss */
+$caios-palette-secondary: (
+    50: #e4edef,
+    100: #bcd3d7,
+    200: #90b6bd,
+    300: #6499a2,
+    400: #42838e,
+    500: #206d7a,
+    600: #1c6572,
+    700: #175a67,
+    800: #0e4f5c,
+    900: #063c47,
+    A100: #bcd3d7,
+    A200: #90b6bd,
+    A400: #206d7a,
+    A700: #0e4f5c,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$caios-app-primary: mat.m2-define-palette($caios-palette-primary);
+$caios-app-accent: mat.m2-define-palette($caios-palette-secondary);
+$caios-app-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+$caios-app-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $caios-app-primary,
+            accent: $caios-app-accent,
+            warning: $caios-app-warn,
+        ),
+        typography: mat.m2-define-typography-config(
+                $font-family: "'Raleway', Arial, Helvetica, sans-serif",
+            ),
+        density: 0,
+    )
+);
+
+// Emit theme-dependent styles for common features used across multiple components.
+@include mat.all-component-themes($caios-app-theme);
+
+.cdk-overlay-pane {
+    max-width: 100vw !important;
+    justify-content: center;
+
+    .mat-dialog-container {
+        border-radius: 0;
+        width: 100vw;
+        height: 100vh;
+
+        @media (min-width: breakpoint('md')) {
+            width: 576px;
+            height: auto;
+            border-radius: 16px;
+        }
+
+        @media (min-width: breakpoint('lg')) {
+            width: 760px;
+        }
+
+        .mat-dialog-content {
+            max-height: 75vh;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--white-two);
+
+            @media (min-width: breakpoint('md')) {
+                padding-bottom: 8px;
+                border-bottom: none;
+            }
+        }
+    }
+}
+
+.mat-form-field-appearance-outline {
+    &.mat-focused {
+        .mat-form-field-outline-thick {
+            color: var(--greyish-brown);
+        }
+    }
+
+    &.mat-form-field-invalid {
+        &.mat-form-field-invalid {
+            .mat-form-field-outline-thick {
+                color: var(--neon-red);
+            }
+        }
+    }
+}
+
+.mat-form-field-flex {
+    align-items: center !important;
+}
+
+.mat-form-field {
+    .mat-form-field-label {
+        color: var(--black-60);
+    }
+
+    &.mat-focused {
+        .mat-form-field-label {
+            color: var(--greyish-brown);
+        }
+    }
+
+    &.mat-form-field-invalid {
+        .mat-form-field-label {
+            color: var(--neon-red);
+        }
+    }
+
+    &.mat-form-field-flex {
+        align-items: center;
+    }
+
+    &.mat-form-field-appearance-outline {
+        .mat-form-field-suffix {
+            color: var(--neon-red);
+
+            .mat-icon-button:not([disabled]) {
+                color: var(--neon-red);
+            }
+        }
+    }
+}
+
+.mat-input-element {
+    caret-color: var(--greyish-brown);
+}
+
+.mat-form-field-invalid {
+    .mat-input-element {
+        caret-color: var(--neon-red);
+    }
+}
+
+.mat-error {
+    color: var(--neon-red);
+}
+
+.mat-dialog-title {
+    margin: 0 0 30px;
+    font-size: 24px;
+    font-weight: var(--raleway-light);
+    color: var(--warm-grey);
+}
+
+.mat-dialog-actions {
+    justify-content: flex-end;
+
+    .mat-button {
+        color: var(--neon-red);
+
+        &.primary {
+            font-weight: var(--raleway-bold);
+        }
+
+        .mat-riple {
+            background-color: var(--neon-red);
+        }
+    }
+}
+
+.mat-checkbox-frame {
+    border-color: var(--neon-red);
+}
+
+.mat-checkbox-indeterminate,
+.mat-checkbox-checked {
+    &.mat-accent {
+        .mat-checkbox-background {
+            background-color: var(--neon-red);
+        }
+    }
+}
+
+.mat-checkbox-frame {
+    border-color: var(--neon-red);
+}
+
+.mat-checkbox-label {
+    color: var(--greyish-brown);
+}
+
+button.mat-menu-item {
+    color: var(--warm-grey);
+    font-size: var(--font-l);
+    font-weight: var(--raleway-medium);
+    outline: none;
+}

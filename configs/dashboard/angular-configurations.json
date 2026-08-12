@@ -1,0 +1,55 @@
+{
+    "_comment": "The two blocks that scripts/build-dashboard.sh splices into angular.json. Upstream has no `caios` tenant, so `ng build --configuration caios-production` fails without these. Modelled on the kmd4eosc-production blocks, which are the most recent flavour added upstream and therefore the best template.",
+
+    "build": {
+        "caios-production": {
+            "optimization": true,
+            "extractLicenses": true,
+            "sourceMap": false,
+            "namedChunks": false,
+            "outputHashing": "all",
+            "fileReplacements": [
+                {
+                    "replace": "src/environments/environment.ts",
+                    "with": "src/environments/environment.prod.ts"
+                }
+            ],
+            "scripts": [
+                "node_modules/cookieconsent/build/cookieconsent.min.js",
+                "node_modules/intro.js/intro.js"
+            ],
+            "_comment_styles": "styles[0] MUST be the tenant theme and MUST come before src/styles.scss. variables.scss imports _material.scss on its first line.",
+            "styles": [
+                "src/theme/caios/variables.scss",
+                "src/styles.scss",
+                "node_modules/ol/ol.css",
+                "node_modules/cookieconsent/build/cookieconsent.min.css",
+                "node_modules/intro.js/introjs.css"
+            ],
+            "_comment_assets": "assets[0] maps the tenant image directory onto /assets/images/, which is where index.html looks for favicon.ico and the app looks for dashboard-logo.png. Order matters: the tenant glob must precede the generic src/assets glob.",
+            "assets": [
+                {
+                    "glob": "**/*",
+                    "input": "src/assets/images/caios",
+                    "output": "/assets/images/"
+                },
+                {
+                    "glob": "**/*",
+                    "input": "src/assets/i18n/",
+                    "output": "/assets/i18n/"
+                },
+                {
+                    "glob": "**/*",
+                    "input": "src/assets/",
+                    "output": "/assets/"
+                }
+            ]
+        }
+    },
+
+    "serve": {
+        "caios-production": {
+            "buildTarget": "ai4-dashboard:build:caios-production"
+        }
+    }
+}

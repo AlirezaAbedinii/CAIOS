@@ -1,0 +1,107 @@
+// CAIOS theme tokens. Seeded from kmd4eosc and recoloured.
+// This file is what angular.json lists in `styles`; it pulls in
+// _material.scss on line 1.
+@import 'material';
+
+:root {
+    /** Styleguide: colors **/
+    --black: #000000;
+    --white: #ffffff;
+    --light-gray: #f7f6f7;
+    --border-gray: #e4e4e4;
+    --dark-gray: #999999;
+    --white-three: #f8f8f8;
+    --warm-grey: #7b7b7b;
+    --greyish-brown: #4a4a49;
+    --neon-red: #ff0000;
+    --success-green: #41bc13;
+    --warning-orange: #ff5f15;
+    --good-value: #1d9e75;
+    --neutral-value: #ef9f27;
+    --bad-value: #e03355;
+
+    --primary: #12b5cb;
+    --primary-text: #0a2a30;
+    --accent: #0e4f5c;
+    --secondary: #206d7a;
+    --accent-dark: #0b7e8f;
+
+    /** Font-Weight Vars **/
+    --raleway-bold: 700;
+    --raleway-medium: 500;
+    --raleway-light: 300;
+
+    /** Font Sizes **/
+    --font-xs: 12px;
+    --font-sm: 14px;
+    --font-md: 16px;
+    --font-lg: 18px;
+    --font-xl: 20px;
+    --font-2xl: 24px;
+
+    .mat-button,
+    .mat-button-focus-overlay,
+    .mat-icon-button {
+        background-color: transparent;
+        outline: none !important;
+        outline-style: none !important;
+    }
+
+    .action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        cursor: pointer;
+        margin: 15px 0px 10px 0px;
+    }
+
+    .action-buttons__add-button {
+        font-weight: var(--raleway-medium);
+        font-size: 14px;
+        color: var(--neon-red);
+    }
+
+    .mat-mdc-snack-bar-container {
+        &.red-snackbar {
+            --mat-snackbar-container-color: var(--neon-red);
+            --mat-mdc-snack-bar-button-color: var(--white);
+            --mat-snackbar-supporting-text-color: var(--white);
+            white-space: pre-wrap;
+        }
+        &.primary-snackbar {
+            --mat-snackbar-container-color: var(--primary);
+            --mat-mdc-snack-bar-button-color: var(--white);
+            --mat-snackbar-supporting-text-color: var(--white);
+            white-space: pre-wrap;
+        }
+        &.success-snackbar {
+            --mat-snackbar-container-color: var(--success-green);
+            --mat-mdc-snack-bar-button-color: var(--white);
+            --mat-snackbar-supporting-text-color: var(--white);
+            white-space: pre-wrap;
+        }
+    }
+}
+
+$color-primary: #0e4f5c;
+$color-primary-light: #cde8ed;
+$color-primary-dark: #06232a;
+$color-primary-rgb: rgb(14, 79, 92);
+
+$color-accent: #12b5cb;
+$color-accent-light: #edfbfd;
+$color-accent-dark: #0b7e8f;
+$color-accent-rgb: rgb(18, 181, 203);
+$color-accent-dark-rgb: rgb(11, 126, 143);
+
+$color-default: #8e8c8c;
+$color-default-light: #f7f6f6;
+$color-default-dark: #151515;
+
+$color-surface: #faf7f4;
+$color-surface-card: #ffffff;
+$color-border: rgba(0, 0, 0, 0.08);
+
+$color-hero-shadow-rgb: 80, 10, 30;
+
+@import '../exports/variables';

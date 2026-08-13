@@ -5,10 +5,10 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 3 part A complete.** PAPI is live and a module deploys
-through it with a real login token, runs on the cluster, and is reachable over
-HTTPS at its own address. Part B is the dashboard — the same thing from a
-browser, which is the first piece a viewer would recognise as the product.
+**Where we are: Stage 3 complete.** There is now something recognisable as the
+product: a branded CAIOS dashboard you log into, backed by an API that deploys
+real workloads onto the cluster. Next is Stage 4 — federated learning across the
+three sites, which is the headline.
 
 ---
 
@@ -19,15 +19,79 @@ browser, which is the first piece a viewer would recognise as the product.
 | 0 — Local scaffold | Every config, script and patch, written and self-tested | **Done** |
 | 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **Done** — gate passed |
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | **Done** — gate passed |
-| 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Part A done** — API deploys; dashboard next |
+| 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | Not started |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
 **Nothing is blocking.** Next actions, in order:
 
-1. Stage 3 part B — build the CAIOS dashboard image and click through it in a
-   browser: log in, browse the catalogue, deploy, open the running module.
-2. Stage 4 — federated learning across the three sites.
+1. Stage 4 — federated learning: partition data non-IID across the three sites,
+   deploy the Flower server and three clients, run a training, produce the
+   comparison chart.
+2. Stage 5 — curated medical catalogue and the CAIOS look.
+
+Worth doing at some point, not blocking: open the dashboard in a browser and
+click through it. Everything it depends on is verified, but no human has looked
+at it yet.
+
+---
+
+## 2026-08-12 — STAGE 3 GATE PASSED: the dashboard is live
+
+The full browser login path, proven end to end rather than assumed:
+
+```
+  login page renders          <title>Sign in to CAIOS</title>
+  credentials submitted       authorization code issued (110 chars)
+  code exchanged (PKCE)       access token returned
+  token used against PAPI     HTTP 200
+  wrong redirect URI          HTTP 400 — correctly rejected
+```
+
+That is the real sequence a browser performs: the login form was fetched,
+submitted with a real password, the returned code exchanged for a token, and
+that token accepted by the API. Everything the dashboard needs is working.
+
+`scripts/check-dashboard.sh` covers the rest: the page serves over a certificate
+that validates, the title is ours, and the runtime configuration points at our
+API, our realm and our client. It also asserts the third-party analytics beacon
+stayed blanked.
+
+### The same lesson, a third time
+
+The Angular build failed with:
+
+```
+Schema validation failed: Data path "" must NOT have additional
+properties(_comment_styles).
+```
+
+Annotated JSON is good for humans and invalid for schema-validating consumers.
+This has now come up three times — the Keycloak realm import, `angular.json`,
+and the tenant config served to the browser — each time with a different
+symptom. The rule that emerged: **keep the notes in the source, strip them at
+the boundary.** All three staging paths now do.
+
+The tenant one was the subtlest: those comments explained which upstream URLs we
+replaced, so they *mentioned* `cloud.ai4eosc.eu` — and were being published in
+the running page's config, where they read like leftover AI4EOSC references.
+
+### Where Stage 3 stands
+
+| | |
+|---|---|
+| PAPI | Deploys modules with a real token; statistics report the live cluster |
+| Dashboard | Serves, branded CAIOS, wired to our API and login server |
+| Login | Full authorization-code flow with PKCE, verified end to end |
+| A running module | Reachable at its own address over verified HTTPS |
+
+Open it at `https://dashboard.192.168.104.181.sslip.io` and log in as
+`researcher`. Import `~/caios-ca.pem` first to avoid the certificate warning.
+
+Next is Stage 4: federated learning across the three sites. The sizing note from
+part A matters there — the dev environment's upstream default of 4 CPUs will not
+place on a 3-vCPU node, and three GPU-backed clients under one account would hit
+the 2-GPU cap. Clients run CPU-only.
 
 ---
 

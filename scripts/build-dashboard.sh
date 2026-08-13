@@ -29,7 +29,27 @@ mkdir -p build
 cp -r "$SRC" "$DST"
 
 # 1. tenant config
-cp "$CFG/caios.json" "$DST/src/assets/config/caios.json"
+#
+# Annotations stripped on the way in. The image merges this over _base.json
+# with jq and serves the result at /assets/config/config.json, so any _comment
+# key here ends up published in the running page — including the notes naming
+# the upstream URLs we replaced, which then read like leftover AI4EOSC
+# references to anyone inspecting it.
+#
+# Third time this pattern has come up (Keycloak realm import, angular.json
+# schema, now here): keep the notes in the source, strip them at the boundary.
+python3 - "$CFG/caios.json" "$DST/src/assets/config/caios.json" <<'PYSTRIP'
+import json, sys
+
+def strip(o):
+    if isinstance(o, dict):
+        return {k: strip(v) for k, v in o.items() if not k.startswith("_comment")}
+    if isinstance(o, list):
+        return [strip(v) for v in o]
+    return o
+
+json.dump(strip(json.load(open(sys.argv[1]))), open(sys.argv[2], "w"), indent=4)
+PYSTRIP
 
 # 2. theme
 mkdir -p "$DST/src/theme/caios"

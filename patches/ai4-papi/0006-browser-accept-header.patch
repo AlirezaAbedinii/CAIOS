@@ -1,0 +1,33 @@
+diff -ruN a/ai4papi/routers/v1/catalog/common.py b/ai4papi/routers/v1/catalog/common.py
+--- a/ai4papi/routers/v1/catalog/common.py	2026-08-13 04:31:41.258074911 +0000
++++ b/ai4papi/routers/v1/catalog/common.py	2026-08-13 04:31:41.286075059 +0000
+@@ -203,12 +203,27 @@
+             else "application/json"
+         )
+ 
+-        if not profile and accept != "application/json":
++        # [CAIOS] Accept is a list with optional q-values, not a single token.
++        # Browsers never send exactly "application/json": Angular's HttpClient
++        # sends "application/json, text/plain, */*". Comparing with equality
++        # therefore treats every request from the dashboard as a request for an
++        # alternative representation and answers 400 "Please specify the
++        # profile" for every module and tool the catalogue tries to display.
++        #
++        # Treat a request that will accept plain JSON as a request for plain
++        # JSON. The alternative formats still work when asked for explicitly.
++        wants_plain_json = (
++            "application/json" in accept
++            or "*/*" in accept
++            or accept.strip() == ""
++        )
++
++        if not profile and not wants_plain_json:
+             raise HTTPException(
+                 status_code=400,
+                 detail=f"Please specify the profile to use to perform the mapping: {supported_profiles}",
+             )
+-        elif profile and accept != "application/json":
++        elif profile and not wants_plain_json:
+             if profile not in supported_profiles:
+                 raise HTTPException(
+                     status_code=400,

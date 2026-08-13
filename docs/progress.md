@@ -56,6 +56,26 @@ level too high and returned 404 — surfacing as *"Error calling the API, please
 retry later Error: Not Found"* on every page. A runtime value, so it was a
 restart rather than a rebuild.
 
+**4. The Statistics page hung on a null it never checked.** Every request
+returned 200, so the fault was entirely client-side: the page does
+
+```js
+statsResponse['datacenters'][dc]['footprints']['carbon']
+```
+
+with no guard, and our `footprints` was null because the carbon-footprint
+lookup is patched out. The exception killed the subscribe callback, so the
+spinner ran forever and **nothing was reported** — no error bar, no console
+message the user would look for.
+
+Fixed server-side rather than by patching the dashboard: PAPI now always
+returns a footprints structure with empty lists, and a zero affinity instead of
+null. Empty lists render as em dashes, which is the right display for "we do
+not collect this". No dashboard patch, no rebuild.
+
+The check now asserts the *shape* of the statistics payload, not just its
+status code — a 200 carrying a null in the wrong place was exactly the failure.
+
 **3. PAPI compares the `Accept` header with strict equality.** It checks
 `accept != "application/json"`, but Angular sends
 `application/json, text/plain, */*`. So every module and tool metadata request

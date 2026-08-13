@@ -124,6 +124,42 @@ if [[ -n "$TOKEN" ]]; then
             -o /dev/null -w '%{http_code}' "$API_BASE/$path")
         [[ "$c" == "200" ]] && ok "$label ($c)" || bad "$label returned $c"
     done
+    # The Statistics page dereferences these without a guard:
+    #   statsResponse['datacenters'][dc]['footprints']['carbon']
+    # A null footprints throws inside the subscribe callback, and the page then
+    # spins forever showing no error at all — so assert the shape, not just 200.
+    curl -sS --max-time 60 -H "$BROWSER_ACCEPT" -H "Authorization: Bearer $TOKEN" \
+        -o /tmp/caios-cluster.json "$API_BASE/deployments/stats/cluster?vo=vo.caios.ca" 2>/dev/null
+    python3 <<'PYSTATS'
+import json, sys
+try:
+    d = json.load(open("/tmp/caios-cluster.json"))
+except Exception as e:
+    print("  [FAIL] cluster stats are not valid JSON: %s" % e); sys.exit(1)
+
+dcs = d.get("datacenters") or {}
+if not dcs:
+    print("  [FAIL] no datacenters reported"); sys.exit(1)
+
+bad = 0
+for name, dc in dcs.items():
+    fp = dc.get("footprints")
+    if not isinstance(fp, dict) or not all(k in fp for k in ("carbon", "water", "green-score")):
+        print("  [FAIL] datacenter %s has footprints=%r — the Statistics page "
+              "will throw and hang on this" % (name, fp)); bad = 1
+    if dc.get("affinity") is None:
+        print("  [FAIL] datacenter %s has affinity=None" % name); bad = 1
+    if not dc.get("nodes"):
+        print("  [FAIL] datacenter %s reports no nodes" % name); bad = 1
+
+if not bad:
+    n = sum(len(dc.get("nodes") or {}) for dc in dcs.values())
+    c = d.get("cluster") or {}
+    print("  [ ok ] statistics shape is renderable (%d node(s), %s GPU(s))"
+          % (n, c.get("gpu_total")))
+sys.exit(bad)
+PYSTATS
+    [[ $? -eq 0 ]] || fail=1
 else
     printf '  [skip] authenticated endpoints — no password in caios.env\n'
 fi

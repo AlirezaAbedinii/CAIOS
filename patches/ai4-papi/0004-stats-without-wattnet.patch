@@ -1,15 +1,14 @@
 diff -ruN a/ai4papi/routers/v1/deployments/common.py b/ai4papi/routers/v1/deployments/common.py
---- a/ai4papi/routers/v1/deployments/common.py	2026-08-12 22:34:42.193088122 +0000
-+++ b/ai4papi/routers/v1/deployments/common.py	2026-08-12 22:34:42.221088289 +0000
-@@ -11,6 +11,14 @@
+--- a/ai4papi/routers/v1/deployments/common.py	2026-08-13 04:30:07.429590590 +0000
++++ b/ai4papi/routers/v1/deployments/common.py	2026-08-13 04:30:07.469590792 +0000
+@@ -11,6 +11,13 @@
      """
      cluster_stats = stats.get_cluster_stats(vo)
      for k, v in cluster_stats.datacenters.items():
-+        # [CAIOS] affinity is None whenever the carbon-footprint lookup was
++        # [CAIOS] affinity may be None when the carbon-footprint lookup was
 +        # skipped (see stats/deployments.py). Without this guard every
 +        # deployment fails with "unsupported operand type(s) for *: 'NoneType'
-+        # and 'float'" — a 500 during deployment caused by an optional feature
-+        # we do not run.
++        # and 'float'" — a 500 caused by an optional feature we do not run.
 +        if v.affinity is None:
 +            continue
 +
@@ -17,8 +16,8 @@ diff -ruN a/ai4papi/routers/v1/deployments/common.py b/ai4papi/routers/v1/deploy
          # with other constraints/affinities.
          affinity = int(v.affinity * 0.3)
 diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/deployments.py
---- a/ai4papi/routers/v1/stats/deployments.py	2026-08-12 22:34:42.189088097 +0000
-+++ b/ai4papi/routers/v1/stats/deployments.py	2026-08-12 22:34:42.221088289 +0000
+--- a/ai4papi/routers/v1/stats/deployments.py	2026-08-13 04:30:07.429590590 +0000
++++ b/ai4papi/routers/v1/stats/deployments.py	2026-08-13 04:30:07.469590792 +0000
 @@ -3,6 +3,7 @@
  """
  
@@ -27,7 +26,68 @@ diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/d
  import csv
  import time
  from datetime import datetime, timedelta
-@@ -234,9 +235,15 @@
+@@ -32,6 +33,15 @@
+ 
+ green_director = wattnet.GreenDirector(datacenters=papiconf.datacenters)
+ 
++# [CAIOS] Mirrors the `resources` list in ai4-accounting/summarize.py.
++CAIOS_ACCOUNTING_RESOURCES = [
++    "cpu_num",
++    "cpu_MHz",
++    "memory_MB",
++    "disk_MB",
++    "gpu_num",
++]
++
+ 
+ @cached(cache=TTLCache(maxsize=1024, ttl=6 * 60 * 60))
+ def load_stats(
+@@ -42,12 +52,26 @@
+     dependency, so we're keeping it like this for the moment.
+     """
+ 
++    # [CAIOS] Historical usage comes from the separate ai4-accounting service,
++    # which we deliberately do not run (see docs/scope.md). Upstream raises 500,
++    # and the dashboard surfaces that as a red error bar on every page — an
++    # alarming failure for a feature we chose not to have.
++    #
++    # Return the shape ai4-accounting itself writes for a namespace with no
++    # recorded usage: a zeroed aggregate and empty series.
++    empty_stats = {
++        "full-agg": {r: 0 for r in CAIOS_ACCOUNTING_RESOURCES},
++        "timeseries": {
++            k: [] for k in ["date", "running", "queued"] + CAIOS_ACCOUNTING_RESOURCES
++        },
++        # No "owner" rows, so get_user_stats falls through to its own
++        # "user has no recorded stats" path.
++        "users-agg": {k: [] for k in ["owner"] + CAIOS_ACCOUNTING_RESOURCES},
++    }
++
+     main_dir = os.environ.get("ACCOUNTING_PTH", None)
+     if not main_dir:
+-        raise HTTPException(
+-            status_code=500,
+-            detail="Deployments stats information not available (no env var).",
+-        )
++        return empty_stats
+ 
+     # Load all stats files
+     stats = {}
+@@ -55,10 +79,9 @@
+         pth = Path(main_dir) / "summaries" / f"{namespace}-{name}.csv"
+ 
+         if not pth.is_file():
+-            raise HTTPException(
+-                status_code=500,
+-                detail="Deployments stats information not available (missing file).",
+-            )
++            # [CAIOS] Same reasoning: accounting configured but not yet
++            # producing files is "no data", not a server error.
++            return empty_stats
+ 
+         with open(pth, "r") as f:
+             reader = csv.DictReader(f, delimiter=";")
+@@ -234,9 +257,17 @@
                  stats.cluster.gpu_models[model_name].gpu_used += g_stats.gpu_used
  
      # Compute green affinities
@@ -35,18 +95,20 @@ diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/d
 -    for dc_name, affinity in affinities.items():
 -        stats.datacenters[dc_name].affinity = affinity
 +    # [CAIOS] Made non-fatal — see the note in get_cluster_stats_bg below.
-+    # Datacenters keep affinity=None when this is skipped, which
-+    # deployments/common.py is patched to tolerate.
 +    try:
 +        affinities = green_director.rank(stats.datacenters.keys())
 +        for dc_name, affinity in affinities.items():
 +            stats.datacenters[dc_name].affinity = affinity
 +    except Exception as e:
-+        warnings.warn(f"Could not compute green affinities, skipping: {e}")
++        warnings.warn(f"Could not compute green affinities, using 0: {e}")
++        # 0 rather than None. The dashboard reads this straight into a numeric
++        # field, and deployments/common.py skips a zero affinity anyway.
++        for dc_name in stats.datacenters:
++            stats.datacenters[dc_name].affinity = 0
  
      # Add update time
      stats.updated_at = (
-@@ -257,10 +264,22 @@
+@@ -257,10 +288,38 @@
      datacenters_conf = copy.deepcopy(papiconf.datacenters)
  
      # Retrieve datacenter footprints
@@ -70,6 +132,22 @@ diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/d
 +                datacenters_conf[dc_name]["footprints"] = metrics
 +    except Exception as e:
 +        warnings.warn(f"Could not retrieve carbon footprints, continuing without: {e}")
++
++    # [CAIOS] Every datacenter must carry a footprints structure, even an empty
++    # one. The dashboard dereferences it without a guard —
++    #
++    #     statsResponse['datacenters'][dc]['footprints']['carbon']
++    #
++    # — so a null here throws inside the subscribe callback and the Statistics
++    # page spins forever with no error shown. Empty lists render as em dashes,
++    # which is the correct display for "we do not collect this".
++    for dc_name in datacenters_conf:
++        if not datacenters_conf[dc_name].get("footprints"):
++            datacenters_conf[dc_name]["footprints"] = {
++                "carbon": [],
++                "water": [],
++                "green-score": [],
++            }
  
      # Instantiate datacenters dictionary containing schemas.DatacenterStats objects
      datacenters = {}

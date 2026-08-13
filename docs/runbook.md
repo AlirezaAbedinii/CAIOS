@@ -130,6 +130,62 @@ in V1 removes the step entirely.
 
 ---
 
+## Rebuilding the dashboard
+
+The dashboard is the one service built from source rather than pulled, so it is
+the one with a real build step.
+
+```bash
+bash scripts/build-dashboard.sh
+cd compose && docker compose --env-file ../configs/env/caios.env up -d dashboard
+bash ../scripts/check-dashboard.sh
+```
+
+The build takes several minutes — it is a full Angular compile — and needs
+network access for `npm ci`.
+
+### What is baked in versus injected at start
+
+This distinction decides whether you need a rebuild or just a restart.
+
+| Changes | Needs |
+|---|---|
+| Theme colours, logo, tenant JSON, page title | **Rebuild** |
+| API address, login server, client ID | **Restart only** |
+
+The four runtime values are written into `config.json` by the image's own
+entrypoint on every start. So moving the API to a new address is a restart, not
+a rebuild.
+
+### If the page loads but nothing works
+
+Check `config.json` first — it is served at
+`/assets/config/config.json` and shows exactly what the running page believes:
+
+```bash
+curl -s https://dashboard.<CTRL_IP>.sslip.io/assets/config/config.json | python3 -m json.tool
+```
+
+`apiURL` and `issuer` are the two that matter. A wrong `issuer` produces a login
+loop; a wrong `apiURL` produces a page that renders perfectly with every action
+failing.
+
+### If login redirects and then fails
+
+The redirect URI must be registered in Keycloak. Ours are scoped to the real
+dashboard origin deliberately — a wildcard on a public client is how tokens get
+stolen. If the dashboard address changes, the realm has to change with it:
+
+```bash
+bash scripts/render-configs.sh    # regenerates from caios.env
+```
+
+Keycloak only imports a realm on first start, so an existing deployment needs
+the change applying through the admin console, or the `keycloak_db` volume
+removed to re-import from scratch.
+
+---
+
 ## Trusting the CAIOS certificate on your own machine
 
 Optional. Without it everything works, you just click past a browser warning on

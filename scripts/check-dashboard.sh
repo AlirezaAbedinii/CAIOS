@@ -50,7 +50,9 @@ except Exception as e:
     print("  [FAIL] config.json is not valid JSON: %s" % e); sys.exit(1)
 
 checks = [
-    ("apiURL points at our API",  c.get("apiURL") == "https://" + api_host, c.get("apiURL")),
+    # Must be "https://<api host>/v1" — the suffix is not optional, see below.
+    ("apiURL points at our API",
+     c.get("apiURL") == "https://%s/v1" % api_host, c.get("apiURL")),
     ("issuer points at our realm",
      c.get("issuer") == "https://%s/realms/%s" % (auth_host, realm), c.get("issuer")),
     ("clientId is caios-dashboard", c.get("clientId") == "caios-dashboard", c.get("clientId")),
@@ -83,14 +85,48 @@ PY
 
 echo
 echo "=== 3. The things the page will call ==="
-for probe in "$DASH/assets/images/favicon.ico|favicon" ; do
-    url="${probe%%|*}"; label="${probe##*|}"
-    c=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$url")
-    [[ "$c" == "200" ]] && ok "$label served ($c)" || bad "$label returned $c"
+c=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$DASH/assets/images/favicon.ico")
+[[ "$c" == "200" ]] && ok "favicon served ($c)" || bad "favicon returned $c"
+
+# apiURL must end in /v1. app.config.ts replaces the API base with this value
+# wholesale, and the built-in default carries the suffix — omit it and every
+# call lands one level too high, which the UI reports as
+# "Error calling the API, please retry later Error: Not Found".
+API_BASE=$(python3 -c "import json;print(json.load(open('/tmp/caios-cfg.json'))['apiURL'])" 2>/dev/null)
+[[ "$API_BASE" == */v1 ]] && ok "apiURL includes the /v1 suffix" \
+                          || bad "apiURL is '$API_BASE' — must end in /v1"
+
+# Call the endpoints the dashboard actually loads, with the Accept header a
+# browser actually sends. Angular sends a list, not the bare "application/json"
+# that upstream's metadata endpoint compares against — so testing with curl's
+# default header hides a 400 that every real page load would hit.
+BROWSER_ACCEPT='Accept: application/json, text/plain, */*'
+TOKEN=$(bash scripts/get-token.sh researcher "${CAIOS_PW_RESEARCHER:-}" 2>/dev/null)
+
+for ep in \
+    "catalog/modules/detail|module catalogue" \
+    "catalog/tools/detail|tool catalogue" \
+    "catalog/modules/ai4os-demo-app/metadata|module metadata"
+do
+    path="${ep%%|*}"; label="${ep##*|}"
+    c=$(curl -sS --max-time 40 -H "$BROWSER_ACCEPT" -o /dev/null -w '%{http_code}' "$API_BASE/$path")
+    [[ "$c" == "200" ]] && ok "$label ($c)" || bad "$label returned $c"
 done
 
-c=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' "https://${CAIOS_API_HOST}/v1/catalog/modules")
-[[ "$c" == "200" ]] && ok "API catalogue reachable ($c)" || bad "API catalogue returned $c"
+if [[ -n "$TOKEN" ]]; then
+    for ep in \
+        "deployments/stats/cluster?vo=vo.caios.ca|cluster statistics" \
+        "deployments/stats/user?vo=vo.caios.ca|user statistics" \
+        "deployments/modules?vo=vo.caios.ca|deployments list"
+    do
+        path="${ep%%|*}"; label="${ep##*|}"
+        c=$(curl -sS --max-time 40 -H "$BROWSER_ACCEPT" -H "Authorization: Bearer $TOKEN" \
+            -o /dev/null -w '%{http_code}' "$API_BASE/$path")
+        [[ "$c" == "200" ]] && ok "$label ($c)" || bad "$label returned $c"
+    done
+else
+    printf '  [skip] authenticated endpoints — no password in caios.env\n'
+fi
 
 c=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' \
     "https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration")

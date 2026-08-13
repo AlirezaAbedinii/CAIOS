@@ -36,6 +36,56 @@ at it yet.
 
 ---
 
+## 2026-08-12 — Stage 3 follow-up: three browser-only faults
+
+The dashboard opened in a real browser for the first time and failed three
+different ways, none of which the programmatic checks had caught. All three are
+fixed and the checks now cover them.
+
+**1. Certificate trust is functional, not cosmetic.** Clicking past the warning
+grants an exception for that hostname only. The page is served from
+`dashboard.<...>` but calls `api.<...>`, and a background fetch cannot prompt —
+so the browser blocked it and the page reported an API error. Caddy now serves
+the CA at `/caios-ca.pem` on the dashboard host, reachable from the machine that
+has the problem. Docs corrected; they had called it optional.
+
+**2. `API_SERVER` must include `/v1`.** `app.config.ts` replaces the API base
+with this value wholesale, and the built-in default is
+`https://api.cloud.ai4eosc.eu/v1`. Without the suffix every call landed one
+level too high and returned 404 — surfacing as *"Error calling the API, please
+retry later Error: Not Found"* on every page. A runtime value, so it was a
+restart rather than a rebuild.
+
+**3. PAPI compares the `Accept` header with strict equality.** It checks
+`accept != "application/json"`, but Angular sends
+`application/json, text/plain, */*`. So every module and tool metadata request
+from the dashboard was answered with 400 "Please specify the profile". Accept is
+a list with q-values, not a token; patched to treat anything that will accept
+plain JSON as a request for plain JSON.
+
+This one is worth remembering as a class: **testing an API with curl's default
+headers hides faults that only appear in a browser.** The check script now sends
+the header Angular actually sends.
+
+### Also fixed: the Statistics page no longer errors
+
+`/deployments/stats/user` returned 500 because `ACCOUNTING_PTH` is unset — we
+deliberately do not run the accounting service. Upstream raises rather than
+degrades, so a feature we chose not to have produced an alarming red bar.
+
+It now returns the same shape `ai4-accounting` itself writes for a namespace
+with no recorded usage — a zeroed aggregate and empty series — so the page shows
+empty charts instead of an error. That is also the honest answer: there is no
+history yet.
+
+### The check script now exercises real page loads
+
+It calls the endpoints the dashboard actually loads, with the browser's Accept
+header and a real token, and asserts `apiURL` ends in `/v1`. Every one of these
+three faults would now be caught before opening a browser.
+
+---
+
 ## 2026-08-12 — STAGE 3 GATE PASSED: the dashboard is live
 
 The full browser login path, proven end to end rather than assumed:

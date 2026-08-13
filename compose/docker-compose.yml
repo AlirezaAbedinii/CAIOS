@@ -256,7 +256,12 @@ services:
     container_name: caios_dashboard
     restart: unless-stopped
     environment:
-      API_SERVER: https://${CAIOS_API_HOST}
+      # MUST include /v1. app.config.ts replaces environment.api.base with this
+      # value wholesale, and the built-in default is
+      # https://api.cloud.ai4eosc.eu/v1 — so dropping the suffix makes every
+      # call land one level too high and return 404, surfacing in the UI as
+      # "Error calling the API, please retry later Error: Not Found".
+      API_SERVER: https://${CAIOS_API_HOST}/v1
       ISSUER: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
       CLIENT_ID: caios-dashboard
       DUMMY_CLIENT_SECRET: ""

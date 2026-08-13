@@ -1,0 +1,98 @@
+diff -ruN a/ai4papi/routers/v1/catalog/common.py b/ai4papi/routers/v1/catalog/common.py
+--- a/ai4papi/routers/v1/catalog/common.py	2026-08-13 04:16:16.621523296 +0000
++++ b/ai4papi/routers/v1/catalog/common.py	2026-08-13 04:16:16.665523601 +0000
+@@ -203,12 +203,27 @@
+             else "application/json"
+         )
+ 
+-        if not profile and accept != "application/json":
++        # [CAIOS] Accept is a list with optional q-values, not a single token.
++        # Browsers never send exactly "application/json": Angular's HttpClient
++        # sends "application/json, text/plain, */*". Comparing with equality
++        # therefore treats every request from the dashboard as a request for an
++        # alternative representation, and answers 400 "Please specify the
++        # profile" for every module and tool the catalogue tries to display.
++        #
++        # Treat a request that will accept plain JSON as a request for plain
++        # JSON. The alternative formats still work when asked for explicitly.
++        wants_plain_json = (
++            "application/json" in accept
++            or "*/*" in accept
++            or accept.strip() == ""
++        )
++
++        if not profile and not wants_plain_json:
+             raise HTTPException(
+                 status_code=400,
+                 detail=f"Please specify the profile to use to perform the mapping: {supported_profiles}",
+             )
+-        elif profile and accept != "application/json":
++        elif profile and not wants_plain_json:
+             if profile not in supported_profiles:
+                 raise HTTPException(
+                     status_code=400,
+diff -ruN a/ai4papi/routers/v1/stats/deployments.py b/ai4papi/routers/v1/stats/deployments.py
+--- a/ai4papi/routers/v1/stats/deployments.py	2026-08-13 04:16:16.625523324 +0000
++++ b/ai4papi/routers/v1/stats/deployments.py	2026-08-13 04:16:16.665523601 +0000
+@@ -32,6 +32,15 @@
+ 
+ green_director = wattnet.GreenDirector(datacenters=papiconf.datacenters)
+ 
++# [CAIOS] Mirrors the `resources` list in ai4-accounting/summarize.py.
++CAIOS_ACCOUNTING_RESOURCES = [
++    "cpu_num",
++    "cpu_MHz",
++    "memory_MB",
++    "disk_MB",
++    "gpu_num",
++]
++
+ 
+ @cached(cache=TTLCache(maxsize=1024, ttl=6 * 60 * 60))
+ def load_stats(
+@@ -42,12 +51,27 @@
+     dependency, so we're keeping it like this for the moment.
+     """
+ 
++    # [CAIOS] Historical usage comes from the separate ai4-accounting service,
++    # which we deliberately do not run (see docs/scope.md). Upstream raises 500
++    # in that case, and the dashboard surfaces it as a red error bar on every
++    # page — an alarming failure for a feature we chose not to have.
++    #
++    # Return the shape ai4-accounting itself produces for a namespace with no
++    # recorded usage (summarize.py writes a zeroed full-agg and an empty
++    # users-agg), so the page renders empty charts instead of an error.
++    empty_stats = {
++        "full-agg": {r: 0 for r in CAIOS_ACCOUNTING_RESOURCES},
++        "timeseries": {
++            k: [] for k in ["date", "running", "queued"] + CAIOS_ACCOUNTING_RESOURCES
++        },
++        # No "owner" rows, so get_user_stats falls through to its own
++        # "user has no recorded stats" path.
++        "users-agg": {k: [] for k in ["owner"] + CAIOS_ACCOUNTING_RESOURCES},
++    }
++
+     main_dir = os.environ.get("ACCOUNTING_PTH", None)
+     if not main_dir:
+-        raise HTTPException(
+-            status_code=500,
+-            detail="Deployments stats information not available (no env var).",
+-        )
++        return empty_stats
+ 
+     # Load all stats files
+     stats = {}
+@@ -55,10 +79,9 @@
+         pth = Path(main_dir) / "summaries" / f"{namespace}-{name}.csv"
+ 
+         if not pth.is_file():
+-            raise HTTPException(
+-                status_code=500,
+-                detail="Deployments stats information not available (missing file).",
+-            )
++            # [CAIOS] Same reasoning as above: accounting configured but not yet
++            # producing files is "no data", not a server error.
++            return empty_stats
+ 
+         with open(pth, "r") as f:
+             reader = csv.DictReader(f, delimiter=";")

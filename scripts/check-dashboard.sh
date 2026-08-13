@@ -107,6 +107,14 @@ Dashboard OK.
 Open it at:  $DASH
 Log in as:   researcher   (password in configs/env/caios.env)
 
-If the browser warns about the certificate, import ~/caios-ca.pem once —
-see docs/runbook.md.
+FIRST, in that browser, install our CA:
+
+    $DASH/caios-ca.pem
+
+Not cosmetic. The page is served from ${CAIOS_DASHBOARD_HOST} but calls the API
+on ${CAIOS_API_HOST}. Clicking past the warning covers only the first host; the
+background calls to the second are blocked silently, and the page reports
+"Error calling the API, please try again later".
+
+docs/runbook.md has per-platform install steps and a stopgap.
 EOF

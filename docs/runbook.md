@@ -188,16 +188,50 @@ removed to re-import from scratch.
 
 ## Trusting the CAIOS certificate on your own machine
 
-Optional. Without it everything works, you just click past a browser warning on
-every CAIOS page. With it, no warnings anywhere — worth doing before recording
-anything.
+**Required, not optional.** An earlier version of this section called it
+cosmetic. It is not: without our CA installed, the dashboard loads and then
+fails with *"Error calling the API, please try again later"*.
+
+Here is why. Clicking "proceed anyway" grants an exception for **that hostname
+only**. The dashboard is served from `dashboard.<...>` but calls the API at
+`api.<...>` — a different host — from JavaScript. A background request cannot
+show you a warning to click through, so the browser simply blocks it and the
+page reports an API error. Login is affected the same way, via `auth.<...>`.
+
+Two ways out. Installing the CA is the real fix; the second is a stopgap.
 
 **What you are copying:** `~/caios-ca.pem` on `caios_server`. This is the
 *public* half of our local certificate authority. It is meant to be distributed
 and is safe to email, paste or commit anywhere. The private half is
 `~/caios-ca.key`, which never leaves that node.
 
-### Where to run the copy
+### Easiest: download it from the dashboard
+
+Open this in the browser that has the problem and save the file:
+
+```
+https://dashboard.<CTRL_IP>.sslip.io/caios-ca.pem
+```
+
+You will have to click past the certificate warning once to reach it, which is
+fine — that exception is enough to fetch this one file. Then install it (below)
+and the warnings disappear everywhere.
+
+### Stopgap, if you cannot install a CA right now
+
+Visit each hostname once and click through its warning, so the browser holds a
+separate exception for each:
+
+```
+https://api.<CTRL_IP>.sslip.io/docs
+https://auth.<CTRL_IP>.sslip.io/realms/caios
+```
+
+Then reload the dashboard. This works, but the exceptions are per-browser and
+per-profile and do not survive a fresh machine — so it is not what you want for
+a recording, or for a demo on someone else's laptop.
+
+### Other ways to get the file
 
 The file already exists on `caios_server`. There is nothing to copy *there* —
 run these **on your own laptop**, after connecting to the VPN.

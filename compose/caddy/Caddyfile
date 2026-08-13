@@ -34,7 +34,27 @@
 https://{$CAIOS_DASHBOARD_HOST} {
 	import caios_tls
 	encode gzip
-	reverse_proxy 127.0.0.1:8081
+
+	# Serve the CA certificate for download.
+	#
+	# Not a convenience: without our CA installed, the browser blocks the
+	# dashboard's calls to api.<...> entirely. Clicking through the warning on
+	# the dashboard host grants an exception for THAT host only, and background
+	# XHR/fetch requests to the API host cannot prompt — they simply fail, and
+	# the page reports "Error calling the API, please try again later".
+	#
+	# So this is the fix for a functional problem, and it needs to be reachable
+	# from the machine that has the problem.
+	handle /caios-ca.pem {
+		header Content-Type application/x-pem-file
+		header Content-Disposition "attachment; filename=caios-ca.pem"
+		root * /etc/caddy/certs
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8081
+	}
 }
 
 # ---------------------------------------------------------------------------

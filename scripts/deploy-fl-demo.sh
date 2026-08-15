@@ -52,10 +52,21 @@ USER_NAME="${CAIOS_FL_USER:-researcher}"
 PW_VAR="CAIOS_PW_$(echo "$USER_NAME" | tr 'a-z-' 'A-Z_')"
 PASSWORD="${!PW_VAR:-}"
 ROUNDS="${CAIOS_FL_ROUNDS:-10}"
-IDE_PASSWORD="${CAIOS_FL_IDE_PASSWORD:-caios-demo-2026}"
+# The password for the deployed JupyterLab/VS Code workspaces. No default here
+# on purpose: a working credential in a committed file is a committed secret,
+# even a throwaway one on a VPN-only subnet. Real value lives in caios.env.
+IDE_PASSWORD="${CAIOS_FL_IDE_PASSWORD:-}"
 STATE="demo/fl/results/deployment.json"
 
 [[ -n "$PASSWORD" ]] || { echo "No password for $USER_NAME ($PW_VAR unset in $ENV_FILE)"; exit 1; }
+if [[ -z "$IDE_PASSWORD" ]]; then
+    echo "CAIOS_FL_IDE_PASSWORD is unset. Add it to $ENV_FILE:"
+    echo
+    echo "    CAIOS_FL_IDE_PASSWORD=$(head -c 12 /dev/urandom | base64 | tr -d '/+=' | head -c 14)"
+    echo
+    echo "PAPI requires at least 9 characters."
+    exit 1
+fi
 
 TOKEN="$(bash scripts/get-token.sh "$USER_NAME" "$PASSWORD" 2>/dev/null)"
 [[ -n "$TOKEN" ]] || { echo "Could not get a token for $USER_NAME — is Keycloak up?"; exit 1; }

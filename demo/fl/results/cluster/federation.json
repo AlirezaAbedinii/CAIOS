@@ -1,0 +1,45 @@
+{
+  "run": "cluster",
+  "date": "2026-08-15",
+  "rounds": 10,
+  "local_epochs": 2,
+  "strategy": "Federated Averaging (FedAvg)",
+  "min_fit_clients": 3,
+  "wall_clock_seconds": 30.72,
+  "server": {
+    "job": "54a033c6-98f3-11f1-ac38-e52fe1a7274c",
+    "node": "caios-wn-gpu-2",
+    "image": "ai4oshub/ai4os-federated-server",
+    "transport": "gRPC over TLS through Traefik (h2c), CAIOS local CA"
+  },
+  "sites": {
+    "site_a": {
+      "node": "caios-wn-gpu-0",
+      "job": "5b2f9bce-98f3-11f1-b823-e52fe1a7274c",
+      "train_slices": 700
+    },
+    "site_b": {
+      "node": "caios-wn-gpu-1",
+      "job": "636ba63d-98f3-11f1-8b7b-e52fe1a7274c",
+      "train_slices": 958
+    },
+    "site_c": {
+      "node": "caios-wn-gpu-2",
+      "job": "7566a55f-98f3-11f1-92a3-e52fe1a7274c",
+      "train_slices": 799
+    }
+  },
+  "curve": [
+    0.71,
+    0.7875,
+    0.8023,
+    0.8089,
+    0.8287,
+    0.827,
+    0.8451,
+    0.8534,
+    0.8484,
+    0.8418
+  ],
+  "failures": 0
+}

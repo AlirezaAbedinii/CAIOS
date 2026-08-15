@@ -1,0 +1,114 @@
+---
+# Put the Nomad scheduler into "spread" mode, cluster-wide.
+#
+#   cd ansible && ansible-playbook playbook-scheduler-config.yml
+#
+# Safe and re-runnable. Changes one field of the cluster's scheduler
+# configuration; touches no node, no job and no data. Existing allocations are
+# not moved — this affects where the *next* job is placed.
+#
+# WHY
+# ---
+# Nomad defaults to `binpack`: fill one node before starting on the next. That
+# is the right default for a large cluster where consolidation frees whole
+# machines. It is the wrong one here, for a reason specific to this demo.
+#
+# Each site node has 3 CPU cores. A dev environment reserves cpu_num cores plus
+# a little shared time, so two fit on a node and three do not. Deploy three
+# federated learning clients under binpack and Nomad packs two of them onto
+# caios_site_a and puts the third on caios_site_b — leaving caios_site_c empty.
+#
+# The demo would still train, and the accuracy numbers would be identical. But
+# the claim being made is that three hospitals hold three separate datasets on
+# three separate machines and the data never leaves any of them, and two of the
+# three "hospitals" would be the same computer. That is the one thing in this
+# demo that has to be structurally true rather than described.
+#
+# With `spread`, each new deployment goes to the least-allocated node, so the
+# three clients land one per site without anyone choosing where.
+#
+# WHY NOT A CONSTRAINT ON EACH DEPLOYMENT
+# ---------------------------------------
+# The alternative was a "which hospital?" dropdown in the deploy form, mapping
+# to a Nomad constraint on node metadata. That needs a PAPI patch *and* an
+# Angular patch — the dashboard builds its configuration form from hardcoded
+# fields, not from PAPI's schema, so a new key in user.yaml simply would not
+# appear — plus a dashboard rebuild. Days of work and two more patches to carry,
+# for placement that one cluster setting already gives us.
+#
+# Enforcing site membership properly is V1 item 3 (namespace-per-site), which
+# makes it a property of who you log in as rather than of where the scheduler
+# felt like putting you. This is the MVP-shaped version of that.
+
+- name: Configure the Nomad scheduler
+  hosts: nomad_master
+  become: true
+  gather_facts: false
+
+  vars:
+    nomad_api: "https://127.0.0.1:4646"
+    nomad_certs: /etc/nomad.d/certs
+    desired_algorithm: spread
+
+  tasks:
+    - name: Read the current scheduler configuration
+      ansible.builtin.uri:
+        url: "{{ nomad_api }}/v1/operator/scheduler/configuration"
+        method: GET
+        client_cert: "{{ nomad_certs }}/cli.pem"
+        client_key: "{{ nomad_certs }}/cli-key.pem"
+        ca_path: "{{ nomad_certs }}/nomad-ca.pem"
+        return_content: true
+      register: scheduler_current
+
+    - name: Report what it is now
+      ansible.builtin.debug:
+        msg: >-
+          SchedulerAlgorithm is
+          {{ scheduler_current.json.SchedulerConfig.SchedulerAlgorithm }},
+          wanted {{ desired_algorithm }}
+
+    # The API replaces the whole configuration object, so the current one is
+    # sent back with a single field changed. Writing a hand-built body instead
+    # would quietly reset preemption and memory oversubscription to defaults.
+    - name: Set the scheduler algorithm
+      ansible.builtin.uri:
+        url: "{{ nomad_api }}/v1/operator/scheduler/configuration"
+        method: POST
+        client_cert: "{{ nomad_certs }}/cli.pem"
+        client_key: "{{ nomad_certs }}/cli-key.pem"
+        ca_path: "{{ nomad_certs }}/nomad-ca.pem"
+        body_format: json
+        body: >-
+          {{
+            scheduler_current.json.SchedulerConfig
+            | combine({'SchedulerAlgorithm': desired_algorithm})
+          }}
+        status_code: [200]
+      when: >-
+        scheduler_current.json.SchedulerConfig.SchedulerAlgorithm
+        != desired_algorithm
+      register: scheduler_set
+
+    - name: Confirm it took
+      ansible.builtin.uri:
+        url: "{{ nomad_api }}/v1/operator/scheduler/configuration"
+        method: GET
+        client_cert: "{{ nomad_certs }}/cli.pem"
+        client_key: "{{ nomad_certs }}/cli-key.pem"
+        ca_path: "{{ nomad_certs }}/nomad-ca.pem"
+        return_content: true
+      register: scheduler_after
+
+    - name: Fail if the cluster did not accept it
+      ansible.builtin.assert:
+        that:
+          - scheduler_after.json.SchedulerConfig.SchedulerAlgorithm == desired_algorithm
+        fail_msg: >-
+          Scheduler is still
+          {{ scheduler_after.json.SchedulerConfig.SchedulerAlgorithm }}.
+          Federated learning clients will binpack onto fewer nodes than there
+          are sites.
+        success_msg: >-
+          Scheduler algorithm is {{ desired_algorithm }} — new deployments go to
+          the least-allocated node.

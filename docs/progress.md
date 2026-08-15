@@ -5,10 +5,11 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 3 complete.** There is now something recognisable as the
-product: a branded CAIOS dashboard you log into, backed by an API that deploys
-real workloads onto the cluster. Next is Stage 4 — federated learning across the
-three sites, which is the headline.
+**Where we are: Stage 4 complete. The headline feature works.** A federated
+training runs across three hospital sites on three separate machines, driven
+from the platform, and beats what any one site can do alone. Everything the
+grant story needs is now demonstrable end to end. What is left is content and
+polish.
 
 ---
 
@@ -20,19 +21,118 @@ three sites, which is the headline.
 | 1 — Cluster | Consul, Nomad, Traefik running; a job reachable over HTTPS | **Done** — gate passed |
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | **Done** — gate passed |
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
-| 4 — Federated learning | Training across three sites | Not started |
+| 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
 
 **Nothing is blocking.** Next actions, in order:
 
-1. Stage 4 — federated learning: partition data non-IID across the three sites,
-   deploy the Flower server and three clients, run a training, produce the
-   comparison chart.
-2. Stage 5 — curated medical catalogue and the CAIOS look.
+1. Stage 5 — curated medical catalogue and the CAIOS look.
+2. Write and time `docs/demo-script.md`, then rehearse the walkthrough
+   end to end in a browser.
 
-Worth doing at some point, not blocking: open the dashboard in a browser and
-click through it. Everything it depends on is verified, but no human has looked
-at it yet.
+Worth doing at some point, not blocking: run the federated demo once from a
+browser rather than through `nomad alloc exec`. Every piece of that path is
+verified — JupyterLab serves, the bundle downloads, the client connects — but
+the clicking itself has not been done by a human yet.
+
+---
+
+## 2026-08-15 — STAGE 4 GATE PASSED: federated learning across three sites
+
+Ten rounds, three hospitals, thirty seconds of training, zero failed rounds.
+
+```
+  federated across three sites   0.710 -> 0.842, best 0.853
+  best single hospital alone     0.806
+  all data pooled centrally      0.865
+```
+
+Federated closes **81% of the gap** between the best a single hospital can do
+and what pooling everything would give — with no slice of data leaving the node
+it started on. The chart is `demo/fl/results/federated-vs-baselines.png`.
+
+Where the work actually ran:
+
+| Node | Holds | Slices |
+|---|---|---|
+| `caios-wn-gpu-0` | Hospital A workspace | 700 |
+| `caios-wn-gpu-1` | Hospital B workspace | 958 |
+| `caios-wn-gpu-2` | Hospital C workspace + the Flower server | 799 |
+
+**The work was split into six pieces**, each committed and testable on its own,
+so that only the last one needed the cluster. That ordering paid for itself: by
+the time anything was deployed, the only untested thing left was the network
+path.
+
+**The data.** Cheng et al.'s public brain-tumour MRI set from figshare — 3064
+T1-weighted slices, 233 patients, three tumour types, CC BY 4.0. Public data
+only (D-07), reduced to 64×64 because a federated round has to finish while an
+audience watches.
+
+Split deliberately unevenly, because an even split would have made the demo
+prove nothing: each site could train a decent model alone and federating would
+gain nothing visible. Hospital A gets mostly meningioma, B mostly glioma, C a
+spread — the case mix of a referral centre versus a general hospital.
+
+Splits are **by patient, never by slice**. One patient contributes several
+near-identical slices, so a random slice-level split would put the same patient
+in both training and test and quietly inflate every number above. This is the
+first thing a reviewer would check.
+
+**The comparison is honest in two ways worth stating.** Every line is scored on
+one test set, held out before the sites were formed and patient-disjoint from
+all of them. And every line is trained in *rounds*, not epochs — a site-alone
+model at round 5 has made exactly as many passes over its own data as a
+federated client has, so the chart compares methods rather than training
+budgets.
+
+**Three hospitals had to be three machines.** Nomad defaults to `binpack`, and
+at 3 cores a node it would have packed two workspaces onto one machine and left
+the third idle. The training and the accuracy would have been identical; the
+claim would not. `ansible/playbook-scheduler-config.yml` switches the cluster to
+`spread`, so each deployment lands on the least-allocated node. One idempotent
+setting, no patches.
+
+The alternative — a "which hospital?" dropdown in the deploy form — needs a PAPI
+patch *and* an Angular patch, because the dashboard builds its configuration
+form from hardcoded fields rather than from PAPI's schema, plus a dashboard
+rebuild. Days of work for placement one cluster setting already gives us.
+Enforcing site membership properly stays V1 item 3.
+
+**Each site's bundle contains only that site's data.** With no Nextcloud in MVP
+(D-15), datasets are copied into the workspace. `scripts/build-fl-bundles.sh`
+builds one tarball per site and the isolation is verified, not asserted — Site
+A's bundle physically does not contain Site B's slices. That turns a promise
+about how we behave into a property of what was delivered.
+
+**What the local rehearsal caught, before any deployment.**
+`scripts/fl-rehearse.sh` runs the whole federation over loopback in one minute.
+It found the model choices that matter — no batch normalisation, because FedAvg
+would average running statistics across sites with very different class mixes
+and produce something that looks like federated learning failing when it is a
+normalisation artefact — and it settled the Flower version. The deployed server
+runs a fork based on 1.16.0, so clients pin `flwr==1.16.0`; a client on a
+different major connects, waits, and times out saying nothing useful.
+
+**What only the cluster could prove**, and did: a client inside a workspace can
+reach the bundle host, install the pinned Flower, and complete a gRPC TLS
+handshake against Traefik using the CAIOS CA. Upstream's own example client
+passes `certifi` there, which works only for a publicly-trusted certificate; for
+us it fails with a handshake error that never mentions certificates.
+
+Also verified on the way through: the GPU is visible inside a workspace
+(`NVIDIA H100L-1-12C`, driver 580.105.08) and JupyterLab serves at its own
+subdomain.
+
+**Two bash traps that cost time**, recorded so nobody pays twice. A heredoc
+inside a command substitution inside a loop is consumed after the first
+iteration — the second site deployed with an empty body and PAPI silently
+filled in defaults. And piping JSON into `python3 - <<PY` makes Python read the
+heredoc as its own stdin, so the pipe is never seen. Both now use `python3 -c`.
+
+**Cleaned up:** the Stage 3 gate deployment and a GPU test workspace were
+deleted to free cores for the four FL workloads, and one orphaned federated
+server left behind by the first failed script run. All recreatable in minutes.
 
 ---
 

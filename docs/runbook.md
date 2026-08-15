@@ -292,6 +292,119 @@ step; it is purely for browsers on your own machine.
 
 ---
 
+## Running the federated demo
+
+The headline. Roughly ten minutes end to end, of which thirty seconds is actual
+training. All of it is clicking except the two commands typed into workspace
+terminals.
+
+### Once, before the first run
+
+```bash
+# on caios_server — downloads ~900 MB, then never again
+demo/.venv/bin/python demo/fl/prepare_data.py
+demo/.venv/bin/python demo/fl/partition.py
+bash scripts/build-fl-bundles.sh
+```
+
+`build-fl-bundles.sh` must be re-run after any change to `client.py`,
+`model.py`, or the data — the workspaces fetch the bundle, not the repository.
+
+The Nomad scheduler must be in `spread` mode or two hospitals land on one
+machine (D-19). Idempotent, so just run it:
+
+```bash
+cd ansible && ansible-playbook playbook-scheduler-config.yml
+```
+
+### Bring the demo up
+
+```bash
+bash scripts/deploy-fl-demo.sh            # server + three sites, ~3 minutes
+bash scripts/deploy-fl-demo.sh --status   # where everything landed
+```
+
+On the day this is done by clicking through the dashboard — Tools → federated
+server (service **jupyter**, min clients **3**), then three dev environments,
+**GPU 0**. The script is for rehearsal and for rebuilding without re-deriving
+nine form fields from memory.
+
+**Check `--status` shows the three sites on three different nodes.** That is the
+whole claim. If two share a node, the scheduler is still on `binpack`.
+
+### Start the server
+
+Open the federated server's **ide** endpoint, and in a terminal:
+
+```bash
+cd /srv/ai4os-federated-server/fedserver && python3 server.py
+```
+
+Wait for `Flower ECE: gRPC server running`. It then blocks until all three
+clients connect — that is `min_fit_clients: 3` doing its job, not a hang.
+
+### Start the three hospitals
+
+In each site workspace's terminal, with that site's name and the server's
+hostname (the `fedserver-...` address from `--status`):
+
+```bash
+curl -k -sSL https://dashboard.192.168.104.181.sslip.io/fl/bootstrap.sh | bash -s site_a fedserver-<uuid>.pacs-deployments.192.168.104.105.sslip.io
+cd ~/caios-fl && ./run.sh
+```
+
+Add `--quiet` to `run.sh`'s command for a clean projector terminal; leave it off
+if anything is going wrong, because Flower's per-message logging is the first
+useful thing to read.
+
+Training starts the moment the third client connects. Each site prints its own
+accuracy on the shared test set as the rounds land.
+
+### Afterwards
+
+```bash
+# collect the curve and redraw the chart
+demo/.venv/bin/python demo/fl/plot_results.py
+bash scripts/deploy-fl-demo.sh --delete    # asks for confirmation
+```
+
+### When it goes wrong
+
+**Clients connect but nothing happens.** The server needs all three. Check
+`--status` says `running` for every site, and that each client printed
+`connecting to ...`. Two connected clients wait forever by design.
+
+**A client fails the TLS handshake.** It is using the wrong CA or none. The
+bundle ships `caios-ca.pem` and `client.py` refuses to start without `--ca`.
+Upstream's example passes `certifi` here, which only works for a
+publicly-trusted certificate; ours is signed by the CAIOS local CA.
+
+**A client connects, then times out saying nothing useful.** Flower version. The
+server runs a fork based on 1.16.0 and the bundle pins `flwr==1.16.0`. If
+someone has re-run `pip install flwr` in that workspace, it is now on a
+different major.
+
+**Accuracy starts high and gets worse, or sits flat near 0.33.** Not the
+plumbing. Check that all three sites got *different* bundles — three copies of
+the same shard federates perfectly and learns nothing extra.
+
+**A workspace will not start, "Dimension cpu exhausted".** Four FL workloads
+need four cores across three 3-core nodes. Delete any leftover deployments:
+`bash scripts/deploy-fl-demo.sh --status` lists everything running.
+
+**The bundle download 404s.** `scripts/build-fl-bundles.sh` has not been run, or
+Caddy predates the `/fl/` route. Re-run the build, then
+`docker compose -f compose/docker-compose.yml --env-file configs/env/caios.env up -d caddy`.
+
+### Rehearsing without the cluster
+
+`bash scripts/fl-rehearse.sh` runs a server and three clients on caios_server
+over loopback and checks the result. One minute. It exercises everything except
+the network path, so it is the right place to test any change to `client.py` or
+`model.py` before rebuilding bundles.
+
+---
+
 ## Before the demo *(not yet exercised)*
 
 - [ ] Pre-pull every image onto every node. A cold multi-GB pull mid-demo is the
@@ -315,3 +428,7 @@ step; it is purely for browsers on your own machine.
 5. Keycloak issuer mismatch — universal 401.
 6. Three GPU deployments under one account — rejected on the third, by design
    (2-GPU cap). Run FL clients CPU-only.
+7. Nomad scheduler left on `binpack` — two hospitals share a node and the
+   federated demo quietly stops being a three-site demo.
+8. Bundles not rebuilt after editing `client.py` or `model.py` — the workspaces
+   fetch the bundle, not the repository, so the change simply is not there.

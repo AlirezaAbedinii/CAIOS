@@ -154,20 +154,31 @@ Goal: log in through the browser, deploy a module, open it. No terminal.
 
 The headline. Everything above exists to make this work.
 
-- [ ] Deploy one dev environment; confirm Jupyter opens and the GPU is visible
-- [ ] Prepare and partition the dataset non-IID across three sites
-      (`demo/fl/partition.py`) — Site A mostly class 1, Site B mostly class 2,
-      Site C mixed
-- [ ] Deploy the Flower FL server: `service: jupyter`, `min_fit_clients: 3`
-- [ ] Deploy three dev environments, one per site node
-- [ ] **CPU-only for the FL clients.** PAPI caps one user at 2 GPUs across all
+- [x] Deploy one dev environment; confirm Jupyter opens and the GPU is visible
+      — `NVIDIA H100L-1-12C`, driver 580.105.08, JupyterLab on its own subdomain
+- [x] Prepare and partition the dataset non-IID across three sites
+      (`demo/fl/partition.py`) — Site A mostly meningioma, Site B mostly glioma,
+      Site C a spread. Splits are by patient, never by slice (D-21)
+- [x] Deploy the Flower FL server: `service: jupyter`, `min_fit_clients: 3`
+- [x] Deploy three dev environments, one per site node — `spread` scheduling
+      (D-19) puts them on gpu-0, gpu-1 and gpu-2 without anyone choosing
+- [x] **CPU-only for the FL clients.** PAPI caps one user at 2 GPUs across all
       running deployments; three GPU clients would be rejected on the third.
       They are also downsampled hard, so CPU is plenty.
-- [ ] Run a full federated training; confirm accuracy improves across rounds
-- [ ] Produce the three-line chart: site-alone vs centralised vs federated
+- [x] Run a full federated training; confirm accuracy improves across rounds
+      — 10 rounds in 30s, 0.710 -> 0.842, best 0.853, zero failed rounds
+- [x] Produce the three-line chart: site-alone vs centralised vs federated
+      — `demo/fl/results/federated-vs-baselines.png`
 
-**Gate:** a federated training completes across three sites, driven from the
-dashboard.
+**Gate: passed 2026-08-15.** A federated training completed across three sites
+on three separate nodes. Federated 0.853 against 0.806 for the best single
+hospital and 0.865 for pooling everything — 81% of the gap closed with no data
+leaving any site.
+
+Deployment went through PAPI (`scripts/deploy-fl-demo.sh`), which is what the
+dashboard calls, and the client commands were typed into the workspaces. Doing
+the same run entirely by clicking is a rehearsal item, not a gate item — every
+piece of that path is verified.
 
 ---
 

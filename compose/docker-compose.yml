@@ -32,6 +32,10 @@ services:
       # Caddy's automatic HTTPS cannot work on a private subnet — see the
       # Caddyfile for why.
       - ./certs:/etc/caddy/certs:ro
+      # Federated learning bundles, served at /fl/ on the dashboard host.
+      # Built by scripts/build-fl-bundles.sh; absent until it has been run,
+      # which Caddy tolerates — the route 404s rather than failing to start.
+      - ../demo/fl/dist:/srv/fl:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:

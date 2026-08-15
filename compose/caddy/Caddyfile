@@ -52,6 +52,21 @@ https://{$CAIOS_DASHBOARD_HOST} {
 		file_server
 	}
 
+	# Federated learning bundles — one per hospital site, built by
+	# scripts/build-fl-bundles.sh.
+	#
+	# Here rather than on a data.<...> hostname because the control-plane
+	# certificate carries exactly four SANs, and regenerating it to add a fifth
+	# risks a working login for the sake of a file download. MVP has no
+	# Nextcloud (D-15), so this is how a site workspace gets its data.
+	#
+	# Read-only, and the directory holds nothing that is not already meant to
+	# leave: public MRI slices, the client source, and the CA we hand out anyway.
+	handle_path /fl/* {
+		root * /srv/fl
+		file_server browse
+	}
+
 	handle {
 		reverse_proxy 127.0.0.1:8081
 	}

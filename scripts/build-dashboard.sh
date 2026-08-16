@@ -57,14 +57,36 @@ cp "$CFG/theme/caios/variables.scss" "$CFG/theme/caios/_material.scss" "$DST/src
 
 # 3. images
 mkdir -p "$DST/src/assets/images/caios"
-if compgen -G "$CFG/images/*" >/dev/null; then
-    cp "$CFG"/images/* "$DST/src/assets/images/caios/"
+
+# Check for the four files by name, not for "is the directory non-empty".
+#
+# It used to test `compgen -G "$CFG/images/*"`, which matched the README.md
+# sitting in that directory explaining what to put there. So the fallback never
+# ran, only README.md was copied, and the dashboard shipped with no logo and no
+# favicon at all — nginx's SPA fallback then answered /assets/images/
+# dashboard-logo.png with index.html and HTTP 200, so every page had a broken
+# image in the top-left and nothing looked like an error.
+#
+# Generate them with: demo/.venv/bin/python scripts/make-brand-assets.py
+REQUIRED_IMAGES=(dashboard-logo.png favicon.ico forbidden.png not-found.png)
+missing_images=()
+for img in "${REQUIRED_IMAGES[@]}"; do
+    [[ -s "$CFG/images/$img" ]] || missing_images+=("$img")
+done
+
+if (( ${#missing_images[@]} == 0 )); then
+    for img in "${REQUIRED_IMAGES[@]}"; do
+        cp "$CFG/images/$img" "$DST/src/assets/images/caios/"
+    done
+    echo "    using CAIOS artwork (${#REQUIRED_IMAGES[@]} files)"
 else
-    # Fall back to upstream artwork so the build succeeds before the real logo
-    # exists. A build that fails for want of a favicon helps nobody.
-    echo "    NOTE: configs/dashboard/images/ is empty — using placeholder artwork."
-    echo "          Drop dashboard-logo.png, favicon.ico, forbidden.png and"
-    echo "          not-found.png there before the demo."
+    # Fall back to upstream artwork so the build still succeeds. A build that
+    # fails for want of a favicon helps nobody — but say so loudly, because
+    # shipping another project's logo defeats the point of branding (D-08).
+    echo "    WARNING: missing CAIOS artwork: ${missing_images[*]}"
+    echo "             falling back to upstream KMD4EOSC images — the dashboard"
+    echo "             will carry somebody else's logo."
+    echo "             Fix with: demo/.venv/bin/python scripts/make-brand-assets.py"
     cp "$SRC"/src/assets/images/kmd4eosc/* "$DST/src/assets/images/caios/"
 fi
 

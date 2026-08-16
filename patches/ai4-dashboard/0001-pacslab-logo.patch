@@ -1,0 +1,33 @@
+--- a/src/app/layout/sidenav/sidenav.component.html
++++ b/src/app/layout/sidenav/sidenav.component.html
+@@ -169,15 +169,28 @@
+             </p>
+ 
+             <div class="bottom-images">
++                <!--
++                  [CAIOS] PACS Lab, the organisation behind CAIOS, beside the
++                  CAIOS mark.
++
++                  This replaces upstream's eu-flag.jpg rather than sitting next
++                  to it. That flag is an EU funding acknowledgement, correct for
++                  AI4EOSC and wrong for us: CAIOS is a Canadian project running
++                  on Compute Canada under a Canadian allocation, and displaying
++                  the flag claims European funding the project does not have.
++                  It rendered unconditionally, so every page carried it.
++                -->
+                 <img
+-                    src="../../../assets/images/eu-flag.jpg"
+-                    width="50"
++                    src="../../../assets/images/pacslab-logo.png"
++                    width="46"
+                     class="mr-2"
++                    alt="PACS Lab"
+                 />
+                 <img
+                     src="../../../assets/images/dashboard-logo.png"
+                     width="100"
+                     class="mb-1"
++                    alt="CAIOS"
+                 />
+             </div>
+ 

@@ -63,7 +63,27 @@ sets `meta.status=ready` on each node, and every PAPI job template requires it.
 Without the patch we get a cluster that passes its own tests and then fails
 every real deployment.
 
-### `ai4-dashboard` — deliberately **not** patched for MVP
+### `ai4-dashboard/0001-pacslab-logo.patch`
+
+The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and
+the tenant logo. The EU flag is a European funding acknowledgement — correct for
+AI4EOSC, and a false claim for us. CAIOS is a Canadian project running on
+Compute Canada under a Canadian allocation, and the flag rendered
+unconditionally, on every page.
+
+The patch replaces it with `pacslab-logo.png`, crediting PACS Lab — the
+organisation behind CAIOS — beside the CAIOS mark. It cannot be configuration:
+the tenant config offers text and links, not images, and the image list in that
+block is hardcoded in the template.
+
+This is the first dashboard patch, so the note below is no longer strictly true.
+It still describes the *principle* correctly, and the rest of it still holds:
+everything else visible in a walkthrough is tenant configuration.
+`scripts/build-dashboard.sh` applies dashboard patches itself, because it stages
+`vendor/` into `build/` and would otherwise overwrite whatever
+`apply-patches.sh` had put there.
+
+### `ai4-dashboard` — otherwise deliberately **not** patched for MVP
 
 The dashboard has hardcoded `cloud.ai4eosc.eu` endpoints, but on inspection
 none of them need a source patch to get the MVP demo right.

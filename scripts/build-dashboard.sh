@@ -28,6 +28,25 @@ rm -rf "$DST"
 mkdir -p build
 cp -r "$SRC" "$DST"
 
+# 0. source patches
+#
+# This script stages vendor/ -> build/ itself, which means it overwrites
+# whatever scripts/apply-patches.sh put there. So the dashboard patches are
+# applied here rather than relying on that script having run first — otherwise
+# they are silently discarded and the build looks fine.
+if compgen -G "patches/ai4-dashboard/*.patch" >/dev/null; then
+    for p in patches/ai4-dashboard/*.patch; do
+        if git -C "$DST" apply --check "$ROOT/$p" 2>/dev/null; then
+            git -C "$DST" apply "$ROOT/$p"
+            echo "    applied $(basename "$p")"
+        else
+            echo "    FAILED  $(basename "$p") — upstream has moved."
+            echo "            Read the patch, not the error; see patches/README.md."
+            exit 1
+        fi
+    done
+fi
+
 # 1. tenant config
 #
 # Annotations stripped on the way in. The image merges this over _base.json
@@ -68,7 +87,9 @@ mkdir -p "$DST/src/assets/images/caios"
 # image in the top-left and nothing looked like an error.
 #
 # Generate them with: demo/.venv/bin/python scripts/make-brand-assets.py
-REQUIRED_IMAGES=(dashboard-logo.png favicon.ico forbidden.png not-found.png)
+# pacslab-logo.png is referenced by patches/ai4-dashboard/0001: it sits beside
+# the CAIOS mark at the bottom of the sidenav, where upstream shows an EU flag.
+REQUIRED_IMAGES=(dashboard-logo.png favicon.ico forbidden.png not-found.png pacslab-logo.png)
 missing_images=()
 for img in "${REQUIRED_IMAGES[@]}"; do
     [[ -s "$CFG/images/$img" ]] || missing_images+=("$img")
@@ -86,7 +107,16 @@ else
     echo "    WARNING: missing CAIOS artwork: ${missing_images[*]}"
     echo "             falling back to upstream KMD4EOSC images — the dashboard"
     echo "             will carry somebody else's logo."
-    echo "             Fix with: demo/.venv/bin/python scripts/make-brand-assets.py"
+    for img in "${missing_images[@]}"; do
+        if [[ "$img" == "pacslab-logo.png" ]]; then
+            # Supplied, not generated: it is another organisation's mark and we
+            # do not draw our own version of it.
+            echo "             $img is supplied by PACS Lab — save the official"
+            echo "               file to $CFG/images/$img"
+        else
+            echo "             $img: demo/.venv/bin/python scripts/make-brand-assets.py"
+        fi
+    done
     cp "$SRC"/src/assets/images/kmd4eosc/* "$DST/src/assets/images/caios/"
 fi
 

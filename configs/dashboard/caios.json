@@ -5,7 +5,8 @@
     "voName": "vo.caios.ca",
     "projectName": "CAIOS",
     "projectUrl": "https://github.com/AlirezaAbedinii/CAIOS",
-    "acknowledgments": "CAIOS is a research platform for medical and neuroscience AI, built on the open-source AI4OS stack.",
+    "_comment_acknowledgments": "Names the organisation in text, as well as in the logo added by patches/ai4-dashboard/0001. Rendered in the sidenav footer, followed by a link carrying projectName.",
+    "acknowledgments": "CAIOS is a medical and neuroscience AI platform from PACS Lab, built on the open-source AI4OS stack.",
 
     "_comment_sidenav": "Overrides _base.json, which points all four of these at cloud.ai4eosc.eu. Storage and MLflow are V1; until they exist, listing them would give the demo two dead links. Add them back when they are real.",
     "sidenavMenu": [],

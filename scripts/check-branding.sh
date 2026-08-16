@@ -98,7 +98,7 @@ fi
 
 echo
 echo "=== 3. branding artwork is really artwork ==="
-for asset in dashboard-logo.png favicon.ico forbidden.png not-found.png; do
+for asset in dashboard-logo.png favicon.ico forbidden.png not-found.png pacslab-logo.png; do
     ctype="$(curl -k -sS --max-time 20 -o "$TMP/$asset" -w '%{content_type}' "$DASH/assets/images/$asset")"
     kind="$(file -b "$TMP/$asset" 2>/dev/null)"
     case "$kind" in
@@ -110,6 +110,27 @@ for asset in dashboard-logo.png favicon.ico forbidden.png not-found.png; do
             bad "$asset is not an image: $kind" ;;
     esac
 done
+
+echo
+echo "=== 3b. no funding claims we cannot make ==="
+# Upstream renders an EU flag in the sidenav footer, unconditionally. That is a
+# European funding acknowledgement, correct for AI4EOSC and false for us: CAIOS
+# is a Canadian project on Compute Canada under a Canadian allocation. It is
+# replaced by the PACS Lab logo (patches/ai4-dashboard/0001), and this makes
+# sure a dashboard rebuild that drops the patch cannot quietly bring it back.
+bundle_main="$(grep -oE 'main-[A-Z0-9]+\.js' "$TMP/index.html" | head -1)"
+if [[ -n "$bundle_main" ]] && curl -k -sS --max-time 30 "$DASH/$bundle_main" -o "$TMP/main.js"; then
+    if grep -q 'eu-flag' "$TMP/main.js"; then
+        bad "the sidenav still renders eu-flag.jpg — it claims EU funding CAIOS does not have"
+    else
+        ok "no EU funding acknowledgement rendered"
+    fi
+    if grep -q 'pacslab-logo' "$TMP/main.js"; then
+        ok "PACS Lab is credited beside the CAIOS mark"
+    else
+        bad "pacslab-logo.png is not referenced — the dashboard patch did not apply"
+    fi
+fi
 
 echo
 echo "=== 4. the marketplace fits the audience ==="

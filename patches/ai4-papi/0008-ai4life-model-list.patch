@@ -1,0 +1,42 @@
+--- a/ai4papi/routers/v1/catalog/tools.py
++++ b/ai4papi/routers/v1/catalog/tools.py
+@@ -1,4 +1,5 @@
+ from copy import deepcopy
++import os
+ 
+ from fastapi import APIRouter, HTTPException
+ from fastapi.security import HTTPBearer
+@@ -75,6 +76,33 @@
+         if item_name == "ai4os-ai4life-loader":
+             ai4life_catalog = utils.ai4life_catalog()
+             models = [m["id"] for m in ai4life_catalog.values()]
++
++            # [CAIOS] Restrict and order the offered models.
++            #
++            # Upstream offers all 68 entries of the loader's
++            # filtered_models.json, in file order. About two dozen of those are
++            # near-duplicate "Live cell (E. coli) segmentation" and nucleus
++            # segmentation entries differing only by architecture, so the
++            # dropdown reads as noise and its default is whatever happens to be
++            # first in the file.
++            #
++            # AI4LIFE_MODELS is a comma-separated list of ids. Order is
++            # preserved, so the first is what a user sees selected — ours is a
++            # connectomics model, which is the point. Unknown ids are dropped
++            # rather than trusted, and if nothing matches we fall back to the
++            # full upstream list rather than serving an empty dropdown.
++            #
++            # See catalog/ai4life-models.txt.
++            allowed = [
++                i.strip()
++                for i in os.environ.get("AI4LIFE_MODELS", "").split(",")
++                if i.strip()
++            ]
++            if allowed:
++                available = set(models)
++                curated = [i for i in allowed if i in available]
++                models = curated or models
++
+             conf["general"]["model_id"]["options"] = models
+             conf["general"]["model_id"]["value"] = models[0]
+ 

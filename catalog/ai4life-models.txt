@@ -1,0 +1,56 @@
+# Which bioimage.io models the AI4Life loader offers, and in what order.
+#
+# Read by scripts/render-ai4life-models.sh into the AI4LIFE_MODELS environment
+# variable; PAPI filters its dropdown to these (patches/ai4-papi/0008). One ID
+# per line, order preserved — the first becomes the default selection.
+#
+# WHY THIS LIST CARRIES MORE WEIGHT THAN IT LOOKS
+#
+# The stock module catalogue is documented as having two medical modules. It
+# effectively has one: image-classification-tf-dicom is undeployable (see
+# catalog/keep.txt) and neuroscience modules number zero. So this file is where
+# the platform's neuroscience credibility actually comes from — real published
+# models, deployable by ID, no code written by us.
+#
+# WHY NOT ALL 68
+#
+# Upstream offers every model in the loader's filtered_models.json. Of those, a
+# dozen are near-duplicate "Live cell (E. coli) segmentation" entries and
+# another dozen are near-duplicate nucleus segmentation entries, differing only
+# by architecture. A researcher opening a 68-entry dropdown of mostly identical
+# descriptions learns nothing. Twelve chosen ones, connectomics first, reads as
+# a curated neuroscience platform.
+#
+# ON THE IDs
+#
+# These are the loader's `id` field, which is what the deploy form submits.
+# Mostly bioimage.io nicknames, but not always — see the DOI below. Do not
+# substitute a nickname you read on the bioimage.io website without checking it
+# against filtered_models.json; scripts/render-ai4life-models.sh validates
+# every line here against the live file for exactly that reason.
+
+# --- Connectomics: tracing neurons through electron microscopy ---------------
+# Core neuroscience, and the reason this list exists. Three architectures on the
+# same task, which also makes the "compare two models" beat possible.
+zealous-snail             # 3D Attention U-Net, circuit reconstruction from EM
+exuberant-parrot          # 3D ResUNet++, same task
+willing-whale             # 3D Residual U-Net, same task
+
+# --- Electron microscopy organelles ------------------------------------------
+good-butterfly            # mitochondria segmentation, 3D Attention U-Net
+stupendous-sheep          # MitoNet 2D, a generalist mitochondrial instance model
+
+# --- Microscopy segmentation a cell biologist will recognise -----------------
+# The DOI is not a mistake. This is NucleiSegmentationBoundaryModel, by far the
+# most downloaded model in the catalogue (70,601). Its bioimage.io nickname is
+# "affable-shark", but the loader's id field carries the concept DOI, and the
+# nickname is not accepted by the deploy form.
+10.5281/zenodo.5764892    # NucleiSegmentationBoundaryModel — the recognisable one
+famous-fish               # CellPose cyto3
+philosophical-panda       # Cellpose nuclear model, fine-tuned
+resourceful-otter         # 2D nucleus segmentation — cheapest to run live
+
+# --- Realistic preprocessing and clinical histology --------------------------
+humorous-fox              # Noise2Void denoising — a real EM preprocessing step
+thoughtful-chipmunk       # skeletal muscle fibre segmentation, brightfield
+noisy-ox                  # Segment Anything, fine-tuned for microscopy

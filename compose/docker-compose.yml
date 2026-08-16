@@ -219,6 +219,12 @@ services:
       # hours, so after changing the fork either restart PAPI or PUT
       # /v1/catalog/modules/refresh.
       MODULES_CATALOGUE_REPO: ${MODULES_CATALOGUE_REPO:-ai4os-hub/modules-catalog}
+      # Patched in — upstream offers all 68 bioimage.io models the loader
+      # supports, two dozen of which are near-duplicates, with whatever is
+      # first in the file as the default. Ours is a curated twelve, ordered so
+      # a connectomics model is selected by default. Empty = upstream.
+      # Generated from catalog/ai4life-models.txt.
+      AI4LIFE_MODELS: ${AI4LIFE_MODELS:-}
       NOMAD_ADDR: ${NOMAD_ADDR}
       NOMAD_CACERT: ${NOMAD_CACERT}
       NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}

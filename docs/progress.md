@@ -5,11 +5,13 @@ Running log of what has actually been done. Updated at every step.
 Newest entries at the top. Each entry says what changed, what was verified, and
 what it unblocks — so that "done" always means something checkable.
 
-**Where we are: Stage 4 complete. The headline feature works.** A federated
-training runs across three hospital sites on three separate machines, driven
-from the platform, and beats what any one site can do alone. Everything the
-grant story needs is now demonstrable end to end. What is left is content and
-polish.
+**Where we are: MVP complete. Stages 0–5 are done.** A federated training runs
+across three hospital sites on three separate machines and beats what any one
+site can do alone; the platform around it now reads as a medical imaging
+platform rather than somebody else's stack. `docs/demo-script.md` is written
+and timed at 22 minutes.
+
+What is left is rehearsal and the V1 list — a real certificate first.
 
 ---
 
@@ -22,18 +24,109 @@ polish.
 | 2 — Identity | Keycloak and Vault; a token PAPI accepts | **Done** — gate passed |
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
-| 5 — Content and branding | Curated catalogue, CAIOS look | Not started |
+| 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
 
-**Nothing is blocking.** Next actions, in order:
+**Nothing is blocking. The MVP is complete.** Next actions, in order:
 
-1. Stage 5 — curated medical catalogue and the CAIOS look.
-2. Write and time `docs/demo-script.md`, then rehearse the walkthrough
-   end to end in a browser.
+1. **Rehearse the demo end to end in a browser**, following
+   `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
+   clicking yet — every piece is verified individually, which is not the same
+   thing.
+2. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+   browser warning that currently opens the demo.
+3. Record it.
 
-Worth doing at some point, not blocking: run the federated demo once from a
-browser rather than through `nomad alloc exec`. Every piece of that path is
-verified — JupyterLab serves, the bundle downloads, the client connects — but
-the clicking itself has not been done by a human yet.
+Two things a person still has to judge, which no script settles:
+
+- Does the dashboard read as a medical imaging platform to someone who does not
+  know the project? That is the Stage 5 gate's real half.
+- Is brain MRI the right disease area? (Q-08 — answered by default, not by
+  decision.)
+
+---
+
+## 2026-08-16 — STAGE 5 GATE PASSED: it reads as a medical platform
+
+The MVP is complete. `scripts/check-branding.sh` passes every mechanical check,
+and `docs/demo-script.md` is written and timed at 22 minutes over seven beats.
+
+**The catalogue went from 46 modules to 9.** Upstream's is roughly two thirds
+marine biology, agriculture and remote sensing — good modules, wrong audience,
+and it is the first thing a visitor looks at. Curated in a fork
+(`caios-modules-catalog`), driven by `catalog/keep.txt`, which records the test
+applied to every line: would a medical or neuroscience researcher plausibly
+deploy this on their own data?
+
+Judged from each module's own summary rather than its name, which mattered more
+than expected. `DEEP-OC-mods` reads generic and is network security monitoring.
+`ai4os-speech-to-text-tf` sounds like clinical dictation and is keyword
+spotting. Two U-Net segmentation models were dropped despite segmentation being
+*the* medical imaging task, because one is trained on Cercospora leaf spot and
+the other on aerial imagery — a clinician who reads "leaf spot" concludes the
+platform is not theirs.
+
+**The finding that matters more than the curation.**
+`image-classification-tf-dicom` — chest X-ray, speaks DICOM, on paper the single
+most relevant module upstream ships and the anchor for the whole PACS framing —
+is undeployable:
+
+- its metadata gives `docker_image` as a bare `image-classification-tf-dicom`
+  with no namespace, where every other module gives `ai4oshub/<name>`. PAPI does
+  `repo, image = registry.split("/")[-2:]`, which raises `ValueError`, so
+  `/config` returns HTTP 500 and the dashboard errors the instant the module is
+  clicked;
+- and the image is published nowhere findable, so even with the parse fixed it
+  would fail at pull.
+
+Patching PAPI would have turned an immediate error into a deployment that spins
+and dies in front of an audience. So it is dropped, and **the documented "two
+medical modules" is really one.**
+
+**Which makes the AI4Life loader load-bearing, not a bonus.** It deploys any
+bioimage.io model by ID. Upstream offers all 68 it supports, in file order, two
+dozen of which are near-identical nucleus and E. coli segmentation entries. Ours
+is a curated twelve, ordered so the form opens on *"Circuit reconstruction for
+electron microscopy"* — connectomics, which is core neuroscience. That is where
+the platform's neuroscience credibility now comes from.
+
+A second documentation error found here: `catalog/medical-shortlist.md`
+recommends `affable-shark` (70,000 downloads) and claims the IDs were verified
+against the loader's own `filtered_models.json`. They were not — that is the
+bioimage.io *nickname*; the `id` the deploy form accepts is the concept DOI
+`10.5281/zenodo.5764892`. Wrong IDs fail silently, because PAPI just drops ones
+it does not recognise, so `scripts/render-ai4life-models.sh` now validates every
+line against the live catalogue and refuses to render if any is unknown.
+
+**The dashboard had no logo and no favicon.** Not the wrong ones — none. Every
+page carried a broken image in the top-left, and nothing looked like an error,
+because nginx answers a missing asset with `index.html` and HTTP 200: the
+browser was receiving HTML labelled as a PNG.
+
+The cause was one line in `build-dashboard.sh`, which tested whether the artwork
+directory was non-empty with `compgen -G`. It matched the `README.md` sitting in
+that directory explaining what to put there, so the placeholder fallback never
+ran. It now checks for the four files by name. Artwork is generated by
+`scripts/make-brand-assets.py`; the mark is three nodes joined in a triangle,
+which is the federated story in one glyph.
+
+**`scripts/check-branding.sh` exists so this cannot recur quietly.** It verifies
+assets by content type and magic bytes rather than status code — precisely the
+mistake that hid the missing logo — and separates what is live from what is
+inert: the runtime `config.json` is clean and the analytics beacon is disabled
+(a FAIL if not), while two `cloud.ai4eosc.eu` addresses compiled into the JS
+bundle as overridden fallbacks are reported as warnings rather than pretended
+away.
+
+**One bug found by accident, worth more than the feature that found it.**
+Rebuilding PAPI broke all of its outbound HTTPS to our own domains
+(`CERTIFICATE_VERIFY_FAILED`, surfacing as "Fail to fetch data from the url" on
+the deployments page). The CA was mounted from `${HOME}/caios-ca.pem`; Docker
+needs `sudo` on this host, `sudo` resets `HOME` to `/root`, the file is not
+there — and **Docker's response to a missing bind-mount source is to silently
+create an empty directory**. So `update-ca-certificates` found a directory,
+did nothing, and PAPI started perfectly while trusting no CAIOS certificate at
+all. Both mounts are now repo-relative. Every silent "configuration had no
+effect" of this shape has the same cause.
 
 ---
 

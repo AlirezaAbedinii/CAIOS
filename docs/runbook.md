@@ -405,6 +405,70 @@ the network path, so it is the right place to test any change to `client.py` or
 
 ---
 
+## Catalogue and branding
+
+### Is it still CAIOS?
+
+```bash
+bash scripts/check-branding.sh
+```
+
+Checks what the running dashboard actually serves. Run it after any dashboard
+rebuild, any catalogue change, and once immediately before the demo.
+
+It verifies artwork by magic bytes, not status code, and that is deliberate:
+nginx answers a missing asset with `index.html` and HTTP 200, so a missing logo
+looks fine to anything that only reads status codes. That is exactly how the
+dashboard shipped with no logo at all.
+
+### Changing which modules appear in the marketplace
+
+Edit `catalog/keep.txt`, then:
+
+```bash
+bash scripts/curate-catalogue.sh            # show what would change
+bash scripts/curate-catalogue.sh --apply    # rewrite and push the fork
+```
+
+**Then wait up to five minutes.** `raw.githubusercontent.com` serves
+`.gitmodules` with `max-age=300`, so the marketplace keeps showing the old list
+after the push no matter how many times you restart PAPI. This looks exactly
+like a broken cache and is not one. After that, restart PAPI to clear its own
+six-hour cache:
+
+```bash
+sudo docker restart caios_papi
+```
+
+### Changing which bioimage.io models the AI4Life loader offers
+
+Edit `catalog/ai4life-models.txt`, then:
+
+```bash
+bash scripts/render-ai4life-models.sh           # validate the IDs
+bash scripts/render-ai4life-models.sh --write   # write into caios.env
+sudo docker compose -f compose/docker-compose.yml --env-file configs/env/caios.env up -d papi
+```
+
+The validation matters. IDs are usually bioimage.io nicknames but not always —
+the most downloaded model is shown everywhere as `affable-shark` while the
+loader's `id` is the DOI `10.5281/zenodo.5764892`. A wrong ID fails silently,
+because PAPI drops ones it does not recognise, so the dropdown just quietly has
+one fewer entry.
+
+### Regenerating the logo and favicon
+
+```bash
+demo/.venv/bin/python scripts/make-brand-assets.py
+bash scripts/build-dashboard.sh
+sudo docker compose -f compose/docker-compose.yml --env-file configs/env/caios.env up -d dashboard
+```
+
+Colours live in `configs/dashboard/theme/caios/variables.scss` and are repeated
+at the top of the script; change both.
+
+---
+
 ## Before the demo *(not yet exercised)*
 
 - [ ] Pre-pull every image onto every node. A cold multi-GB pull mid-demo is the
@@ -432,3 +496,10 @@ the network path, so it is the right place to test any change to `client.py` or
    federated demo quietly stops being a three-site demo.
 8. Bundles not rebuilt after editing `client.py` or `model.py` — the workspaces
    fetch the bundle, not the repository, so the change simply is not there.
+9. A compose bind mount pointing at `${HOME}` — Docker needs `sudo` here, `sudo`
+   makes `HOME=/root`, and a missing mount source becomes an empty *directory*
+   rather than an error. PAPI then runs healthily while trusting no CAIOS
+   certificate, and every call to our own domains fails with
+   `CERTIFICATE_VERIFY_FAILED`.
+10. Catalogue edited but the marketplace unchanged — GitHub's raw CDN caches
+    `.gitmodules` for five minutes. Not PAPI's fault; wait, then restart PAPI.

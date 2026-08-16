@@ -264,6 +264,28 @@ than failing. PAPI then started healthily while trusting no CAIOS certificate,
 and every outbound HTTPS call to our own domains failed with an error
 mentioning nothing about mounts.
 
+**D-30 — PACS Lab is credited in the sidenav, and the EU flag is removed.**
+CAIOS is the project; PACS Lab (`https://pacs.eecs.yorku.ca/`) is the
+organisation behind it. Its logo sits beside the CAIOS mark at the bottom of the
+sidenav, linked, and the acknowledgement line names it.
+
+It *replaces* upstream's `eu-flag.jpg` rather than joining it. That flag is a
+European funding acknowledgement — correct for AI4EOSC, and a claim CAIOS cannot
+make: this is a Canadian project on Compute Canada under a Canadian allocation.
+It rendered unconditionally, on every page, and had gone unnoticed because
+branding review had been looking for missing CAIOS branding rather than for
+inherited branding that was present and wrong.
+
+This is the first dashboard patch (`patches/ai4-dashboard/0001`), so the
+"dashboard is unpatched" property no longer holds literally. It cannot be
+configuration: the tenant config offers text and links, and the image pair is
+hardcoded in the template. `scripts/check-branding.sh` now fails if `eu-flag`
+returns or `pacslab-logo` disappears.
+
+The logo file is supplied by PACS Lab, not generated.
+`scripts/make-brand-assets.py` deliberately does not draw it — an approximation
+of another organisation's real mark is worse than none.
+
 ---
 
 ## Open
@@ -318,3 +340,7 @@ from 46 modules to 9, twelve bioimage.io models with connectomics as the
 default, CAIOS artwork where there had been none, and a branding audit that
 checks content rather than status codes. Recorded D-24 through D-29. The
 headline finding is D-25: upstream's "two medical modules" is really one.
+
+**2026-08-16, later** — PACS Lab credited in the sidenav footer, replacing an EU
+funding flag that had been rendering on every page. Recorded as D-30, and the
+first dashboard patch.

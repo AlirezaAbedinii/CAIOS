@@ -1,9 +1,12 @@
 --- a/src/app/layout/sidenav/sidenav.component.html
 +++ b/src/app/layout/sidenav/sidenav.component.html
-@@ -169,15 +169,28 @@
+@@ -169,15 +169,40 @@
              </p>
  
              <div class="bottom-images">
+-                <img
+-                    src="../../../assets/images/eu-flag.jpg"
+-                    width="50"
 +                <!--
 +                  [CAIOS] PACS Lab, the organisation behind CAIOS, beside the
 +                  CAIOS mark.
@@ -14,15 +17,26 @@
 +                  on Compute Canada under a Canadian allocation, and displaying
 +                  the flag claims European funding the project does not have.
 +                  It rendered unconditionally, so every page carried it.
++
++                  40px, not the 46 first tried: this is a square badge standing
++                  where a 50x33 flag stood, next to a wordmark that renders about
++                  21px tall. Much larger and the badge dominates the mark it is
++                  meant to accompany.
 +                -->
-                 <img
--                    src="../../../assets/images/eu-flag.jpg"
--                    width="50"
-+                    src="../../../assets/images/pacslab-logo.png"
-+                    width="46"
++                <a
++                    href="https://pacs.eecs.yorku.ca/"
++                    target="_blank"
++                    rel="noopener noreferrer"
++                    title="PACS Lab"
                      class="mr-2"
-+                    alt="PACS Lab"
-                 />
+-                />
++                >
++                    <img
++                        src="../../../assets/images/pacslab-logo.png"
++                        width="40"
++                        alt="PACS Lab"
++                    />
++                </a>
                  <img
                      src="../../../assets/images/dashboard-logo.png"
                      width="100"

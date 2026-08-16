@@ -212,6 +212,13 @@ services:
       # a role literally called "" rather than as its default_role, and refuses
       # with 403 — surfacing as a bare HTTP 500 on every deployment.
       VAULT_ROLE: caios
+      # Patched in — upstream hardcodes ai4os-hub/modules-catalog, which is the
+      # only thing deciding what the marketplace shows. Ours is a fork pruned
+      # from 46 modules to 10 that a medical or neuroscience researcher might
+      # actually use; see catalog/keep.txt. PAPI caches the result for six
+      # hours, so after changing the fork either restart PAPI or PUT
+      # /v1/catalog/modules/refresh.
+      MODULES_CATALOGUE_REPO: ${MODULES_CATALOGUE_REPO:-ai4os-hub/modules-catalog}
       NOMAD_ADDR: ${NOMAD_ADDR}
       NOMAD_CACERT: ${NOMAD_CACERT}
       NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}

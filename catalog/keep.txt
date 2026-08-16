@@ -1,0 +1,96 @@
+# The CAIOS marketplace catalogue: what a medical or neuroscience researcher sees.
+#
+# Consumed by scripts/curate-catalogue.sh, which prunes our fork of
+# ai4os-hub/modules-catalog down to these entries. One module per line; blank
+# lines and #-comments ignored.
+#
+# THE TEST APPLIED TO EVERY LINE
+#
+#   Would a medical or neuroscience researcher plausibly deploy this on their
+#   own data?
+#
+# Not "is it good", not "does it work" — all 46 upstream modules work. The
+# question is whether its presence helps or hurts someone deciding, in the first
+# ten seconds of scrolling, whether this platform is for them.
+#
+# Emptier and relevant beats fuller and irrelevant. 12 modules that could all
+# apply to your work reads better than 46 where you scroll past coral reef
+# segmentation to find four that might.
+#
+# Judged from each module's own summary via PAPI, not from its name. Two that
+# look like keeps on name alone are deliberately absent, noted at the bottom.
+
+# --- Medical, directly -------------------------------------------------------
+# Upstream is documented as shipping two medical modules. It effectively ships
+# one — see the note on image-classification-tf-dicom at the bottom.
+retinopathy-test                  # retinopathy classification
+
+# --- Retrainable on your own data --------------------------------------------
+# "Train your own X with your custom dataset" modules. These are what a
+# researcher with their own labelled images actually reaches for, and they are
+# domain-neutral, so nothing about them reads as somebody else's field.
+ai4os-image-classification-tf     # train your own image classifier
+ai4os-yolo-torch                  # detection, segmentation and classification
+ai4os-fasterrcnn-torch            # object detection
+obj-detection-torch               # Faster R-CNN detection and classification
+ai4os-audio-classification-tf     # train your own audio classifier — respiratory sounds
+
+# --- Clinical movement analysis ----------------------------------------------
+posenet-tf                        # body pose: gait, movement disorders, rehabilitation
+
+# --- Platform utilities ------------------------------------------------------
+ai4os-demo-app                    # the try-me path; the demo needs it
+tf-cnn-benchmarks-api             # CNN benchmarks — "is this GPU actually working"
+
+# --- Deliberately NOT kept, despite looking like keeps ------------------------
+#
+# image-classification-tf-dicom
+#                            THE ONE THAT HURTS. Chest X-ray classification that
+#                            speaks DICOM — on paper the single most relevant
+#                            module upstream ships, and the anchor for the PACS
+#                            framing. It is undeployable:
+#
+#                              * its metadata gives docker_image as the bare
+#                                string "image-classification-tf-dicom", with no
+#                                namespace, where every other module gives
+#                                "ai4oshub/<name>". PAPI does
+#                                `repo, image = registry.split("/")[-2:]`, which
+#                                raises ValueError, so /config returns HTTP 500
+#                                and the dashboard errors the moment the module
+#                                is clicked.
+#                              * and the image is not published under ai4oshub,
+#                                deephdc, or anywhere findable on Docker Hub —
+#                                so even with the parse fixed, deployment would
+#                                fail at image pull.
+#
+#                            Patching PAPI would convert an immediate error into
+#                            a deployment that spins and dies, which is worse in
+#                            front of an audience. Dropped.
+#
+#                            Consequence worth stating plainly: the documented
+#                            "2 medical modules" is really one. The medical and
+#                            neuroscience credibility of this catalogue rests on
+#                            the AI4Life loader, not on the stock modules.
+#
+# UC-adnaneds-DEEP-OC-unet   U-Net semantic segmentation — but trained and
+#                            described as Cercospora Leaf Spot on sugar beet.
+#                            Segmentation is the core medical imaging task, so
+#                            this was tempting. A clinician reading "leaf spot"
+#                            concludes the platform is not theirs, which is
+#                            exactly the impression Stage 5 exists to prevent.
+#
+# semseg-vaihingen           2D semantic segmentation, aerial imagery. Same
+#                            reasoning.
+#
+# DEEP-OC-mods               Reads as generic from the name; its own summary is
+#                            "proactive network monitoring and security
+#                            protection". Not imaging at all.
+#
+# ai4os-speech-to-text-tf    Sounded like clinical dictation. Its summary is
+#                            keyword spotting between short audio clips, which
+#                            is not that.
+#
+# Segmentation is covered instead by the AI4Life loader (see
+# configs/papi/tools/ai4os-ai4life-loader/user.yaml), which offers real
+# biomedical segmentation — nuclei, mitochondria, neurons — rather than a
+# retrained agricultural model.

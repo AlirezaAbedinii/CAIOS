@@ -1,0 +1,29 @@
+--- a/ai4papi/routers/v1/catalog/modules.py	2026-08-16 17:08:36.966534967 +0000
++++ b/ai4papi/routers/v1/catalog/modules.py	2026-08-16 17:08:36.958534920 +0000
+@@ -1,4 +1,5 @@
+ from copy import deepcopy
++import os
+ 
+ from fastapi import APIRouter, HTTPException
+ 
+@@ -12,7 +13,19 @@
+ 
+ class ModulesCatalog(Catalog):
+     def __init__(self):
+-        super().__init__(repo="ai4os-hub/modules-catalog", item_type="module")
++        # [CAIOS] Which GitHub repository the marketplace is read from.
++        #
++        # Catalog.get_items() fetches https://raw.githubusercontent.com/<repo>/
++        # master/.gitmodules and treats every submodule in it as a marketplace
++        # entry. That repository name is the only thing deciding what a user
++        # sees, and upstream hardcodes it — so a deployment serving a different
++        # audience cannot curate without editing this line.
++        #
++        # Ours points at a fork pruned to medical and general-purpose modules;
++        # see catalog/keep.txt and scripts/curate-catalogue.sh. Left unset, this
++        # behaves exactly as upstream does.
++        repo = os.environ.get("MODULES_CATALOGUE_REPO", "ai4os-hub/modules-catalog")
++        super().__init__(repo=repo, item_type="module")
+ 
+     def get_config(
+         self,

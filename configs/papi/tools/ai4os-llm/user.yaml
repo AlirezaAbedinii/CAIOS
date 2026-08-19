@@ -1,0 +1,84 @@
+---
+# CAIOS deployment form for the LLM tool.
+#
+# Mounted over /home/ai4-papi/etc/tools/ai4os-llm/user.yaml by
+# compose/docker-compose.yml. Upstream lives in vendor/ai4-papi/; never edit there.
+#
+# This file IS the form. The dashboard renders whatever appears here — field
+# names, defaults, help text and the option lists — so wording changes need no
+# rebuild, only a PAPI restart.
+#
+# Two values PAPI overwrites at request time, so do not bother setting them:
+#   * llm.vllm_model_id.options -> the keys of configs/papi/vllm.yaml
+#   * llm.vllm_model_id.value   -> the first of those (see the note in vllm.yaml)
+#
+# Note there is deliberately no `hardware:` section, matching upstream. One
+# consequence worth knowing: quotas.check_userwise reads hardware.gpu_num, so an
+# LLM deployment's GPU is invisible to the two-GPU-per-user cap and nothing stops
+# a user filling the cluster. Documented in docs/llm-risks.md R-15 rather than
+# fixed — adding the section would change the form for no demo benefit.
+
+general:
+  title:
+    name: Deployment title
+    value: ''
+    description: Provide short title for this deployment (less than 45 characters). Useful when you have lots of different active deployments.
+
+  desc:
+    name: Deployment description
+    value: ''
+    description: Provide some additional extended information about this deployment.
+
+llm:
+  type:
+    name: Deployment type
+    value: 'both'
+    description: >-
+      What to deploy. "both" gives you a chat interface and an API endpoint and is
+      what you want unless you know otherwise. "vllm" is the API alone, for calling
+      from a notebook or an editor. "open-webui" is the chat interface alone, pointed
+      at an endpoint you already have.
+    options: ['both', 'vllm', 'open-webui']
+
+  vllm_model_id:
+    name: LLM model
+    value: 'Qwen/Qwen3.5-2B'
+    description: >-
+      The model to serve. This list is the subset of the platform catalogue that
+      fits in this cluster's GPU memory — see docs/llm-infrastructure.md. Larger
+      models answer better and take longer to load; the default is the largest that
+      still leaves comfortable headroom.
+    options: []
+
+  ui_username:
+    name: Open WebUI email
+    value: ''
+    description: >-
+      The administrator account created for you in the chat interface. Must be an
+      email address — the dashboard validates it as one, and Open WebUI signs up
+      with it.
+
+  ui_password:
+    name: Open WebUI password
+    value: ''
+    description: >-
+      Password for that account. Note this is stored in clear text in the Nomad job
+      specification, so use a throwaway password and not one you use elsewhere.
+
+  HF_token:
+    name: Huggingface token
+    value: ''
+    description: >-
+      Only needed for gated models. Every model in the CAIOS catalogue is ungated,
+      so you should be able to leave this empty. Like the password above, it would
+      be stored in clear text in the job specification.
+
+  openai_api_key:
+    name: OpenAI API key
+    value: ''
+    description: Needed only when deploying Open WebUI on its own, to reach an endpoint you already have.
+
+  openai_api_url:
+    name: OpenAI API base url
+    value: ''
+    description: Needed only when deploying Open WebUI on its own. Include the /v1 suffix.

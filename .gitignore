@@ -109,3 +109,6 @@ authorized_keys
 # Anything the tooling writes with real values in it
 compose/generated/
 configs/env/caios.env
+
+# Unit-test virtualenv (scripts/run-tests.sh)
+.venv-tests/

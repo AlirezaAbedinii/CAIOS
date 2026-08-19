@@ -55,8 +55,30 @@
       # `tokens` is the image that issues per-client credentials — the beat
       # where each hospital gets its own revocable key.
       - ai4oshub/ai4os-federated-server:tokens
+      # --- the LLM tool (Stage 6) ---
+      # vLLM is 10.5 GB. Pulling it during a demo is a very long silence, and
+      # our job template sets force_pull = false precisely so this pull is the
+      # only one that ever happens. Tags are pinned to match
+      # configs/papi/tools/ai4os-llm/nomad.hcl — if you change one, change both,
+      # or the deployment pulls at run time and the point is lost.
+      - vllm/vllm-openai:v0.27.1
+      - ghcr.io/open-webui/open-webui:v0.11.0
+      # The LLM tool's two helper tasks. Upstream references a bare
+      # `python:slim-bullseye`, which is a moving tag; ours is pinned.
+      - python:3.12-slim-bullseye
 
   tasks:
+
+    # Bind-mounted by the vLLM task so model weights survive a redeploy instead
+    # of being pulled from Hugging Face again. Created here rather than left to
+    # Docker: Docker's response to a missing bind-mount source is to silently
+    # create an empty directory owned by root, which is exactly how D-29 went
+    # unnoticed. Making it explicit means a wrong path fails loudly instead.
+    - name: Create the Hugging Face model cache directory
+      ansible.builtin.file:
+        path: "{{ (mount_dir if inventory_hostname in (groups['nomad_volume'] | default([])) else '/mnt') }}/hf-cache"
+        state: directory
+        mode: "0777"
 
     - name: Pull images
       # Retries because the failure being worked around is a timeout, not a

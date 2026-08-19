@@ -51,6 +51,82 @@ Keycloak's token is rejected — so the headline feature fails at PAPI, with an
 error that looks nothing like "wrong Vault". Same treatment: read from
 `VAULT_ADDR`, keep the upstream default.
 
+### `ai4-papi/0003-tryme-vo.patch` — pinned to `e80a2b7`
+
+`routers/v1/try_me/nomad.py` looks up `"vo.ai4eosc.eu"` in the VO map **at import
+time**. On any deployment whose `main.yaml` does not list that VO it raises
+`KeyError` and PAPI refuses to start at all — not just the try-me feature, the
+whole API. Falls back to the first VO configured.
+
+### `ai4-papi/0004-stats-without-wattnet.patch` — pinned to `e80a2b7`
+
+`routers/v1/deployments/common.py` multiplies a carbon-footprint `affinity`
+value that is `None` whenever the WattNet lookup was skipped — which it always
+is here, because we do not run it. Every deployment then fails with
+`unsupported operand type(s) for *: 'NoneType' and 'float'`: a 500 caused
+entirely by an optional feature. Guarded.
+
+### `ai4-papi/0005-skip-mail-sidecar.patch` — pinned to `e80a2b7`
+
+The `email-notification` task is a **prestart** task, so when it cannot start
+neither does the deployment — and it pulls from an external registry. With no
+mail configured it is pure failure surface. Skipped when unconfigured.
+
+### `ai4-papi/0006-browser-accept-header.patch` — pinned to `e80a2b7`
+
+`routers/v1/catalog/common.py` compares the `Accept` header with `==`. Browsers
+never send exactly `application/json`; Angular's `HttpClient` sends
+`application/json, text/plain, */*`. So every request from our own dashboard was
+treated as a request for HTML. Parses the header as the list with q-values that
+it is.
+
+### `ai4-papi/0007-catalogue-repo.patch` — pinned to `e80a2b7`
+
+Covered above under the marketplace: the GitHub repository the catalogue is read
+from is hardcoded, and it is the only thing deciding what a user sees. Read from
+`MODULES_CATALOGUE_REPO`, defaulting to upstream.
+
+### `ai4-papi/0008-ai4life-model-list.patch` — pinned to `e80a2b7`
+
+`routers/v1/catalog/tools.py` offers all 68 entries of the AI4Life loader's
+`filtered_models.json`, in file order, about two dozen of them near-duplicates,
+with whatever happens to be first as the default. Read from `AI4LIFE_MODELS` so
+the list can be curated and ordered; unset behaves as upstream.
+
+### `ai4-papi/0009-llm-gpu-models.patch` — pinned to `e80a2b7`
+
+Two fixes in the LLM deployment path, `routers/v1/deployments/tools.py`.
+
+**The GPU allowlist.** Line 604 is a single hardcoded string comparison:
+
+```python
+if "Tesla T4" not in models:
+    raise HTTPException(status_code=405, ...)
+```
+
+That is the only thing between a perfectly capable GPU and a 405, and it is not
+configuration anywhere — so a deployment with different hardware cannot run this
+tool at all. Ours reports `NVIDIA H100L-1-12C MIG 1g.12gb`, which is strictly
+more capable than a T4 in everything except memory. Now read from
+`LLM_GPU_MODELS` as a comma-separated list, **defaulting to `Tesla T4`** so an
+unset variable behaves exactly as upstream does.
+
+Still present at upstream `master` as of 2026-08-19, so there is no fix to pull.
+
+**The `open-webui` typo.** Line 575 reads:
+
+```python
+if user_conf["llm"]["type"] in ["openwebui", "both"]:   # username/password checks
+```
+
+but the value that field can hold, per `etc/tools/ai4os-llm/user.yaml`, is
+`open-webui` **with a hyphen**. So a standalone UI deployment skipped both
+credential checks, `create-admin` then POSTed an empty email and password, and
+the UI came up **with signup open** — the first visitor becomes the
+administrator. Worth reporting upstream.
+
+Neither can be configuration: both are literals inside a function body.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

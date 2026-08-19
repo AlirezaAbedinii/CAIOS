@@ -402,11 +402,60 @@ up -d`:
   proof that Nomad will accept it, and costs nothing to run;
 - PAPI's logs contain no startup warnings about the new mounts.
 
-### Gate
+### What it found — run on 2026-08-19
 
-- [ ] `bash scripts/run-tests.sh` green
-- [ ] `bash scripts/check-llm-config.sh` green
-- [ ] The dashboard's deploy form opens and lists our nine models
+**Complete.** All four blockers addressed, 31 unit tests and the smoke test
+green.
+
+**The unit tests were checked against upstream, not just against ourselves.**
+Pointing the same nine assertions at `vendor/ai4-papi/etc/tools/ai4os-llm/nomad.hcl`
+fails all nine — 8 cores on a 3-core node, 32 GB on a 30 GB node, the Tesla T4
+constraint, the moving image tags, `force_pull`, the HTTPS helper URLs, the
+missing `shm_size`. A suite that passes on both the fixed and the broken version
+tests nothing, so this is the check that the checks are real.
+
+**The live API now serves our configuration**, verified field by field rather
+than by status code:
+
+```
+ai4os-llm is in the tools catalogue
+serving our 9 models, not upstream's thirteen
+form defaults to Qwen/Qwen3.5-2B
+deployment types: ['both', 'vllm', 'open-webui']
+PAPI allows: NVIDIA H100L-1-12C MIG 1g.12gb
+   cluster has: NVIDIA H100L-1-12C MIG 1g.12gb
+nomad job validate: Job validation successful
+```
+
+**And the argument for Stage L1 stopped being an argument.** `nomad job plan`
+against the live cluster:
+
+```
+- WARNING: Failed to place all allocations.
+    * Dimension "cpu" exhausted on 2 nodes
+    * Dimension "cores" exhausted on 1 nodes
+```
+
+The job is correct and the cluster has no room for it while the three
+federated-learning workspaces hold cores on all three compute nodes. **Node 6 is
+not a preference, it is a requirement** — this is what `docs/llm-infrastructure.md`
+predicted from arithmetic, now measured.
+
+**A latent bug found on the way.** `scripts/apply-patches.sh` does `rm -rf build/<repo>`,
+and `build/ai4-dashboard` holds root-owned files from the Docker build in
+`scripts/build-dashboard.sh`. The `rm` failed with "Permission denied", and
+because the script runs under `set -e` everything after it was skipped — so the
+dashboard was being left unpatched while `ai4-papi` looked fine. Fixed, and it is
+the same shape of fault as D-29: a failure that presents as silence.
+
+### Gate — passed 2026-08-19
+
+- [x] `bash scripts/run-tests.sh` green — 31 tests
+- [x] The suite demonstrably fails against upstream's template
+- [x] `bash scripts/check-llm-config.sh` green
+- [x] `nomad job validate` accepts the rendered job
+- [ ] The dashboard's deploy form opens in a browser and lists nine models
+      — needs a human with a browser, like every other UI check in this project
 
 **Commit:** `llm: unblock the tool on CAIOS hardware`
 
@@ -573,9 +622,9 @@ minutes; this should not push it past 26.
 
 | Stage | Work | Days | Can start |
 |---|---|---|---|
-| L0 | Verify node 6, prove CUDA works | 0.5 | Now |
-| L1 | Join it as `caios_llm` | 0.5 | After L0 |
-| L2 | Patch and configure PAPI | 1.0 | **Now — independent of L0/L1** |
+| L0 | Verify node 6, prove CUDA works | 0.5 | **done 2026-08-19** |
+| L1 | Join it as `caios_llm` | 0.5 | **next — L3 cannot place without it** |
+| L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
 | L3 | First vLLM deployment | 0.5 | After L1 + L2 |
 | L4 | Open WebUI end to end | 0.5 | After L3 |
 | L5 | Dashboard catalogue | 0.5 | After L2 |

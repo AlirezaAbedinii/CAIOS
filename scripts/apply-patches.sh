@@ -22,7 +22,15 @@ apply_repo() {
     fi
 
     echo "==> $repo"
-    rm -rf "$dst"
+    # build/ai4-dashboard picks up root-owned files from the Docker build in
+    # scripts/build-dashboard.sh, so a plain rm fails with "Permission denied"
+    # partway through — leaving a half-deleted tree and, because of `set -e`,
+    # skipping every repo after it. That is how ai4-dashboard came to be silently
+    # left unpatched while ai4-papi looked fine.
+    if ! rm -rf "$dst" 2>/dev/null; then
+        echo "    (removing root-owned build output from a previous container build)"
+        sudo rm -rf "$dst"
+    fi
     mkdir -p "$(dirname "$dst")"
     cp -r "$src" "$dst"
 

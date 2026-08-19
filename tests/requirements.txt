@@ -1,0 +1,4 @@
+# Unit-test dependencies. Deliberately tiny: these tests must run offline, in
+# seconds, with no cluster and no Nomad.
+pytest>=8.0
+PyYAML>=6.0

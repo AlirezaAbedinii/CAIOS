@@ -1,0 +1,208 @@
+---
+# CAIOS model catalogue for the LLM tool.
+#
+# Mounted over /home/ai4-papi/etc/vllm.yaml by compose/docker-compose.yml.
+# Upstream lives in vendor/ai4-papi/etc/vllm.yaml; never edit it there.
+#
+# WHAT IS DIFFERENT FROM UPSTREAM, AND WHY
+# ----------------------------------------
+# Upstream's file is written for a Tesla T4: 16 GB of memory, compute capability
+# 7.5. Ours is an H100 NVL sliced by MIG into one `1g.12gb` vGPU instance:
+# compute capability 9.0, and — measured, not assumed —
+#
+#     torch.cuda.mem_get_info() -> total 12100 MiB, free 10475 MiB
+#
+# Note that those are not the numbers `nvidia-smi` prints (12288 / 10565). vLLM
+# sizes itself from the CUDA figures, so the CUDA figures are the ones that
+# matter. Re-derive them for any node with scripts/check-llm-node.sh.
+#
+# 1. `--gpu-memory-utilization 0.80` on every model, because vLLM takes that
+#    setting as a fraction of TOTAL and can only ever use FREE:
+#
+#        0.90 (vLLM's default) -> 10890 MiB : over by 415, will not start
+#        0.85                  -> 10285 MiB : fits, 190 MiB spare — too tight
+#        0.80                  ->  9680 MiB : fits, 795 MiB spare
+#
+# 2. `--dtype float16` REMOVED throughout. Upstream sets it for exactly one
+#    reason, stated in its own header: "bfloat16 is only supported in GPUs with
+#    compute capability +8.0 (NVIDIA T4 has 7.5)". Ours is 9.0 and
+#    torch.cuda.is_bf16_supported() returns True, so the models run in the
+#    precision they were trained in instead of being cast down.
+#
+# 3. Nine models, not thirteen. Dropped:
+#      - Ministral-3-3B-Reasoning-2512 (7.70 GB) and granite-vision-4.1-4b
+#        (7.99 GB) — the weights leave no usable KV cache in a 9680 MiB budget;
+#      - both Llama-3.2-3B variants — they are gated, and a Hugging Face token
+#        typed into the deploy form is stored in clear text in the Nomad job
+#        (docs/llm-risks.md R-09). Every model below is ungated, so the token
+#        field should never be required.
+#
+# 4. `--max-model-len` reduced only where the arithmetic demands it. granite is
+#    the single model that needed it.
+#
+# Weight sizes in the comments are real `.safetensors` totals from the Hugging
+# Face API, measured 2026-08-19. The KV figures are predictions; Stage L3
+# replaces them with what vLLM reports at startup.
+#
+# Check vLLM recipes for optimal flags: https://recipes.vllm.ai/
+
+# ORDER MATTERS. PAPI's catalog/tools.py sets the form's default to models[0],
+# so the first entry below is what a user sees pre-selected. Qwen3.5-2B is first
+# deliberately: it is the largest model that still leaves generous headroom, and
+# a demo is better served by a model that answers well than by one that loads
+# fastest.
+
+models:
+
+  # ====================================================================================
+  # Qwen
+
+  Qwen/Qwen3.5-2B:
+    name: 'Qwen3.5-2B'
+    description: 'A 2B parameter instruction-tuned model from the Qwen 3.5 series, optimized for dialogue and general-purpose tasks. The default — the largest model that still leaves generous headroom.'
+    family: 'Qwen'
+    license: 'Apache 2.0'
+    context: '16K'
+    needs_HF_token: False
+    # weights 4.55 GB -> ~4.1 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '16384',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'qwen3_coder',
+      '--reasoning-parser', 'qwen3',
+      ]
+
+  Qwen/Qwen3.5-0.8B:
+    name: 'Qwen3.5-0.8B'
+    description: 'A 0.8B parameter instruction-tuned model from the Qwen 3.5 series, optimized for dialogue and general-purpose tasks. The quickest to load, and the choice when startup time matters more than answer quality.'
+    family: 'Qwen'
+    license: 'Apache 2.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 1.75 GB -> ~6.8 GB left for KV cache. Comfortable.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'qwen3_coder',
+      '--reasoning-parser', 'qwen3',
+      ]
+
+  # ====================================================================================
+  # Mistral
+
+  mistralai/Ministral-3-3B-Instruct-2512:
+    name: 'Ministral-3-3B-Instruct-2512'
+    description: 'A 3B parameter instruction-tuned model from the Ministral series, optimized for dialogue and general-purpose tasks.'
+    family: 'Mistral'
+    license: 'Apache 2.0'
+    context: '16K'
+    needs_HF_token: False
+    # weights 4.67 GB -> ~4.0 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '16384',
+      '--tokenizer_mode', 'mistral',
+      '--config_format', 'mistral',
+      '--load_format', 'mistral',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'mistral',
+      ]
+
+  # ====================================================================================
+  # LiquidAI
+
+  LiquidAI/LFM2.5-1.2B-Instruct:
+    name: 'LFM2.5-1.2B-Instruct'
+    description: 'A 1B parameter instruction-tuned model from the LFM 2.5 series, optimized for dialogue and general-purpose tasks.'
+    family: 'LiquidAI'
+    license: 'LFM 1.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 2.34 GB -> ~6.2 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'lfm2',
+      ]
+
+  LiquidAI/LFM2.5-1.2B-Thinking:
+    name: 'LFM2.5-1.2B-Thinking'
+    description: 'A 1B parameter instruction-tuned model from the LFM 2.5 series, optimized for thinking tasks. Shows its reasoning, which demonstrates well.'
+    family: 'LiquidAI'
+    license: 'LFM 1.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 2.34 GB -> ~6.2 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'lfm2',
+      '--reasoning-parser', 'qwen3',
+      ]
+
+  LiquidAI/LFM2.5-VL-450M:
+    name: 'LFM2.5-VL-450M'
+    description: 'A 0.4B parameter model from the LFM 2.5 series with vision capabilities — it can read an image as well as text.'
+    family: 'LiquidAI'
+    license: 'LFM 1.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 0.90 GB -> ~7.6 GB left for KV cache. The smallest on offer.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      ]
+
+  LiquidAI/LFM2.5-VL-1.6B:
+    name: 'LFM2.5-VL-1.6B'
+    description: 'A 1.6B parameter model from the LFM 2.5 series with vision capabilities.'
+    family: 'LiquidAI'
+    license: 'LFM 1.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 3.19 GB -> ~5.4 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      ]
+
+  # ====================================================================================
+  # IBM
+
+  ibm-granite/granite-4.1-3b:
+    name: 'granite-4.1-3b'
+    description: 'A 3B parameter instruction-tuned model from the Granite 4.1 series, optimized for dialogue and general-purpose tasks.'
+    family: 'IBM'
+    license: 'Apache 2.0'
+    context: '8K'
+    needs_HF_token: False
+    # weights 6.81 GB -> only ~2.0 GB left for KV cache, so the context is cut
+    # from upstream's 16K to 8K. This is the tightest model we offer; if Stage L3
+    # finds it will not load, drop it rather than shrinking it further.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '8192',
+      '--enable-auto-tool-choice',
+      '--tool-call-parser', 'granite4',
+      ]
+
+  # ====================================================================================
+  # DeepSeek
+
+  deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B:
+    name: 'DeepSeek-R1-Distill-Qwen-1.5B'
+    description: 'A distilled version of DeepSeek-R1, based on Qwen architecture, optimized for efficient reasoning and inference tasks.'
+    family: 'deepseek-ai'
+    license: 'Apache 2.0'
+    context: '32K'
+    needs_HF_token: False
+    # weights 3.55 GB -> ~5.1 GB left for KV cache.
+    args: [
+      '--gpu-memory-utilization', '0.80',
+      '--max-model-len', '32768',
+      '--reasoning-parser', 'deepseek_r1',
+      ]

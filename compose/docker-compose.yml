@@ -225,6 +225,15 @@ services:
       # a connectomics model is selected by default. Empty = upstream.
       # Generated from catalog/ai4life-models.txt.
       AI4LIFE_MODELS: ${AI4LIFE_MODELS:-}
+      # Patched in — upstream gates the LLM tool behind a hardcoded string
+      # comparison against "Tesla T4" (routers/v1/deployments/tools.py), which
+      # is why the dashboard answered "requires NVIDIA T4 GPUs" on hardware that
+      # is strictly more capable. Comma-separated; unset behaves as upstream.
+      #
+      # The value below is what nomad-device-nvidia 1.1.0 reports since the MIG
+      # fix — the plain "NVIDIA H100L-1-12C" it used to report matches nothing
+      # now. Re-derive with: bash scripts/check-llm-config.sh
+      LLM_GPU_MODELS: ${LLM_GPU_MODELS:-NVIDIA H100L-1-12C MIG 1g.12gb}
       NOMAD_ADDR: ${NOMAD_ADDR}
       NOMAD_CACERT: ${NOMAD_CACERT}
       NOMAD_CLIENT_CERT: ${NOMAD_CLIENT_CERT}
@@ -247,6 +256,20 @@ services:
       # model with no specs against it.
       - ../configs/papi/var/gpu_models.csv:/home/ai4-papi/var/gpu_models.csv:ro
       - ../configs/papi/tools/ai4os-federated-server/user.yaml:/home/ai4-papi/etc/tools/ai4os-federated-server/user.yaml:ro
+      # The LLM tool. Three files, and each one fixes something that would
+      # otherwise stop it dead — see docs/llm-risks.md.
+      #
+      # nomad.hcl: upstream pins the GPU device to a Tesla T4 (job pends
+      # forever), asks for 8 CPU cores and 32 GB on 3-core 30 GB nodes (job
+      # never places), and has both helper tasks call their own PUBLIC HTTPS
+      # URL, which dies on our self-signed CA and takes the allocation with it.
+      - ../configs/papi/tools/ai4os-llm/nomad.hcl:/home/ai4-papi/etc/tools/ai4os-llm/nomad.hcl:ro
+      - ../configs/papi/tools/ai4os-llm/user.yaml:/home/ai4-papi/etc/tools/ai4os-llm/user.yaml:ro
+      # vllm.yaml: upstream's catalogue is tuned for a 16 GB Tesla T4 at compute
+      # capability 7.5. Ours has 9680 MiB of usable budget at capability 9.0, so
+      # every model needs --gpu-memory-utilization 0.80 and none of them needs
+      # --dtype float16. Nine models rather than thirteen.
+      - ../configs/papi/vllm.yaml:/home/ai4-papi/etc/vllm.yaml:ro
       # CPU defaults capped to what a 3-vCPU node can actually place. Upstream
       # defaults (2 for modules, 4 for the dev environment) queue forever with
       # "Dimension cpu exhausted" — see the note inside these files.

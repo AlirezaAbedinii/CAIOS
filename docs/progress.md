@@ -27,22 +27,21 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 gate passed** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 + L2 done; L1 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
 1. **Stage L1** — join node 6 as `caios_llm`. Gated on approval to reformat its
-   `/dev/vdb`, which L0 has now shown holds only `lost+found`.
-2. **Stage L2** — the PAPI patch and configuration. Shares no file and no service
-   with L1, so the two run in parallel.
-3. **Rehearse the demo end to end in a browser**, following
+   `/dev/vdb`, which L0 has shown holds only `lost+found`. `nomad job plan` now
+   shows the LLM job cannot place anywhere without it, so L3 is blocked on this.
+2. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
    thing.
-4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+3. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-5. Record it.
+4. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -50,6 +49,97 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — STAGE L2 GATE PASSED: the LLM tool is deployable here
+
+All four blockers addressed. One patch, four configuration files, 31 unit tests,
+one smoke test. No fork.
+
+**`patches/ai4-papi/0009-llm-gpu-models.patch`** does two things. It replaces the
+hardcoded `if "Tesla T4" not in models` with a list read from `LLM_GPU_MODELS`,
+**defaulting to `Tesla T4`** so unset behaves exactly as upstream — the same
+shape as patches 0001, 0002 and 0007. And it fixes `"openwebui"` to
+`"open-webui"`, the typo that let a standalone UI deployment skip its credential
+checks and come up with signup open.
+
+**Four config files, bind-mounted over upstream's**, the mechanism already used
+for two other tools:
+
+- `configs/papi/tools/ai4os-llm/nomad.hcl` — device constraint dropped, resources
+  that fit a 3-core node, images pinned and not force-pulled, both helper tasks
+  moved off the public HTTPS URL onto `${NOMAD_ADDR_*}`, a host-mounted Hugging
+  Face cache, `shm_size` set.
+- `configs/papi/tools/ai4os-llm/user.yaml` — the form, with CAIOS wording.
+- `configs/papi/vllm.yaml` — nine models instead of thirteen, every one with
+  `--gpu-memory-utilization 0.80` and none with `--dtype float16`.
+- `compose/docker-compose.yml` — the mounts, and `LLM_GPU_MODELS`.
+
+### The tests were checked against upstream, not only against ourselves
+
+A suite that passes on both the fixed and the broken version tests nothing. So
+the same nine assertions were pointed at `vendor/ai4-papi`'s template:
+
+```
+caught  no Tesla T4 constraint
+caught  dedicated cores fit: template reserves 8 dedicated cores; nodes have 3
+caught  shared cpu survives: 8 cores leave -10000 MHz in the shared pool
+caught  memory fits: tasks ask for 32000 MB; 30972 MB is schedulable
+caught  images pinned: vllm/vllm-openai:latest uses a moving tag
+caught  not force-pulled
+caught  helpers stay in-allocation: VLLM_ENDPOINT is 'https://vllm-...'
+caught  helpers survive conn errors
+caught  shm_size set
+
+9/9 upstream defects caught by the suite
+```
+
+### The live API serves our configuration
+
+Checked field by field rather than by status code, because every failure this
+guards against returns 200:
+
+```
+ai4os-llm is in the tools catalogue
+serving our 9 models, not upstream's thirteen
+form defaults to Qwen/Qwen3.5-2B
+deployment types: ['both', 'vllm', 'open-webui']
+PAPI allows:  NVIDIA H100L-1-12C MIG 1g.12gb
+cluster has:  NVIDIA H100L-1-12C MIG 1g.12gb
+nomad job validate: Job validation successful
+```
+
+### Stage L1 stopped being an argument and became a measurement
+
+`nomad job plan` against the live cluster:
+
+```
+- WARNING: Failed to place all allocations.
+    * Dimension "cpu" exhausted on 2 nodes
+    * Dimension "cores" exhausted on 1 nodes
+```
+
+The job is correct; the cluster has no room for it while the three FL workspaces
+hold cores on all three compute nodes. Node 6 is a requirement, not a preference.
+The arithmetic in `docs/llm-infrastructure.md` predicted exactly this.
+
+### Two things found on the way
+
+**`scripts/apply-patches.sh` was silently skipping the dashboard.** It does
+`rm -rf build/<repo>`, and `build/ai4-dashboard` holds root-owned files from the
+Docker build in `scripts/build-dashboard.sh`. The `rm` failed with "Permission
+denied", and under `set -e` everything after it was skipped — so `ai4-papi` was
+patched, printed success, and `ai4-dashboard` was not. Same shape as D-29: a
+failure that presents as silence. Fixed.
+
+**Six patches were undocumented.** `test_every_patch_is_referenced_in_the_readme`
+found that `patches/README.md` explained 0001, 0002 and the two non-PAPI patches
+but not 0003 through 0008. All now documented, along with 0009.
+
+**New test infrastructure**, the first in this repository: `tests/` with pytest,
+run by `bash scripts/run-tests.sh` in a gitignored venv. Offline — no cluster, no
+Nomad, no network — so it can run on every change. 31 tests in 0.03 seconds.
 
 ---
 

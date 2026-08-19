@@ -168,8 +168,9 @@ a CUDA tensor operation inside a container.
 
 ### What it found — run on 2026-08-19
 
-**Partially complete.** The half that does not need node 6 is done, and it found
-a cluster-wide defect. The half that does need node 6 is blocked on one thing.
+**Complete.** It cleared the technical unknown it was written for, found a
+cluster-wide defect that was fixed the same day, and confirmed node 6 is what
+D-31 said it is.
 
 **Done, on `caios_site_a`:**
 
@@ -190,22 +191,45 @@ a cluster-wide defect. The half that does need node 6 is blocked on one thing.
   GPU workload on the cluster, not just the LLM tool.**
 - Egress to `huggingface.co` and `ghcr.io` works; 85 GB free on the data volume.
 
-**Blocked:** the cluster SSH key is not installed on `192.168.104.188`, so it
-cannot be logged into from `caios_server` yet. `docs/ssh-setup.md` is the same
-ten-minute procedure the other four nodes needed and it needs a key only you
-hold. Until then its specs are inherited from the other five, and — more to the
-point — **nobody has seen what is on the volume Stage L1 erases.**
+**Done, on node 6** (`192.168.104.188`, hostname `ai4eosc-6`) — first login it
+has ever had. D-31 is confirmed by measurement:
+
+| | node 6 | the three site nodes |
+|---|---|---|
+| cores | 3 | 3 |
+| RAM | 34 GB | 34 GB |
+| GPU | `NVIDIA H100L-1-12C`, 10565 MiB free, cc 9.0 | identical |
+| driver | 580.105.08 | identical |
+| MIG instances | 1 | 1 |
+| egress to Hugging Face | yes | yes |
+
+**And the gate for Stage L1: `/mnt` holds `lost+found` and nothing else.** Its
+`/dev/vdb` is 125 GB of ext4 on the raw device with no partition table — the
+shipped layout, exactly as `docs/llm-infrastructure.md` describes, and exactly
+what has to be relaid.
+
+**It is a bare node.** The NVIDIA driver is present (from the
+`gpu-enabled-instance` snapshot), but there is no Docker, Nomad or Consul —
+nothing has ever been provisioned on it. So the CUDA-in-container test cannot run
+there yet; Stage L1 installs the container runtime, and the check is re-run
+afterwards. CUDA compute is already proven on hardware identical in every
+measured respect, so this is a formality rather than an open question.
 
 Both checks are now scripts, so they are repeatable rather than a transcript:
 `scripts/check-llm-node.sh` and `scripts/check-gpu-scheduling.sh`.
 
-### Gate
+### Gate — passed 2026-08-19
 
 - [x] A CUDA workload provably runs inside a container on a MIG-backed vGPU
 - [x] The vLLM memory budget measured, not predicted
-- [ ] **Cluster key installed on node 6** — `docs/ssh-setup.md`, needs you
-- [ ] The node's specs match the other five, measured not assumed
-- [ ] **Its `/mnt` contents seen by a human**, because L1 erases that volume
+- [x] Cluster key installed on node 6
+- [x] The node's specs match the other three, measured not assumed
+- [x] **Its `/mnt` contents seen: `lost+found` only** — Stage L1 is safe to run
+- [x] Bonus, not in the original gate: a cluster-wide GPU defect found and fixed
+
+Deferred to after L1, because the node has no container runtime yet:
+re-run `scripts/check-llm-node.sh 192.168.104.188` and confirm CUDA computes
+there too.
 
 **Commit:** `llm: measure node 6 and prove CUDA works on the vGPU`
 

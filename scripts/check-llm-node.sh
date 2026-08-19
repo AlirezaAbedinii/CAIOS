@@ -101,11 +101,25 @@ for ip in "${NODES[@]}"; do
         sudo docker info 2>/dev/null | grep -i "runtimes" | sed "s/^ */  /"
         printf "  huggingface.co : "; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://huggingface.co/api/models/Qwen/Qwen3.5-2B
         printf "  ghcr.io        : "; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://ghcr.io/v2/
-        printf "  free on data   : "; df -h /mnt/data 2>/dev/null | awk "NR==2{print \$4}" || df -h /mnt | awk "NR==2{print \$4}"
+        printf "  docker         : "; command -v docker >/dev/null && echo present || echo "ABSENT (Stage L1 installs it)"
+        printf "  free on data   : "; df -h /mnt/data 2>/dev/null | awk "NR==2{print \$4}" || df -h /mnt 2>/dev/null | awk "NR==2{print \$4" (still at /mnt — not yet prepared)"}"
     ' 2>/dev/null
 
     echo
     echo "--- CUDA COMPUTE (not just visibility) ---"
+    # An unprovisioned node has the NVIDIA driver from the image snapshot but no
+    # container runtime — Ansible installs that in Stage L1. That is not a GPU
+    # fault and must not be reported as one.
+    if ! timeout 30 ssh "${SSH_OPTS[@]}" "ubuntu@$ip" 'command -v docker' >/dev/null 2>&1; then
+        if timeout 30 ssh "${SSH_OPTS[@]}" "ubuntu@$ip" 'command -v nvidia-smi' >/dev/null 2>&1; then
+            warn "cannot test yet: no container runtime on this node"
+            warn "the NVIDIA driver is present, so this is an unprovisioned node, not a broken GPU"
+            warn "re-run this check after Stage L1 installs Docker"
+        else
+            bad "neither Docker nor the NVIDIA driver is present — wrong node?"
+        fi
+        continue
+    fi
     out="$(timeout 300 ssh "${SSH_OPTS[@]}" "ubuntu@$ip" "
         sudo docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
           $PROBE_IMAGE python3 -c '

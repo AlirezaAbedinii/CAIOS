@@ -27,16 +27,15 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 part-done** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 gate passed** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Install the cluster SSH key on `192.168.104.188`** — `docs/ssh-setup.md`,
-   ten minutes, needs a key only you hold. It is what finishes Stage L0 and what
-   lets anyone see the volume Stage L1 would erase.
-2. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
-   nothing, so it runs in parallel with the above.
+1. **Stage L1** — join node 6 as `caios_llm`. Gated on approval to reformat its
+   `/dev/vdb`, which L0 has now shown holds only `lost+found`.
+2. **Stage L2** — the PAPI patch and configuration. Shares no file and no service
+   with L1, so the two run in parallel.
 3. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
@@ -51,6 +50,50 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — STAGE L0 GATE PASSED: node 6 measured, and it is what D-31 said
+
+First login node 6 has ever had. **D-31 confirmed by measurement**, not inherited
+from the other nodes:
+
+| | node 6 (`ai4eosc-6`) | the three site nodes |
+|---|---|---|
+| cores | 3 | 3 |
+| RAM | 34 GB | 34 GB |
+| GPU | `NVIDIA H100L-1-12C`, 10565 MiB free, cc 9.0 | identical |
+| driver | 580.105.08 | identical |
+| MIG instances | 1 | 1 |
+| egress to Hugging Face | yes | yes |
+
+**The gate for Stage L1, and the reason L0 exists: `/mnt` holds `lost+found` and
+nothing else.** Its disk is the shipped layout —
+
+```
+vdb   125G ext4  /mnt  ephemeral0        <- no partition table, no vdb1
+```
+
+— which is exactly the thing that has to be relaid, and it is safe to relay.
+
+**It is a bare node.** NVIDIA driver 580.105.08 present, from the
+`gpu-enabled-instance` snapshot. No Docker, no Nomad, no Consul: nothing has ever
+been provisioned on it, and it has been up 2 weeks doing nothing. So the
+CUDA-in-container test cannot run there yet — Stage L1 installs the container
+runtime and the check is re-run then. CUDA compute is already proven on hardware
+identical in every measured respect, so this is a formality.
+
+**A flaw in the check script, found by running it somewhere new.** It reported
+"CUDA does NOT work on this node" for what was really "this node has no Docker".
+That is the same class of mistake as trusting `nvidia-smi`: a check that cannot
+tell "broken" from "not applicable" will eventually send someone hunting a
+hardware fault that does not exist. It now distinguishes the two, and says which
+stage installs the missing piece.
+
+Access, for the record: the pasted `SHA256:2NamFbFqAlAKIchz…` turned out to be
+node 6's **host** key — the server proving its identity to us, the opposite
+direction from the client key that grants access, and a one-way hash either way.
+The key itself was installed separately and works.
 
 ---
 

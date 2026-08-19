@@ -35,6 +35,10 @@ fix to pull.
 and defaulting to upstream's value. Same shape as patches `0001`, `0002` and
 `0007`. → Stage L2.
 
+**The value to set is now `NVIDIA H100L-1-12C MIG 1g.12gb`**, not
+`NVIDIA H100L-1-12C` — the device plugin upgrade in R-18 changed what
+`get_gpu_models()` returns. Confirmed against the live API on 2026-08-19.
+
 ### R-02 · The Nomad job also constrains the GPU device to a Tesla T4
 
 **Verified.** `etc/tools/ai4os-llm/nomad.hcl:167-172`. Even with R-01 patched,
@@ -58,68 +62,60 @@ Reserving all three cores on a 6000 MHz node leaves nothing for the two helper
 tasks and the job still will not place. The arithmetic is worked through in
 `docs/llm-infrastructure.md`. → Stage L2.
 
-### R-18 · Nomad allocates a GPU that CUDA cannot use — **CONFIRMED, cluster-wide**
+### R-18 · Nomad allocated a GPU that CUDA could not use — **FIXED 2026-08-19**
 
-**No longer a risk. Measured on 2026-08-19, and it is a defect in the running
-cluster that has nothing to do with the LLM tool.**
+**Found and fixed the same day. Recorded in full because the failure mode is the
+lesson, not the fix.**
 
-Our GPUs are MIG-backed vGPUs: the device holds one `MIG 1g.12gb` instance, and
-CUDA can address the instance but not the parent. `nomad-device-nvidia` **1.0.0**
-— the version we run — fingerprints and allocates the **parent**. So a Nomad job
-with the `device "gpu"` stanza that every PAPI template uses gets a container in
-which:
+Our GPUs are MIG-backed vGPUs: the card exposes one `MIG 1g.12gb` instance, and
+CUDA can address the instance but not the parent card. `nomad-device-nvidia`
+**1.0.0** fingerprinted and allocated the **parent**. So any job with the
+`device "gpu"` stanza — which is every PAPI job template — landed in a container
+where:
 
 ```
-nvidia-smi -L            ->  GPU 0: NVIDIA H100L-1-12C (UUID: GPU-...)
-                             (and no MIG line)
+nvidia-smi -L            ->  GPU 0: NVIDIA H100L-1-12C (UUID: GPU-...)   [no MIG line]
 torch.cuda.is_available  ->  False
 ```
 
-Verified four ways on `caios_site_a`:
+**Nothing GPU-backed had ever actually computed on this cluster.** It went
+unnoticed for a week because the only check anyone ran was `nvidia-smi`, which
+passes. `docs/progress.md` recorded "the GPU is visible inside a workspace" on
+2026-08-12; it was visible and it was useless. The federated-learning demo was
+unaffected only because D-18 made its clients CPU-only.
 
-| `NVIDIA_VISIBLE_DEVICES` | MIG device exposed | `torch.cuda` |
-|---|---|---|
-| `GPU-<parent uuid>` — what the plugin selects | no | **False** |
-| `MIG-<instance uuid>` | yes | True |
-| `0:0` | yes | True |
-| `all` | yes | True |
+**The fix was one Ansible variable**, `nomad_nvidia_plugin_version: 1.0.0 → 1.1.0`
+(MIG support: issues #3, #27 and #53, all closed 2024-08-22 with that release),
+applied by `ansible/playbook-nvidia-plugin.yml` — a surgical playbook rather than
+re-running the whole Nomad role, `serial: 1`, keeping the old binary alongside
+for rollback.
 
-and then through the real Nomad path: a batch job **with** `device "gpu" { count = 1 }`
-reports `False`; the identical job **without** it reports `True` and
-`NVIDIA H100L-1-12C MIG 1g.12gb`. Setting `NVIDIA_VISIBLE_DEVICES` in the task's
-own `env` block does **not** help — the device plugin overrides it.
+**Verified after:**
 
-**This is the worst failure mode there is, because it looks like success.**
-`docs/progress.md` recorded on 2026-08-12 that "the GPU is visible inside a
-workspace". That was true, and the GPU was unusable. Nothing GPU-backed has ever
-actually computed on this cluster; nobody checked, because `nvidia-smi` said yes.
-The federated-learning demo is unaffected — D-18 made its clients CPU-only.
+```
+job WITH device "gpu" { count = 1 }:
+  SMI GPU 0: NVIDIA H100L-1-12C (UUID: GPU-...)
+  SMI   MIG 1g.12gb  Device 0: (UUID: MIG-...)
+  TORCH_CUDA=True
+  DEV=NVIDIA H100L-1-12C MIG 1g.12gb
+```
 
-**Fix — one Ansible variable.** MIG support landed in `nomad-device-nvidia`
-**1.1.0** (issues #3, #27 and #53, all closed 2024-08-22 alongside that release).
-`ansible/group_vars/all.yml:91` pins `nomad_nvidia_plugin_version: 1.0.0`, and
-the role downloads it straight from `releases.hashicorp.com` — the 1.1.0 artifact
-is present and fetchable, verified.
+`scripts/check-gpu-scheduling.sh` reports "GPU scheduling is healthy" and is the
+regression test. All four federated-learning deployments **survived** the rolling
+restart — Nomad reattached to the running containers rather than killing them,
+which was better than expected and is not something to rely on.
 
-**Not yet proven on our hardware**, and that distinction matters: the fix is
-strongly indicated, not measured. Stage L1 bumps the version, restarts the Nomad
-clients, and `scripts/check-gpu-scheduling.sh` says whether it worked.
+**Two consequences that outlive the fix.**
 
-Two things to re-check after the bump, because the plugin will report the MIG
-instance rather than the parent:
-
-- the **device name** may change from `NVIDIA H100L-1-12C` to a name including
-  the MIG profile. That is what `get_gpu_models(vo)` returns, so it feeds
-  `configs/papi/var/gpu_models.csv`, the dev-env `gpu_type` dropdown, and the
-  allowlist in patch `0009` (R-01). All three may need the new string.
-- restarting a Nomad client **disturbs running allocations**, including the four
-  federated-learning deployments. Schedule it, do not surprise it.
-
-**Fallback if 1.1.0 does not fix it:** drop the `device "gpu"` stanza and select
-the node by `meta.role = llm` instead — proven to work above. The cost is that
-Nomad stops accounting for the GPU, so nothing prevents two GPU jobs landing on
-one node. Tolerable only because the LLM node is dedicated and `cores = 2` on a
-3-core node already means one such job at a time.
+1. **The device name changed** from `NVIDIA H100L-1-12C` to
+   `NVIDIA H100L-1-12C MIG 1g.12gb`, and the reported memory from 12288 to
+   **10564 MiB** — the real usable figure. `configs/papi/var/gpu_models.csv`
+   gained a row for it and PAPI now serves
+   `gpu_type options: ['', 'NVIDIA H100L-1-12C MIG 1g.12gb']`. **Patch `0009`'s
+   `LLM_GPU_MODELS` allowlist must use the new string** (R-01).
+2. **`nvidia-smi` is not evidence.** Any future GPU check in this project
+   multiplies two matrices. Both `scripts/check-llm-node.sh` and
+   `scripts/check-gpu-scheduling.sh` do.
 
 ### R-04 · Node 6's specs are claimed, not yet measured
 

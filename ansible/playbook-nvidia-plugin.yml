@@ -1,0 +1,144 @@
+---
+# Install nomad-device-nvidia on the GPU clients, one node at a time.
+#
+#   cd ansible && ansible-playbook playbook-nvidia-plugin.yml
+#   cd ansible && ansible-playbook playbook-nvidia-plugin.yml --limit caios_site_a
+#
+#   !!  RESTARTS NOMAD on each host it touches. The client config sets
+#       leave_on_terminate = true, so the agent leaves the cluster gracefully and
+#       its allocations are lost. The federated-learning deployments do not
+#       reschedule (reschedule.attempts = 0), so they must be recreated
+#       afterwards with scripts/deploy-fl-demo.sh. The FL *results* live in
+#       demo/fl/results/ on caios_server and are not affected.
+#
+#       serial: 1 means one node at a time, so a bad plugin takes out one node
+#       rather than the whole cluster. Verify with scripts/check-gpu-scheduling.sh
+#       before letting it continue.
+#
+# WHY THIS EXISTS RATHER THAN RE-RUNNING playbook-nomad.yml
+# ---------------------------------------------------------
+# The nomad role also prepares volumes, writes certificates and rewrites agent
+# configuration. None of that needs to change here and all of it is a chance to
+# break something working. This does one thing.
+#
+# WHAT IT FIXES
+# -------------
+# These GPUs are MIG-backed vGPUs: the card exposes one `MIG 1g.12gb` instance,
+# and CUDA can only address the instance, not the parent card.
+# nomad-device-nvidia 1.0.0 fingerprints and allocates the PARENT, so any job
+# with a `device "gpu"` stanza — which is every PAPI job template — gets a
+# container where nvidia-smi shows the GPU and torch.cuda.is_available() is
+# False. It looks exactly like success.
+#
+# MIG support landed in 1.1.0 (hashicorp/nomad-device-nvidia issues #3, #27, #53,
+# all closed 2024-08-22 with that release).
+#
+# ROLLING BACK
+#   The previous binary is kept alongside as nomad-device-nvidia.<version>.bak.
+#   Restore it and restart nomad, or set nomad_nvidia_plugin_version back and
+#   re-run this playbook.
+
+- name: Install the Nomad NVIDIA device plugin
+  hosts: nomad_gpu_clients
+  become: true
+  serial: 1
+
+  vars:
+    # Matches roles/nomad/tasks/nvidia_plugin.yml: volume nodes keep plugins on
+    # the data volume, because that is where Nomad's data_dir points.
+    caios_plugin_dir: >-
+      {{ (mount_dir if inventory_hostname in (groups['nomad_volume'] | default([]))
+          else nomad_data_dir) }}/{{ gpu_plugin_dir }}
+    caios_plugin_bin: "{{ caios_plugin_dir }}/nomad-device-nvidia"
+
+  tasks:
+
+    - name: "Preflight: unzip is present"
+      ansible.builtin.apt:
+        name: unzip
+        state: present
+        update_cache: false
+
+    - name: "Preflight: record the plugin we are replacing"
+      ansible.builtin.stat:
+        path: "{{ caios_plugin_bin }}"
+      register: caios_plugin_before
+
+    - name: "Preflight: show it"
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ caios_plugin_bin }}
+          {{ 'exists, ' ~ caios_plugin_before.stat.size ~ ' bytes, mtime '
+             ~ ('%Y-%m-%d' | strftime(caios_plugin_before.stat.mtime))
+             if caios_plugin_before.stat.exists else 'is absent' }}
+
+    - name: Ensure the plugin directory exists
+      ansible.builtin.file:
+        path: "{{ caios_plugin_dir }}"
+        state: directory
+        mode: "0755"
+
+    # Kept rather than overwritten: if 1.1.0 misbehaves, rolling back must not
+    # depend on the network being reachable.
+    - name: Back up the existing plugin
+      ansible.builtin.copy:
+        src: "{{ caios_plugin_bin }}"
+        dest: "{{ caios_plugin_bin }}.{{ caios_rollback_version | default('previous') }}.bak"
+        remote_src: true
+        mode: "0755"
+        force: false
+      when: caios_plugin_before.stat.exists
+
+    - name: Download and extract nomad-device-nvidia {{ nomad_nvidia_plugin_version }}
+      ansible.builtin.unarchive:
+        src: "https://releases.hashicorp.com/nomad-device-nvidia/{{ nomad_nvidia_plugin_version }}/nomad-device-nvidia_{{ nomad_nvidia_plugin_version }}_linux_amd64.zip"
+        dest: "{{ caios_plugin_dir }}/"
+        remote_src: true
+        mode: "0755"
+      register: caios_plugin_fetch
+
+    - name: Confirm the binary changed
+      ansible.builtin.stat:
+        path: "{{ caios_plugin_bin }}"
+      register: caios_plugin_after
+
+    - name: Report the swap
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ caios_plugin_before.stat.size | default('none') }} bytes ->
+          {{ caios_plugin_after.stat.size }} bytes
+          ({{ 'CHANGED' if caios_plugin_after.stat.size != caios_plugin_before.stat.size | default(0) else 'same size' }})
+
+    # Nomad only loads device plugins at startup, so the binary on disk does
+    # nothing until this happens.
+    - name: Restart Nomad
+      ansible.builtin.service:
+        name: nomad
+        state: restarted
+
+    - name: Wait for the Nomad agent to answer again
+      ansible.builtin.wait_for:
+        port: 4646
+        host: 127.0.0.1
+        delay: 5
+        timeout: 180
+
+    # A node that comes back without its GPU is worse than one that never
+    # restarted, and serial:1 means we can still stop before touching the rest.
+    - name: Wait for the GPU to be fingerprinted again
+      ansible.builtin.shell: >-
+        set -o pipefail;
+        nvidia-smi -L | grep -c MIG
+      args:
+        executable: /bin/bash
+      register: caios_mig_count
+      changed_when: false
+      check_mode: false      # read-only, and a --check run should still report it
+      retries: 6
+      delay: 10
+      until: caios_mig_count.stdout | int > 0
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: nomad restarted, {{ caios_mig_count.stdout }} MIG instance(s) present"

@@ -29,26 +29,21 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
 | 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 part-done** — `docs/llm-plan.md` |
 
-**The MVP is complete, but one thing found on 2026-08-19 is blocking for
-anything GPU-backed:** Nomad's device plugin allocates a GPU that CUDA cannot
-use, cluster-wide (R-18). The federated-learning demo is unaffected because its
-clients are CPU-only (D-18). Next actions, in order:
+**Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
+the same day (R-18). Next actions, in order:
 
 1. **Install the cluster SSH key on `192.168.104.188`** — `docs/ssh-setup.md`,
    ten minutes, needs a key only you hold. It is what finishes Stage L0 and what
    lets anyone see the volume Stage L1 would erase.
-2. **Approve the `nomad-device-nvidia` 1.1.0 bump** and pick a window for it. No
-   GPU deployment on this cluster computes anything until it lands, and applying
-   it restarts the Nomad agents.
-3. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
-   nothing, so it runs in parallel with both of the above.
-4. **Rehearse the demo end to end in a browser**, following
+2. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
+   nothing, so it runs in parallel with the above.
+3. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
    thing.
-5. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-6. Record it.
+5. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -56,6 +51,65 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — GPU scheduling FIXED cluster-wide
+
+The defect found an hour earlier is fixed, verified, and turned into a
+regression test. **Approved by the supervisor to disturb the federated-learning
+deployments; in the end it did not have to.**
+
+**One Ansible variable.** `nomad_nvidia_plugin_version: 1.0.0 -> 1.1.0`, applied
+by a new `ansible/playbook-nvidia-plugin.yml` rather than by re-running the whole
+Nomad role — that role also prepares volumes, writes certificates and rewrites
+agent configuration, none of which needed to change and all of which was a chance
+to break something that worked. The playbook runs `serial: 1`, keeps the old
+binary as `nomad-device-nvidia.1.0.0.bak` so a rollback does not need the network,
+and waits for the GPU to reappear before moving to the next node.
+
+Rolled out one node first, verified, then the other two.
+
+**What changed on each node**, 22,779,848 bytes (built Oct 2021) -> 28,292,408:
+
+| | before (1.0.0) | after (1.1.0) |
+|---|---|---|
+| device name | `NVIDIA H100L-1-12C` | `NVIDIA H100L-1-12C MIG 1g.12gb` |
+| instance id | `GPU-db6f8125-...` | `MIG-f18b0103-...` |
+| memory reported | 12288 MiB (nominal) | **10564 MiB** (real) |
+
+**End to end, through the stanza every PAPI template uses:**
+
+```
+job WITH device "gpu" { count = 1 }
+  SMI GPU 0: NVIDIA H100L-1-12C (UUID: GPU-...)
+  SMI   MIG 1g.12gb  Device 0: (UUID: MIG-...)
+  TORCH_CUDA=True
+  DEV=NVIDIA H100L-1-12C MIG 1g.12gb
+```
+
+`scripts/check-gpu-scheduling.sh` now reports **"GPU scheduling is healthy"**,
+having reported "BROKEN" an hour before. That script is the regression test.
+
+**The FL deployments survived.** All four still running, on the same three nodes,
+tasks healthy. `leave_on_terminate = true` in the client config had me expecting
+them to be lost — Nomad reattached to the running Docker containers instead. Worth
+recording, and not worth relying on: the next restart may behave differently.
+
+**Downstream, as predicted.** The device name change propagates:
+`configs/papi/var/gpu_models.csv` gained a row for the MIG name at its real
+10564 MiB, PAPI was restarted, and the API now serves
+
+```
+gpu_type options: ['', 'NVIDIA H100L-1-12C MIG 1g.12gb']
+```
+
+so the dashboard's GPU dropdown is correct. **Patch `0009`'s allowlist, when it
+is written in Stage L2, must use the new string** — the old one no longer matches
+anything.
+
+**The lesson, now gotcha 13 in CLAUDE.md:** `nvidia-smi` is not evidence that a
+GPU works. Every GPU check in this project multiplies two matrices.
 
 ---
 

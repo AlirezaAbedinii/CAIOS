@@ -30,18 +30,21 @@ queues forever.
 | 2 | Nomad device constraint `= "Tesla T4"` | `nomad.hcl:171` | Config override | R-02 |
 | 3 | **Asks for 8 CPU cores and 32 GB** on 3-core, 30 GB nodes | `nomad.hcl:161,259` | Config override | R-03 |
 | 4 | Both helper tasks call their own public HTTPS URL and die on our self-signed CA | `nomad.hcl:196,284` | Config override | R-05 |
-| 5 | **A Nomad job that asks for a GPU gets one CUDA cannot use** | `nomad-device-nvidia` 1.0.0 | Plugin bump to 1.1.0 | R-18 |
+| 5 | ~~A Nomad job that asks for a GPU gets one CUDA cannot use~~ | `nomad-device-nvidia` 1.0.0 | **FIXED — plugin 1.1.0** | R-18 |
 
 Blocker 3 is the real one for scheduling. Blocker 4 is the one that would have
 eaten a day, because it fails with a traceback that never mentions certificates.
 
-**Blocker 5 was found by running Stage L0, and it is not an LLM problem.** Our
-GPUs are MIG-backed vGPUs; the device plugin we run allocates the *parent*
-device, which CUDA cannot use. Any job with a `device "gpu"` stanza — every PAPI
-template — gets a container where `nvidia-smi` works and `torch.cuda` is
-`False`. Nothing GPU-backed has ever actually computed on this cluster. It was
-invisible because the only check anyone ran was `nvidia-smi`, which passes.
-See R-18; the fix is one Ansible variable.
+**Blocker 5 was found by running Stage L0, and it was not an LLM problem — it
+was cluster-wide.** Our GPUs are MIG-backed vGPUs; the device plugin allocated
+the *parent* device, which CUDA cannot use, so every PAPI job template landed in
+a container where `nvidia-smi` worked and `torch.cuda` was `False`. Nothing
+GPU-backed had ever actually computed on this cluster.
+
+**Fixed on 2026-08-19** by `nomad-device-nvidia` 1.1.0, applied with
+`ansible/playbook-nvidia-plugin.yml`, verified end to end, FL deployments intact.
+It changed the GPU's name and reported memory, which patch `0009` and
+`gpu_models.csv` both depend on. See R-18.
 
 **None of them need a fork.** One patch — in the same shape as the three we
 already carry — plus configuration files bind-mounted over upstream's, which is
@@ -228,19 +231,17 @@ reformat actually does"*. Read that before approving this stage.
   anti-affinity on `meta.role = llm`, so federated-learning workspaces prefer
   the three hospital nodes. Soft, so a dead hospital node does not block a
   workspace. This is R-14.
-- **`ansible/group_vars/all.yml` — `nomad_nvidia_plugin_version: 1.0.0 → 1.1.0`.**
-  This is blocker 5 (R-18) and it is cluster-wide, not node 6's problem: it
-  applies to every GPU client, and applying it **restarts the Nomad agents**,
-  which disturbs the four running federated-learning allocations. Needs its own
-  approval and its own window, separate from the node-6 work.
+- ~~Bump `nomad_nvidia_plugin_version`~~ — **done on 2026-08-19**, ahead of this
+  stage, because it was blocking every GPU workload on the cluster and not just
+  node 6. `caios_llm` picks it up automatically when it joins, since it reads the
+  same group var.
 - Run, each limited to the one host, and **each shown to you before it runs**:
   `playbook-prepare-volumes.yml`, `playbook-nomad.yml`,
   `playbook-container-storage.yml`, `playbook-prepull-images.yml`.
 - `scripts/run-cluster-tests.sh` to flip `meta.status=ready`.
-- After the plugin bump, re-check what `get_gpu_models()` now returns: the plugin
-  will report the MIG instance rather than the parent, so the device **name** may
-  change. Three places consume that string — `configs/papi/var/gpu_models.csv`,
-  the dev-env `gpu_type` dropdown, and the allowlist in patch `0009`.
+- Confirm the new node reports the same device name as the other three,
+  `NVIDIA H100L-1-12C MIG 1g.12gb` — the name changed with the plugin upgrade and
+  patch `0009`'s allowlist depends on it.
 
 > **The approval gate.** `playbook-prepare-volumes.yml` repartitions and
 > reformats `/dev/vdb` as XFS, erasing it. Only that volume — the OS disk
@@ -263,9 +264,9 @@ queue forever with no error anywhere; and `nomad_client_meta` still carries
 with `meta.status=ready`, `meta.type=compute`, `meta.namespace=caios` and
 region `global`. `scripts/check-llm-node.sh` re-run against the joined node.
 
-**`scripts/check-gpu-scheduling.sh` must go from FAIL to pass** on the
-`device "gpu"` probe. That is the acceptance test for the plugin bump, and until
-it passes no GPU-backed deployment on this cluster does any computation.
+**`scripts/check-gpu-scheduling.sh` must still pass** once the fourth node
+joins — it is the regression test for the plugin, and a node that joined with a
+stale one would fail it.
 
 **Regression, and this one matters more than the rest:** tear down and re-run
 `scripts/deploy-fl-demo.sh`, then `--status`, and confirm the three workspaces

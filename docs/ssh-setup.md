@@ -99,6 +99,35 @@ bash /mnt/CAIOS/scripts/check-ssh.sh
 
 ---
 
+## Option A-Windows — `ssh-copy-id` does not exist on Windows
+
+Windows ships OpenSSH's client (`ssh`, `ssh-keygen`) but **not `ssh-copy-id`** —
+it is a shell script, and there is no `sh` to run it. `'ssh-copy-id' is not
+recognized as an internal or external command` is what that looks like.
+
+Do the same thing by hand. From **PowerShell or cmd on your laptop**, one line
+per node — this appends the cluster key and removes duplicates, so it is safe to
+run twice:
+
+```
+ssh ubuntu@192.168.104.188 "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMrpt3N+WgLpGTTzkOy7exfF8OzqlW1bdwWEgPG3RU9J caios-cluster-20260812' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && sort -u -o ~/.ssh/authorized_keys ~/.ssh/authorized_keys"
+```
+
+The quoting matters: **double** quotes on the outside for Windows, **single**
+quotes around the key for the remote shell. Swapping them breaks it.
+
+If your laptop cannot reach `192.168.104.x` directly, run the same line from the
+jumpserver, or use the OpenStack console in Horizon — that gives a shell on the
+instance without SSH at all.
+
+Then verify from `caios_server`:
+
+```bash
+bash /mnt/CAIOS/scripts/check-ssh.sh
+```
+
+---
+
 ## Option B — if agent forwarding is unavailable
 
 Some jumpserver configurations disable it. In that case, install the public key

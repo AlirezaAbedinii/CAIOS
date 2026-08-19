@@ -1,4 +1,5 @@
 name,gpu_memory_MB,gpu_compute_capability
+NVIDIA H100L-1-12C MIG 1g.12gb,10564,9.0
 NVIDIA H100L-1-12C,12288,9.0
 Tesla V100-PCIE-32GB,32000,7.0
 Tesla T4,16000,7.5

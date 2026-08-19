@@ -88,7 +88,20 @@ nomad_ui_passwd: CHANGEME
 # each site's login can only deploy to its own node (see docs/mvp-plan.md).
 nomad_namespaces:
   - caios
-nomad_nvidia_plugin_version: 1.0.0
+# 1.1.0, not upstream's 1.0.0. Our GPUs are MIG-backed vGPUs: the card exposes
+# one `MIG 1g.12gb` instance, and CUDA can only address the instance, not the
+# parent card. 1.0.0 fingerprints and allocates the PARENT, so any job with a
+# `device "gpu"` stanza — every PAPI job template — lands in a container where
+# nvidia-smi shows the GPU and torch.cuda.is_available() is False. It looks
+# exactly like success, which is why it went unnoticed for a week.
+#
+# MIG support landed in 1.1.0 (nomad-device-nvidia issues #3, #27, #53, all
+# closed 2024-08-22 with that release). Applied by playbook-nvidia-plugin.yml;
+# verified by scripts/check-gpu-scheduling.sh. See docs/llm-risks.md R-18.
+nomad_nvidia_plugin_version: 1.1.0
+# What playbook-nvidia-plugin.yml names the backup it keeps, so a rollback does
+# not need the network.
+caios_rollback_version: "1.0.0"
 gpu_plugin_dir: plugins
 nomad_reserved_memory_mb: 4096
 nomad_username: nomad

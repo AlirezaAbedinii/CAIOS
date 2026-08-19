@@ -58,15 +58,15 @@ Reserving all three cores on a 6000 MHz node leaves nothing for the two helper
 tasks and the job still will not place. The arithmetic is worked through in
 `docs/llm-infrastructure.md`. → Stage L2.
 
-### R-04 · Node 6 might not be a GPU node
+### R-04 · Node 6's specs are claimed, not yet measured
 
-**Unverified — this is the one genuine unknown in the whole plan.**
-`192.168.104.188` has never been logged into. If it is CPU-only, or is the
-jumpserver, the LLM has to share a hospital node and the LLM and FL demos can no
-longer run at the same time.
+**Downgraded on 2026-08-19 by D-31.** The instance is confirmed ours, unused,
+and identical to the other five. What remains is that nobody has logged into it,
+so every number about it is inherited from the other nodes rather than read off
+this one — including the `/dev/vdb` contents that Stage L1 erases.
 
-**Fix:** ten minutes of Stage L0, before anything else is built. The plan is
-sequenced so that nothing depends on the answer until L1.
+**Fix:** Stage L0, ten minutes, read-only, before anything else is built.
+Expected to be uneventful; it exists because "expected" is not "measured".
 
 ---
 
@@ -258,13 +258,23 @@ would change the deploy form for no demo benefit. Written into the runbook as
 
 ### R-16 · Reformatting `/dev/vdb` on node 6 destroys whatever is on it
 
-`playbook-nomad.yml` repartitions and reformats that volume as XFS — required
-by Docker's disk quotas and asserted literally by `ai4-nomad_tests`. It is the
-same step the three site nodes went through.
+The instances ship with a 125 GB ext4 filesystem written **directly to the raw
+device**, with no partition table. `ai4-nomad_tests` asserts that a GPU compute
+node's Nomad `data_dir` sits on `/dev/vdb1`, and that suite is the only thing
+that sets `meta.status = ready` — so without a partition the node certifies as
+failed, never turns ready, and silently receives no work at all. Creating a
+partition table means writing over the start of the disk, which is where the
+existing filesystem lives. **There is no non-destructive path.**
 
-**Not accepted silently:** Stage L0 lists the volume's contents and Stage L1
-does not run until you have seen that output and said go. The exact command
-appears in the plan.
+Only `/dev/vdb` is affected. The OS disk `/dev/vda` — the operating system,
+`/home/ubuntu`, SSH keys, packages — is untouched, as is every other node.
+
+**Not accepted silently, and three checks deep:** Stage L0 lists the volume's
+contents for a human to read; the playbook independently refuses to run if
+`/mnt` holds anything other than `lost+found`; and it carries a hard assert that
+it can never run against `caios_server`, whose volume holds this repository. The
+full explanation, with the evidence, is in `docs/llm-infrastructure.md` under
+*"What the reformat actually does"*.
 
 ### R-17 · No model in the catalogue knows any medicine
 
@@ -273,10 +283,13 @@ defensible claim is *"your own model, on your own hardware, where the prompts
 never leave"* — which is the same privacy argument as the federated learning
 demo and is true. *"A medical AI assistant"* is not, and a reviewer will ask.
 
-Accepted, and written into the demo script's wording. If a specific clinical or
-biomedical model is wanted it is one line in `configs/papi/vllm.yaml` plus a fit
-check against the 10.3 GB budget — but somebody has to name a model they trust,
-which is an open question, not an engineering task.
+**Decided on 2026-08-19 (D-32):** upstream's models, used as they are, no
+fine-tuning. So this is now a **wording constraint on the demo**, and it is
+binding: nothing in the script may imply the model knows medicine.
+
+The cost of changing course later is known and small — any model on the list can
+be swapped for a fine-tuned variant by changing one line in
+`configs/papi/vllm.yaml`, provided the variant fits the same 10.3 GB budget.
 
 ### R-18 · MIG-backed vGPU is an unusual target for vLLM
 

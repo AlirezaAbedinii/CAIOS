@@ -18,15 +18,11 @@ the measured one wins and the earlier document is corrected.
 since day one because nobody had told us what it was — becomes `caios_llm`, a
 fourth Nomad GPU compute client dedicated to language-model serving.
 
-That assumes it is a GPU node like the other five. **This has not been
-verified**, because it has never been logged into. Verifying it is Stage L0 of
-the plan and takes about ten minutes. There are three outcomes:
-
-| If node 6 is… | Then |
-|---|---|
-| A GPU node like the others | It becomes `caios_llm`. Plan proceeds unchanged. **Expected case.** |
-| A CPU-only node | It hosts Open WebUI only; vLLM has to share a hospital node, and the LLM and FL demos can no longer run at the same time. |
-| The jumpserver | It stays out. Same fallback as above, and a seventh instance becomes worth requesting. |
+**Confirmed on 2026-08-19 (D-31):** the instance is ours, has never been used,
+and is identical to the other five — 3 vCPU, ~34 GB RAM, one
+`NVIDIA H100L-1-12C`, a 125 GB volume. It has still never been logged into, so
+Stage L0 measures it rather than taking that on trust; the numbers are expected
+to match, and the stage exists because "expected to" is not "does".
 
 A **seventh** instance is not needed for this feature. It would only buy two
 things, neither of them on the critical path: a hot spare if a node fails, and
@@ -206,10 +202,133 @@ playbook runs limited to that host, one run of `ai4-nomad_tests`. No existing
 node is touched. No security group changes — the LLM tool is plain HTTPS
 through Traefik on 443, unlike NVFLARE with its 8002-8003.
 
-**What is destructive and needs your approval:** `playbook-nomad.yml` will
-**repartition and reformat `/dev/vdb` on the new node as XFS**, erasing whatever
-is on it. That is gotcha 5 — Docker's disk quotas and `ai4-nomad_tests` both
-require it. Stage L0 checks the volume's contents before Stage L1 touches it.
+**What is destructive and needs your approval:** the new node's second disk,
+`/dev/vdb`, is repartitioned and reformatted. The next section says exactly what
+that means.
+
+---
+
+## What the reformat actually does
+
+This is the one irreversible step in the whole plan, so it is worth being
+precise rather than waving at "gotcha 5".
+
+### What these instances ship with
+
+Every instance in this project has **two disks**. Measured on `caios_server`,
+and the other five are the same image:
+
+```
+NAME      SIZE FSTYPE   MOUNTPOINT   LABEL
+vda        20G                                  <-- the OS disk
+├─vda1   19.9G ext4     /                cloudimg-rootfs
+├─vda14     4M
+└─vda15   106M vfat     /boot/efi        UEFI
+vdb       125G ext4     /mnt             ephemeral0    <-- the data disk
+```
+
+Look closely at `vdb`. It has **no partitions at all** — no `vdb1` under it.
+OpenStack wrote an ext4 filesystem directly onto the raw device and cloud-init
+mounted it at `/mnt`. That single detail is the whole problem.
+
+### Why that layout stops the node from ever receiving work
+
+`ai4-nomad_tests` is not optional. It is the **only** thing that sets
+`meta.status = ready` on a node, and every PAPI job template constrains on that
+(gotcha 2). A node that fails it looks completely healthy in `nomad node status`
+and silently never receives a single deployment.
+
+For a GPU compute node, the test that runs is
+`ai4_nomad_tests/tests/node/gpu.py`, and its first assertion is:
+
+```python
+assert n["Attributes"]["unique.storage.volume"] in ["/dev/vdb1", "/dev/sdb1"], \
+    "No volume mounted"
+```
+
+`unique.storage.volume` is Nomad's own fingerprint of the device backing its
+`data_dir`. On the live cluster, right now:
+
+| Node | In `nomad_volume`? | `unique.storage.volume` | Disk seen |
+|---|---|---|---|
+| `caios-wn-gpu-0` | yes | **`/dev/vdb1`** | 134 GB |
+| `caios-traefik` | no | `/dev/vda1` | 20 GB |
+
+That difference is produced by one line in `ai4-ansible`'s `nomad.j2`: a host in
+the `nomad_volume` group gets `data_dir = /mnt/data`; every other host gets
+`data_dir = /opt/nomad`, which sits on the 20 GB root disk. (The Traefik node
+passes certification anyway because `meta.type = traefik` routes it to a
+different test that does not check storage.)
+
+So leaving node 6 out of `nomad_volume` gives us a node that reports
+`/dev/vda1`, **fails the GPU node test, never turns `ready`, and never runs
+anything** — while looking perfectly fine. It would also put Nomad's working
+directory, where a 10.5 GB container image and 5 GB of model weights land, on a
+root disk with about 12 GB free.
+
+### Why it cannot be done without erasing
+
+To make Nomad report `/dev/vdb1`, a partition called `vdb1` has to exist. To
+create a partition table on a disk, you write to the start of the disk — which
+is exactly where the existing whole-device filesystem's metadata lives. **There
+is no non-destructive path from "ext4 on the raw device" to "ext4 on a
+partition".** The data has to be somewhere else while the disk is relaid.
+
+That is the entire reason this step is destructive. It is not that XFS is
+required and ext4 must go; it is that a *partition* is required and there is not
+one.
+
+### What is destroyed, and what is not
+
+**Destroyed:** everything on `/dev/vdb`, the 125 GB data volume currently
+mounted at `/mnt`. On the three site nodes that was `lost+found` and nothing
+else, verified on 2026-08-12. Node 6 has never been used, so it should be the
+same — and Stage L0 confirms it by eye before Stage L1 runs.
+
+**Not touched:**
+
+- `/dev/vda` — the OS disk. The operating system, `/home/ubuntu`, SSH keys,
+  installed packages, everything under `/` survives untouched.
+- Every other node in the cluster. The playbook runs `--limit caios_llm`.
+- `caios_server`'s volume, ever. The playbook carries a hard `assert` refusing to
+  run against it, because **this repository lives on it** at `/mnt/CAIOS`.
+
+There is a reboot in the middle. The LXD snap holds a stale reference to `/dev/vdb`
+in its own mount namespace, created while the disk was mounted, and that makes
+`mkfs` fail with "Device or resource busy" even after unmounting. Rebooting is
+the deterministic way to clear it, and the node is empty, so it costs a minute.
+
+### The safety gate is already in the playbook
+
+`playbook-prepare-volumes.yml` does not take your word for it. Before it touches
+anything it lists the contents of `/mnt`, and:
+
+```
+- name: "Refuse to erase a volume with data on it"
+  ansible.builtin.fail:
+    msg: |
+      {{ caios_device }} on {{ inventory_hostname }} is not empty:
+      ...
+      Move anything you need off it, or pass -e caios_force_wipe=true if you
+      are certain it is disposable.
+```
+
+So the sequence is: L0 shows you what is on the disk, you approve, and the
+playbook independently refuses if anything other than `lost+found` is there.
+Two checks, and neither is "trust the plan".
+
+### What we considered instead
+
+| Alternative | Why not |
+|---|---|
+| Leave the disk alone, keep Nomad on `/opt/nomad` | Node never certifies, never runs anything, and has ~12 GB free where a 10.5 GB image must land. |
+| Patch `ai4-nomad_tests` to accept `/dev/vdb` | We already carry one patch to that suite, so it is possible. But it would make node 6 the only node in the cluster laid out differently from the rest, and it means editing the thing whose job is to certify nodes so that it certifies a node it was written to reject. |
+| Keep ext4, just add the partition | Adding the partition is the destructive act. The filesystem type is incidental — XFS is chosen only because we are reformatting anyway and it is what the other three nodes have. |
+| Manually set `meta.status = ready` | Defeats the point of the check, and it would be undone by the next Ansible run. |
+
+**Recommendation: do it as designed.** It is the same step the three hospital
+nodes went through, on a disk that has never held anything, behind two
+independent confirmations.
 
 ---
 

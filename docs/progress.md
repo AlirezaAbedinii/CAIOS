@@ -53,6 +53,56 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-08-19, later — two questions answered, and the reformat explained
+
+**Q-11 answered → D-31.** The sixth instance is ours, unused, and identical to
+the other five. It becomes `caios_llm`, a dedicated LLM host. No new instances
+are needed for Stage 6. It has still never been logged into, so Stage L0 changes
+from *discovery* to *verification* — the numbers are inherited from the other
+nodes rather than read off this one, and one of them (what is on `/dev/vdb`) is
+the thing Stage L1 erases.
+
+**Q-09 answered → D-32.** Upstream's LLM catalogue, used as it is. No
+fine-tuning, no custom weights. The consequence is a wording constraint rather
+than an engineering one: the claim this feature supports is **privacy** — your
+model, your hardware, your prompts never leave — and not medical competence.
+Nothing in the demo script may imply otherwise. Swapping in a fine-tuned variant
+later costs one line in `configs/papi/vllm.yaml`, provided it fits the same
+10.3 GB budget.
+
+**The destructive step, explained properly.** The plan asserted that joining
+node 6 requires reformatting `/dev/vdb` and did not show why, which is not good
+enough for an irreversible operation on shared infrastructure.
+`docs/llm-infrastructure.md` now has a section that does, with the evidence:
+
+- These instances ship `/dev/vdb` as **125 GB of ext4 written directly to the
+  raw device, with no partition table.** There is no `vdb1`.
+- `ai4-nomad_tests` (`tests/node/gpu.py`) asserts
+  `unique.storage.volume in ["/dev/vdb1", "/dev/sdb1"]`, and that suite is the
+  **only** thing that sets `meta.status=ready`, which every PAPI job template
+  requires. A node failing it looks healthy and silently never receives work.
+- The fingerprint follows one line in `ai4-ansible`'s `nomad.j2`: hosts in the
+  `nomad_volume` group get `data_dir = /mnt/data`, everything else gets
+  `/opt/nomad` on the 20 GB root disk. Verified live — `caios-wn-gpu-0` reports
+  `/dev/vdb1` and 134 GB, `caios-traefik` reports `/dev/vda1` and 20 GB.
+- Creating a partition means writing over the start of the disk, where the
+  existing filesystem's metadata lives. **There is no non-destructive path from
+  whole-device ext4 to a partition.** XFS is incidental — the partition is the
+  requirement.
+- Only `/dev/vdb` is affected. `/dev/vda` — OS, `/home/ubuntu`, SSH keys,
+  packages — is untouched, as is every other node. `playbook-prepare-volumes.yml`
+  independently refuses to run if `/mnt` holds anything but `lost+found`, and
+  carries a hard assert that it can never run against `caios_server`, whose
+  volume holds this repository.
+
+Four alternatives were considered and are written down with why each is worse,
+so the choice is reviewable rather than assumed.
+
+**Renumbering:** the plan's proposed engineering decisions moved from D-31…D-35
+to D-33…D-36, since D-31 and D-32 are now settled.
+
+---
+
 ## 2026-08-19 — Stage 6 planned: LLM deployment
 
 **New focus, and it is the second headline feature.** A researcher deploys a

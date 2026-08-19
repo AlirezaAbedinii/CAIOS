@@ -288,6 +288,38 @@ of another organisation's real mark is worse than none.
 
 ---
 
+## Settled on 2026-08-19
+
+**D-31 — The sixth instance becomes `caios_llm`, a dedicated LLM host.**
+`192.168.104.188` is ours, unused, and identical to the other five: 3 vCPU,
+~34 GB RAM, one `NVIDIA H100L-1-12C`, a 125 GB volume at `/dev/vdb`. Confirmed
+by the supervisor on 2026-08-19; it has still never been logged into, so Stage
+L0 verifies the specs rather than discovering them.
+
+It joins as a fourth Nomad GPU compute client and runs the LLM tool only. The
+alternative — borrowing a hospital node — was rejected because the tool needs a
+nearly empty 3-core node, which would make the LLM and federated-learning demos
+mutually exclusive. **No new instances are needed for this feature.**
+*Closes Q-11.*
+
+**D-32 — The LLM catalogue is upstream's models, used as they are.**
+No fine-tuning, no custom weights, no medically adapted model. The nine models
+we offer are AI4OS's own list, filtered only for what fits in 10.3 GB of usable
+VRAM and for what does not require a Hugging Face token.
+
+The consequence is a wording constraint, not an engineering one: the claim this
+feature supports is **privacy** — your model, your hardware, your prompts never
+leave the cluster — and not medical competence. Nothing in the demo script may
+imply the model knows medicine, because a reviewer will ask and it does not.
+That is the same argument federated learning makes, applied to inference, and
+it is true. *Closes Q-09.*
+
+Fine-tuning stays available later at a cost that is now known: any model on the
+list can be swapped for a fine-tuned variant by changing one line in
+`configs/papi/vllm.yaml`, provided the variant fits the same memory budget.
+
+---
+
 ## Open
 
 **Q-02 — Does "PACS lab flavour" mean branding or integration?**
@@ -318,23 +350,10 @@ downstream reads that — but the story, the chart and the site case-mix narrati
 are now written around this dataset. Worth confirming before the demo script is
 recorded.
 
-**Q-09 — Is a medically fine-tuned language model wanted, and if so which one?**
-Every model in the platform's LLM catalogue is general-purpose. The defensible
-claim is privacy — your model, your hardware, your prompts never leave — not
-medical competence. Adding a clinical model is one line in
-`configs/papi/vllm.yaml` plus a fit check against 10.3 GB of usable VRAM, but
-somebody has to name a model they will stand behind in front of reviewers.
-Assumption: ship the general-purpose catalogue and make the privacy claim only.
-
 **Q-10 — Should an LLM deployment stay running between demos?**
 A running vLLM holds a whole GPU indefinitely. Assumption: tear it down between
 rehearsals; deploy live at the start of the real demo and come back to it, which
 also hides the model-load time.
-
-**Q-11 — Does `192.168.104.188` have a role nobody has told us about?**
-It has been idle since day one and has never been logged into. Assumption: it is
-a spare identical to the other five, and becomes `caios_llm`. Stage L0 of
-`docs/llm-plan.md` finds out before anything is touched.
 
 Each of these has a default recorded above or in `docs/scope.md`, so none of them
 blocks work. They are tracked because deciding some of them late is expensive.
@@ -366,6 +385,14 @@ first dashboard patch.
 **2026-08-19** — Stage 6 (LLM deployment) planned, not built. Four documents
 written: `docs/llm-plan.md`, `docs/llm-concepts.md`, `docs/llm-infrastructure.md`
 and `docs/llm-risks.md`. Opened Q-09 through Q-11. **No decisions recorded yet** —
-the plan proposes D-31 through D-35 and they are listed there, awaiting approval,
-rather than here. Corrected `docs/feature-coverage.md`, which had this feature at
-one engineer-day against four blockers it had not found.
+the plan proposes engineering decisions and they are listed there, awaiting
+approval, rather than here. Corrected `docs/feature-coverage.md`, which had this
+feature at one engineer-day against four blockers it had not found.
+
+**2026-08-19, later** — Q-09 and Q-11 answered by the supervisor and recorded as
+D-31 and D-32: the sixth instance is ours and becomes the LLM host, and the LLM
+catalogue ships upstream's models unmodified. The plan's remaining engineering
+proposals renumbered to D-33 through D-36. `docs/llm-infrastructure.md` gained a
+section explaining exactly what the `/dev/vdb` reformat does and why the node is
+never certified without it — the original text asserted it was necessary without
+showing the mechanism.

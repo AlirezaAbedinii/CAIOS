@@ -104,31 +104,33 @@ test.
 
 ---
 
-## Stage L0 — Find out what node 6 is  ·  half a day  ·  changes nothing
+## Stage L0 — Verify node 6, and prove CUDA works  ·  half a day  ·  changes nothing
 
-**Everything downstream branches here, and nothing else does.** Do this first
-and alone.
+**Do this first and alone.** It is read-only, and it is what makes the next
+stage's erase safe to approve.
 
-`192.168.104.188` has been in `docs/infrastructure.md` since day one as "the
-sixth instance, deliberately left out until we know what it is". We now have a
-use for it, so we find out.
+**D-31 settles what the node is:** ours, unused, identical to the other five.
+So L0 is no longer discovery — it is the verification that a claim about
+hardware nobody has logged into yet is actually true, plus the one genuinely
+open technical question (CUDA on a MIG-backed vGPU).
 
 ### Work
 
-Four questions, one SSH session, no writes:
+One SSH session, no writes. **The first login this node has ever had:**
 
 ```bash
 ssh -i ~/.ssh/caios_cluster ubuntu@192.168.104.188 \
   'nvidia-smi --query-gpu=name,memory.total,memory.free,compute_cap,driver_version --format=csv; \
-   nproc; free -g | head -2; lsblk; df -h /mnt; ls -la /mnt'
+   nproc; free -g | head -2; lsblk; df -h /mnt; ls -A /mnt'
 ```
 
-- **Does it have a GPU**, and is it the same `H100L-1-12C` as the others?
-- **How many cores and how much RAM?** Three and 34 GB is expected.
-- **Is there a `/dev/vdb`**, and — the destructive question — **does it hold
-  anything?** Stage L1 reformats it.
-- **Is it the jumpserver?** If OpenVPN or a bastion service is running on it,
-  it stays out of the cluster and the plan takes its fallback path.
+Confirming, against the other five: one `NVIDIA H100L-1-12C` with ~10565 MiB
+free, 3 cores, ~34 GB RAM, a 125 GB `/dev/vdb` — and, the one that gates Stage
+L1, **that `/mnt` holds nothing but `lost+found`.**
+
+If the SSH key is not yet installed on this node — likely, since it has never
+been used — `docs/ssh-setup.md` is the ten-minute fix, the same one the other
+four needed.
 
 Then the question that is not about the node at all, run on any GPU node,
 because it is the one assumption that would sink the feature late:
@@ -155,9 +157,9 @@ a CUDA tensor operation inside a container.
 
 ### Gate
 
-- [ ] Node 6 identified, and its `/mnt` contents seen by a human
+- [ ] The node's specs match the other five, measured not assumed
+- [ ] **Its `/mnt` contents seen by a human**, because L1 erases that volume
 - [ ] A CUDA workload provably runs inside a container on a MIG-backed vGPU
-- [ ] Which of the three infrastructure paths we are on is written down
 
 **Commit:** `llm: measure node 6 and prove CUDA works on the vGPU`
 
@@ -165,8 +167,10 @@ a CUDA tensor operation inside a container.
 
 ## Stage L1 — Bring node 6 in as `caios_llm`  ·  half a day  ·  **destructive**
 
-Only if L0 says it is a GPU node. Otherwise skip to L2 and accept that the LLM
-and FL demos cannot run at the same time.
+Settled by D-31. **This stage reformats `/dev/vdb` on node 6, erasing it.**
+What that means, exactly what is and is not destroyed, and why the node cannot
+be certified without it, is in `docs/llm-infrastructure.md` under *"What the
+reformat actually does"*. Read that before approving this stage.
 
 ### Work
 
@@ -186,9 +190,12 @@ and FL demos cannot run at the same time.
   `playbook-container-storage.yml`, `playbook-prepull-images.yml`.
 - `scripts/run-cluster-tests.sh` to flip `meta.status=ready`.
 
-> **The approval gate.** `playbook-nomad.yml` repartitions and reformats
-> `/dev/vdb` as XFS, erasing it. The exact commands are printed and nothing runs
-> until you say go. This is the same step the three site nodes went through.
+> **The approval gate.** `playbook-prepare-volumes.yml` repartitions and
+> reformats `/dev/vdb` as XFS, erasing it. Only that volume — the OS disk
+> `/dev/vda` is untouched. The playbook **refuses to run** if `/mnt` holds
+> anything other than `lost+found`, so the L0 gate above is a check and not the
+> only line of defence. This is the same step the three site nodes went through
+> on 2026-08-12.
 
 ### Tests
 
@@ -485,7 +492,7 @@ minutes; this should not push it past 26.
 
 | Stage | Work | Days | Can start |
 |---|---|---|---|
-| L0 | Identify node 6, prove CUDA works | 0.5 | Now |
+| L0 | Verify node 6, prove CUDA works | 0.5 | Now |
 | L1 | Join it as `caios_llm` | 0.5 | After L0 |
 | L2 | Patch and configure PAPI | 1.0 | **Now — independent of L0/L1** |
 | L3 | First vLLM deployment | 0.5 | After L1 + L2 |
@@ -499,31 +506,36 @@ while the other starts L2, and the calendar cost is about **2.5 days**.
 
 ---
 
-## Decisions this plan proposes
+## Decisions
 
-To be appended to `docs/decisions.md` as D-31…D-35 once you approve them. They
-are listed here rather than there because none of them is settled yet.
+**Settled on 2026-08-19, in `docs/decisions.md`:**
 
-**D-31 — Node 6 becomes `caios_llm`, a dedicated LLM host.**
-The tool needs a nearly empty 3-core node; borrowing a hospital node would make
-the LLM and FL demos mutually exclusive. No new instances are required.
+- **D-31** — the sixth instance becomes `caios_llm`, a dedicated LLM host. It is
+  ours and identical to the other five. No new instances are needed.
+- **D-32** — the LLM catalogue is upstream's models, used as they are. No
+  fine-tuning. The claim this feature supports is privacy, not medical
+  competence, and the demo wording is bound by that.
 
-**D-32 — GPU model allowlists are configuration, not source.**
+**Proposed, to be appended as D-33…D-36 once the implementation confirms them.**
+They are listed here rather than there because none is settled until the code
+that depends on them exists.
+
+**D-33 — GPU model allowlists are configuration, not source.**
 Patch `0009` reads `LLM_GPU_MODELS` and defaults to upstream's `Tesla T4`. The
 Nomad-side device constraint is dropped entirely: with one GPU model in the
 cluster it constrains nothing and can only go stale.
 
-**D-33 — Job resource budgets are asserted by a test, not by a comment.**
+**D-34 — Job resource budgets are asserted by a test, not by a comment.**
 Upstream's LLM job asks for 8 cores on 3-core nodes. The failure mode is a job
 that pends forever with no error. `test_llm_job_template.py` makes the budget a
 checked fact, including the `cores`-versus-shares trap.
 
-**D-34 — Container images in job templates are pinned, and never force-pulled.**
+**D-35 — Container images in job templates are pinned, and never force-pulled.**
 `vllm/vllm-openai:latest` is 10.5 GB and moves. Pinned tags plus pre-pulling
 turn a fifteen-minute silence into two minutes, and stop an overnight upstream
 release from breaking a rehearsed demo.
 
-**D-35 — In-allocation health checks talk to the allocation, not to Traefik.**
+**D-36 — In-allocation health checks talk to the allocation, not to Traefik.**
 Upstream's helper tasks call their own public HTTPS URL, which cannot work
 against a private CA. Using `${NOMAD_ADDR_*}` removes DNS, TLS and Traefik from
 the startup path and tests the thing actually being waited for.
@@ -532,21 +544,15 @@ the startup path and tests the thing actually being waited for.
 
 ## Open questions
 
-**Q-09 — Is a medically fine-tuned model wanted, and if so which one?**
-Every model in the catalogue is general-purpose. The defensible claim is
-privacy — *your model, your hardware, your prompts never leave* — not medical
-competence. Adding a clinical model is one line in `configs/papi/vllm.yaml` plus
-a fit check against 10.3 GB, but somebody has to name a model they are willing
-to stand behind in front of reviewers. **Assumption if unanswered:** ship the
-general-purpose catalogue and make the privacy claim only.
+**Q-09 — Answered on 2026-08-19. See D-32.** Upstream's models, used as they
+are. No fine-tuning, and the demo makes the privacy claim only.
 
-**Q-10 — Should the LLM stay running between demos?**
+**Q-11 — Answered on 2026-08-19. See D-31.** The node is ours and identical to
+the other five. Stage L0 verifies rather than discovers.
+
+**Q-10 — Should the LLM stay running between demos?** *Still open.*
 A running vLLM holds a GPU indefinitely. Leaving it up makes the demo instant;
 tearing it down frees a GPU and proves the deploy flow live. **Assumption:**
 tear down between rehearsals, deploy live at the start of the real demo and come
-back to it — which is what the script's ordering already does.
-
-**Q-11 — Does node 6 have a role nobody has told us about?**
-It has been idle since day one. If it is the jumpserver or belongs to another
-group, L0 finds out before anything is touched. **Assumption:** it is a spare
-identical to the other five.
+back to it — which is what the script's ordering already does. Nothing depends
+on this before Stage L6.

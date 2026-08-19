@@ -49,7 +49,7 @@ every web service. One is the front door.
           | "Hospital A"|  | "Hospital B"|  | "Hospital C"|
           +-------------+  +-------------+  +-------------+
 
-          192.168.104.188 — sixth instance, unassigned. See below.
+          192.168.104.188 — becoming caios_llm, the LLM host. See below.
 ```
 
 ---
@@ -145,18 +145,23 @@ receives no work.
 ext4, untouched — nothing on the control plane needs per-container quotas, and
 this repository lives there.
 
-### 192.168.104.188 — the sixth instance
+### 192.168.104.188 — the sixth instance, becoming `caios_llm`
 
-Six addresses were provided; the node count was given as five. This one is left
-out of the cluster until we know what it is.
+Six addresses were provided; the node count was given as five. This one was left
+out of the cluster until we knew what it was.
 
-- **A lot of RAM (≥72 GB)?** It becomes the CVAT host, and annotation goes back
-  into the demo.
-- **Another GPU node like the others?** It becomes a fourth compute client, or a
-  spare to swap in if one fails.
-- **The jumpserver?** It stays out entirely.
+**Answered on 2026-08-19 (D-31): it is ours, unused, and identical to the other
+five** — 3 vCPU, ~34 GB RAM, one `NVIDIA H100L-1-12C`, a 125 GB volume. It
+becomes **`caios_llm`**, a fourth Nomad GPU compute client dedicated to the LLM
+tool, so that vLLM and Open WebUI never compete with the three hospital nodes
+for CPU or GPU.
 
-Nothing depends on the answer, so this is not blocking.
+It has still never been logged into. Stage L0 of `docs/llm-plan.md` measures it
+before Stage L1 joins it — and before Stage L1 reformats its `/dev/vdb`, which
+`docs/llm-infrastructure.md` explains in full.
+
+It is **not** the CVAT host: CVAT needs ~72 GB of RAM in one place and this node
+has 34, so D-16 stands unchanged.
 
 ---
 

@@ -58,6 +58,69 @@ Reserving all three cores on a 6000 MHz node leaves nothing for the two helper
 tasks and the job still will not place. The arithmetic is worked through in
 `docs/llm-infrastructure.md`. → Stage L2.
 
+### R-18 · Nomad allocates a GPU that CUDA cannot use — **CONFIRMED, cluster-wide**
+
+**No longer a risk. Measured on 2026-08-19, and it is a defect in the running
+cluster that has nothing to do with the LLM tool.**
+
+Our GPUs are MIG-backed vGPUs: the device holds one `MIG 1g.12gb` instance, and
+CUDA can address the instance but not the parent. `nomad-device-nvidia` **1.0.0**
+— the version we run — fingerprints and allocates the **parent**. So a Nomad job
+with the `device "gpu"` stanza that every PAPI template uses gets a container in
+which:
+
+```
+nvidia-smi -L            ->  GPU 0: NVIDIA H100L-1-12C (UUID: GPU-...)
+                             (and no MIG line)
+torch.cuda.is_available  ->  False
+```
+
+Verified four ways on `caios_site_a`:
+
+| `NVIDIA_VISIBLE_DEVICES` | MIG device exposed | `torch.cuda` |
+|---|---|---|
+| `GPU-<parent uuid>` — what the plugin selects | no | **False** |
+| `MIG-<instance uuid>` | yes | True |
+| `0:0` | yes | True |
+| `all` | yes | True |
+
+and then through the real Nomad path: a batch job **with** `device "gpu" { count = 1 }`
+reports `False`; the identical job **without** it reports `True` and
+`NVIDIA H100L-1-12C MIG 1g.12gb`. Setting `NVIDIA_VISIBLE_DEVICES` in the task's
+own `env` block does **not** help — the device plugin overrides it.
+
+**This is the worst failure mode there is, because it looks like success.**
+`docs/progress.md` recorded on 2026-08-12 that "the GPU is visible inside a
+workspace". That was true, and the GPU was unusable. Nothing GPU-backed has ever
+actually computed on this cluster; nobody checked, because `nvidia-smi` said yes.
+The federated-learning demo is unaffected — D-18 made its clients CPU-only.
+
+**Fix — one Ansible variable.** MIG support landed in `nomad-device-nvidia`
+**1.1.0** (issues #3, #27 and #53, all closed 2024-08-22 alongside that release).
+`ansible/group_vars/all.yml:91` pins `nomad_nvidia_plugin_version: 1.0.0`, and
+the role downloads it straight from `releases.hashicorp.com` — the 1.1.0 artifact
+is present and fetchable, verified.
+
+**Not yet proven on our hardware**, and that distinction matters: the fix is
+strongly indicated, not measured. Stage L1 bumps the version, restarts the Nomad
+clients, and `scripts/check-gpu-scheduling.sh` says whether it worked.
+
+Two things to re-check after the bump, because the plugin will report the MIG
+instance rather than the parent:
+
+- the **device name** may change from `NVIDIA H100L-1-12C` to a name including
+  the MIG profile. That is what `get_gpu_models(vo)` returns, so it feeds
+  `configs/papi/var/gpu_models.csv`, the dev-env `gpu_type` dropdown, and the
+  allowlist in patch `0009` (R-01). All three may need the new string.
+- restarting a Nomad client **disturbs running allocations**, including the four
+  federated-learning deployments. Schedule it, do not surprise it.
+
+**Fallback if 1.1.0 does not fix it:** drop the `device "gpu"` stanza and select
+the node by `meta.role = llm` instead — proven to work above. The cost is that
+Nomad stops accounting for the GPU, so nothing prevents two GPU jobs landing on
+one node. Tolerable only because the LLM node is dedicated and `cores = 2` on a
+3-core node already means one such job at a time.
+
 ### R-04 · Node 6's specs are claimed, not yet measured
 
 **Downgraded on 2026-08-19 by D-31.** The instance is confirmed ours, unused,
@@ -112,15 +175,25 @@ Fallback if the interpolation misbehaves: mount our CA into the tasks and set
 
 ### R-06 · vLLM's default memory fraction overshoots the usable framebuffer
 
-**Verified by measurement.** The GPU reports 12288 MiB total but only
-**10565 MiB free** — 1724 MiB is held by ECC and vGPU overhead. vLLM's default
-`--gpu-memory-utilization 0.9` is a fraction of **total**, so it targets
-11059 MiB and fails at startup with a CUDA out-of-memory error that reads as if
-the model is too big when the model is fine.
+**Verified by measurement, twice — and the numbers CUDA reports are not the ones
+`nvidia-smi` reports.** From inside a container on `caios_site_a`,
+`torch.cuda.mem_get_info()` returns **total 12100 MiB, free 10475 MiB**, where
+`nvidia-smi` says 12288 and 10565. vLLM sizes itself from the CUDA numbers, so
+those are the ones that matter:
 
-**Fix:** `--gpu-memory-utilization 0.80` (9830 MiB, ~700 MiB headroom) on every
-entry in our curated `configs/papi/vllm.yaml`, plus a unit test that fails the
-build if any model omits it or sets it above 0.85. → Stage L2.
+| `--gpu-memory-utilization` | wants | against 10475 MiB free |
+|---|---|---|
+| 0.90 (vLLM's default) | 10890 MiB | **over by 415 MiB — will not start** |
+| 0.85 | 10285 MiB | fits, 190 MiB spare — too tight |
+| **0.80** | **9680 MiB** | **fits, 795 MiB spare** |
+
+Left alone, vLLM fails at startup with a CUDA out-of-memory error that reads as
+if the model is too big when the model is fine.
+
+**Fix:** `--gpu-memory-utilization 0.80` on every entry in our curated
+`configs/papi/vllm.yaml`, plus a unit test that fails the build if any model
+omits it or sets it above 0.85. `scripts/check-llm-node.sh` prints this table
+for any node, so it can be re-derived rather than trusted. → Stage L2.
 
 ### R-07 · The dashboard reads its model catalogue from AI4OS's GitHub, not from us
 
@@ -290,18 +363,6 @@ binding: nothing in the script may imply the model knows medicine.
 The cost of changing course later is known and small — any model on the list can
 be swapped for a fine-tuned variant by changing one line in
 `configs/papi/vllm.yaml`, provided the variant fits the same 10.3 GB budget.
-
-### R-18 · MIG-backed vGPU is an unusual target for vLLM
-
-The guest sees a `1g.12gb` MIG device through a vGPU driver. `nvidia-smi` has
-been confirmed working inside a container on these nodes, but that is not the
-same as proving a CUDA workload allocates and computes — a MIG parent device can
-be visible and still fail at CUDA init.
-
-**Not accepted on faith:** Stage L0 runs a real CUDA tensor operation in a
-container with exactly the environment Nomad sets, before any of this is built.
-If that fails, the whole feature is off the table and we find out on day one
-instead of day four.
 
 ### R-19 · Upstream drift
 

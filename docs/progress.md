@@ -27,22 +27,28 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **Planned** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 part-done** — `docs/llm-plan.md` |
 
-**Nothing is blocking. The MVP is complete.** Next actions, in order:
+**The MVP is complete, but one thing found on 2026-08-19 is blocking for
+anything GPU-backed:** Nomad's device plugin allocates a GPU that CUDA cannot
+use, cluster-wide (R-18). The federated-learning demo is unaffected because its
+clients are CPU-only (D-18). Next actions, in order:
 
-1. **Stage L0 of the LLM plan** — find out what `192.168.104.188` is, and prove
-   a CUDA workload runs in a container on the MIG-backed vGPU. Ten minutes, and
-   everything else in Stage 6 branches on it.
-2. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
-   nothing, so it runs in parallel with the above.
-3. **Rehearse the demo end to end in a browser**, following
+1. **Install the cluster SSH key on `192.168.104.188`** — `docs/ssh-setup.md`,
+   ten minutes, needs a key only you hold. It is what finishes Stage L0 and what
+   lets anyone see the volume Stage L1 would erase.
+2. **Approve the `nomad-device-nvidia` 1.1.0 bump** and pick a window for it. No
+   GPU deployment on this cluster computes anything until it lands, and applying
+   it restarts the Nomad agents.
+3. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
+   nothing, so it runs in parallel with both of the above.
+4. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
    thing.
-4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+5. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-5. Record it.
+6. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -50,6 +56,99 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — STAGE L0: CUDA works, and GPU scheduling does not
+
+Stage L0 run. It cleared the technical unknown it was written for and found a
+cluster-wide defect that has been there since the cluster was built.
+
+**The good news, measured on `caios_site_a` in a container:**
+
+```
+torch.cuda.is_available : True
+device                  : NVIDIA H100L-1-12C MIG 1g.12gb
+capability              : (9, 0)          -> bfloat16 supported
+1024x1024 matmul        : agrees with CPU to 4.4e-4
+bfloat16 matmul         : works
+```
+
+So the MIG-backed vGPU is not an obstacle, and upstream's `--dtype float16` —
+which exists only because a Tesla T4 is compute capability 7.5 — is confirmed
+unnecessary for us.
+
+**A correction to our own numbers.** `torch.cuda.mem_get_info()` reports
+**total 12100 MiB, free 10475 MiB**, where `nvidia-smi` says 12288 / 10565.
+vLLM sizes itself from the CUDA figures, so those are the ones that count:
+
+| `--gpu-memory-utilization` | wants | against 10475 MiB free |
+|---|---|---|
+| 0.90 (vLLM default) | 10890 MiB | over by 415 MiB — will not start |
+| 0.85 | 10285 MiB | fits, 190 MiB spare — too tight |
+| **0.80** | **9680 MiB** | **fits, 795 MiB spare** |
+
+R-06 confirmed. The 0.80 recommendation is now measured, not predicted.
+
+### Blocker 5, and it is not about the LLM
+
+**A Nomad job that asks for a GPU gets one CUDA cannot use.** These are
+MIG-backed vGPUs: the card holds one `MIG 1g.12gb` instance, and CUDA can address
+the instance but not the parent. `nomad-device-nvidia` **1.0.0** — the version in
+`ansible/group_vars/all.yml` — allocates the **parent**.
+
+At the container level, four ways:
+
+| `NVIDIA_VISIBLE_DEVICES` | MIG exposed | `torch.cuda` |
+|---|---|---|
+| `GPU-<parent uuid>` — what the plugin selects | no | **False** |
+| `MIG-<instance uuid>` | yes | True |
+| `0:0` | yes | True |
+| `all` | yes | True |
+
+And through the real Nomad path, twice: a batch job **with**
+`device "gpu" { count = 1 }` reports `TORCH_CUDA=False` and no MIG line; the
+identical job **without** the stanza reports `True` and
+`NVIDIA H100L-1-12C MIG 1g.12gb`. Setting `NVIDIA_VISIBLE_DEVICES` in the task's
+own `env` block does not help — the plugin overrides it.
+
+**Every PAPI job template uses that stanza. So nothing GPU-backed has ever
+actually computed on this cluster.** It stayed invisible for a week because the
+only check anyone ran was `nvidia-smi`, which passes — the entry above on
+2026-08-12, *"the GPU is visible inside a workspace"*, was true and useless. This
+is the exact failure mode that entry was later flagged for in R-18, written as a
+theoretical risk before it turned out to be a live one.
+
+The federated-learning demo is unaffected: D-18 made its clients CPU-only, which
+is now a considerably better decision than it looked at the time.
+
+**Fix: one Ansible variable.** MIG support landed in `nomad-device-nvidia`
+**1.1.0** — issues #3, #27 and #53, all closed 2024-08-22 with that release. The
+role fetches it straight from `releases.hashicorp.com`, and the 1.1.0 artifact is
+present and downloadable, verified. **Not yet proven on our hardware**; the bump
+restarts Nomad agents, which disturbs the four running FL allocations, so it
+needs its own window and its own approval.
+
+### Two scripts, so none of this is a transcript
+
+- `scripts/check-llm-node.sh` — measures a candidate node and, crucially,
+  **multiplies two matrices** rather than asking whether the GPU is visible. It
+  also prints the `--gpu-memory-utilization` table for that node, and
+  distinguishes a node already through `playbook-prepare-volumes.yml` from one
+  still in the shipped layout.
+- `scripts/check-gpu-scheduling.sh` — deploys the two probes above and reports.
+  This is the acceptance test for the plugin bump: it must go from FAIL to pass.
+
+Both were run; both reproduce the findings. All probe jobs purged afterwards, the
+four FL deployments untouched, all four nodes still `ready`.
+
+### Still blocked, and it needs you
+
+The cluster SSH key is not installed on `192.168.104.188`, so it cannot be logged
+into from `caios_server`. `docs/ssh-setup.md` is the same ten-minute procedure the
+other four nodes went through and it needs a key only you hold. Until then, node
+6's specs are inherited rather than measured — and nobody has seen what is on the
+volume Stage L1 would erase.
 
 ---
 

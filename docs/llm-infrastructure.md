@@ -48,7 +48,8 @@ GPU 0: NVIDIA H100L-1-12C (UUID: GPU-db300f68-...)
 | MIG mode | **Enabled**, one `1g.12gb` instance | We hold 1/7 of an H100 NVL, not a whole one. |
 | **Multiprocessor count** | **16** | Out of 132 on a full H100 NVL. This is the compute budget. |
 | Framebuffer, nominal | 12288 MiB | What the profile name promises. |
-| **Framebuffer, usable** | **10565 MiB** | 1724 MiB goes to ECC and vGPU overhead. **This is the number that matters.** |
+| Framebuffer, free per `nvidia-smi` | 10565 MiB | 1724 MiB goes to ECC and vGPU overhead. |
+| **What CUDA reports** | **total 12100, free 10475 MiB** | Measured from inside a container. **These are the numbers vLLM sizes against**, and they are not the ones `nvidia-smi` prints. |
 | Compute capability | **9.0** (Hopper) | bfloat16, FP8 and FlashAttention-3 all supported. |
 | Driver | 580.105.08, CUDA 13.0 | Recent. No CUDA-version blocker for any current vLLM image. |
 | ECC | Enabled | Not optional on vGPU, and it is where most of the 1724 MiB goes. |
@@ -72,6 +73,20 @@ So the trade against the reference platform is: **less memory, better maths.**
 Roughly T4-class throughput from 16 SMs of Hopper, on faster memory, with a
 smaller framebuffer.
 
+### And a third, found by actually testing it
+
+**Nomad cannot currently hand a job a GPU that CUDA can use.** The device plugin
+we run (`nomad-device-nvidia` 1.0.0) allocates the **parent** device; CUDA can
+only address the **MIG instance**. A job with the `device "gpu"` stanza that
+every PAPI template uses gets a container where `nvidia-smi` shows the GPU and
+`torch.cuda.is_available()` is `False`.
+
+This is not an LLM problem — it applies to every GPU workload on the cluster,
+and it has been true since the cluster was built. It went unnoticed because
+`nvidia-smi` reports success. The fix is a one-variable Ansible bump to plugin
+1.1.0, which added MIG support. Full detail and the evidence: `docs/llm-risks.md`
+R-18. Verify with `scripts/check-gpu-scheduling.sh`.
+
 ---
 
 ## What fits on 10.3 GB
@@ -81,9 +96,17 @@ context, compiled graphs, activation peaks — budget ~1.2 GB), and whatever is
 left becomes KV cache, which is what determines how long a conversation can get
 and how many people can chat at once.
 
-With `--gpu-memory-utilization 0.80` the allowance is **9830 MiB ≈ 10.3 GB**.
-Weight sizes below are the real `.safetensors` totals from the Hugging Face API,
-measured 2026-08-19.
+vLLM takes `--gpu-memory-utilization` as a fraction of **total**, but can only
+ever use **free**. Measured on `caios_site_a` on 2026-08-19:
+
+| setting | wants | against 10475 MiB free |
+|---|---|---|
+| 0.90 — vLLM's own default | 10890 MiB | **over by 415 MiB, will not start** |
+| 0.85 | 10285 MiB | fits, 190 MiB spare — too tight |
+| **0.80** | **9680 MiB ≈ 10.15 GB** | **fits, 795 MiB spare** |
+
+So the budget is **0.80, giving ~10.1 GB**. Weight sizes below are the real
+`.safetensors` totals from the Hugging Face API, measured 2026-08-19.
 
 | Model | Weights | KV budget left | Verdict |
 |---|---|---|---|

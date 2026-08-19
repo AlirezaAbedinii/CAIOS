@@ -14,7 +14,7 @@ estimated from memory. Effort is engineer-days for one person.
 |---|---|---|
 | **Catalog → Modules** | ✅ MVP | — |
 | **Catalog → Tools** | ⚠️ 2 of 6 in MVP | 0.5–1 day each |
-| **Catalog → LLMs** | ❌ V1 stretch | 1 day |
+| **Catalog → LLMs** | 🚧 Stage 6, in progress | **4 days** (was estimated 1 — see below) |
 | **Deployments** | ✅ MVP | — |
 | **Deployments → Inference** | ❌ Out | **5–8 days** (needs Kubernetes) |
 | **Try me** | ❌ Out | 1 day + a dedicated node |
@@ -28,7 +28,12 @@ estimated from memory. Effort is engineer-days for one person.
 
 **Roughly 60% of the dashboard's surface is in the MVP.** The excluded 40% is
 concentrated in two areas: serverless inference (which needs a second cluster)
-and the LLM features (which need more GPU memory than we have).
+and the hosted LLM Chat service (which is somebody else's deployment, not ours).
+
+> **Changed on 2026-08-19.** *Catalog → LLMs* has moved from V1 stretch to Stage
+> 6 and is the current focus — the second headline feature after federated
+> learning. Its effort estimate quadrupled once the cluster was measured rather
+> than assumed; section 3 says why, and `docs/llm-plan.md` is the plan.
 
 ---
 
@@ -82,7 +87,7 @@ about NVIDIA's stack.
 
 ---
 
-## 3. Catalog → LLMs ❌ **V1 stretch — and the honest picture is better than expected**
+## 3. Catalog → LLMs 🚧 **Now Stage 6 — in progress, see `docs/llm-plan.md`**
 
 The platform ships **13 ready-to-deploy language models**:
 
@@ -113,6 +118,39 @@ would compete with the federated learning demo for the same machines.
 that behave well. Genuinely feasible as a V1 stretch, and it demos well — a
 researcher chatting with a private model on the lab's own hardware is a good
 image. It should not displace federated learning.
+
+---
+
+### Corrected on 2026-08-19, after measuring the cluster
+
+The two paragraphs above are kept because their conclusion still holds — this is
+feasible and it demos well. **Their numbers and their cost estimate do not.**
+The full analysis is in `docs/llm-plan.md`, `docs/llm-infrastructure.md` and
+`docs/llm-risks.md`; the corrections are:
+
+**GPU memory is 10.3 GB usable, not 12.** The card reports 12288 MiB but 1724 MiB
+goes to ECC and vGPU overhead, leaving 10565 MiB free. vLLM's default memory
+fraction is computed against the nominal total, so left alone it overshoots what
+exists and fails at startup.
+
+**RAM was never the binding constraint — CPU was.** The tool asks for **8
+dedicated CPU cores**, on nodes with **three**. No node in this cluster could
+ever have placed it. That is a larger gap than the memory one and it was missed
+here.
+
+**There are four blockers, not one.** A hard-coded `"Tesla T4"` gate in PAPI's
+Python; a second `Tesla T4` constraint in the Nomad job; the CPU and memory
+budget; and two helper tasks that call their own public HTTPS URL and therefore
+die on our self-signed CA. Only the first produces an error message.
+
+**Cost is 4 engineer-days, not 1** — about 2.5 calendar days with two people,
+including tests. The one-day estimate assumed memory tuning and model selection
+were the whole job.
+
+**One thing is better than assumed:** the GPU is compute capability 9.0, not the
+7.5 of the T4 the tool is written for. Upstream forces `--dtype float16`
+everywhere solely because a T4 cannot do bfloat16. We can run models in their
+native precision.
 
 ---
 

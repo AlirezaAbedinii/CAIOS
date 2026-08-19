@@ -11,7 +11,9 @@ site can do alone; the platform around it now reads as a medical imaging
 platform rather than somebody else's stack. `docs/demo-script.md` is written
 and timed at 22 minutes.
 
-What is left is rehearsal and the V1 list — a real certificate first.
+**Stage 6 — LLM deployment — is the current focus**, planned on 2026-08-19 and
+not yet built. `docs/llm-plan.md` is the plan; the entry below says what the
+analysis found. Alongside it, what is left is rehearsal and the V1 list.
 
 ---
 
@@ -25,16 +27,22 @@ What is left is rehearsal and the V1 list — a real certificate first.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **Planned** — `docs/llm-plan.md` |
 
 **Nothing is blocking. The MVP is complete.** Next actions, in order:
 
-1. **Rehearse the demo end to end in a browser**, following
+1. **Stage L0 of the LLM plan** — find out what `192.168.104.188` is, and prove
+   a CUDA workload runs in a container on the MIG-backed vGPU. Ten minutes, and
+   everything else in Stage 6 branches on it.
+2. **Stage L2 of the LLM plan** — the PAPI patch and configuration. Depends on
+   nothing, so it runs in parallel with the above.
+3. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
    thing.
-2. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-3. Record it.
+5. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -42,6 +50,85 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — Stage 6 planned: LLM deployment
+
+**New focus, and it is the second headline feature.** A researcher deploys a
+private language model onto the lab's own GPUs — vLLM as the engine, Open WebUI
+as the chat interface. The argument is the same one as federated learning,
+escalated: the platform that trains across hospitals without moving data also
+answers questions without sending them to a vendor.
+
+**Nothing built. Four documents written**, and everything in them measured
+against the live cluster rather than assumed:
+`docs/llm-plan.md` (staged plan with tests), `docs/llm-concepts.md` (what the
+pieces are), `docs/llm-infrastructure.md` (what the hardware is), and
+`docs/llm-risks.md` (what goes wrong).
+
+**The tool has four blockers, not the one it reports.** The dashboard's
+"requires NVIDIA T4 GPUs" error is the check that happens to fire first:
+
+1. A hard-coded `"Tesla T4"` string comparison in PAPI's Python
+   (`tools.py:604`) — still present at upstream `master`, so there is no fix to
+   pull.
+2. A second `Tesla T4` device constraint in the Nomad job (`nomad.hcl:171`),
+   which would leave the job pending forever with no error.
+3. **The job asks for 8 dedicated CPU cores and 32 GB on nodes with 3 and 30.**
+   This is the real blocker, it is larger than the memory gap, and no node in
+   this cluster could ever have placed it. There is a trap inside the fix:
+   Nomad's `cores` removes those CPUs' MHz from the shared pool, so reserving
+   all three leaves nothing for the helper tasks and the job still will not
+   place.
+4. Both helper tasks call **their own public HTTPS URL** and so hit our
+   self-signed CA from a stock Python image. Neither catches exceptions, and
+   both are `prestart`/`poststart` hooks — so the allocation dies with a
+   traceback that never mentions certificates. This is the one that would have
+   cost a day.
+
+**What the GPU actually is.** `NVIDIA H100L-1-12C` decoded: a MIG-backed vGPU,
+one `1g.12gb` slice, **16 SMs** of an H100 NVL, driver 580.105.08, CUDA 13.0.
+
+- **Usable framebuffer is 10565 MiB, not 12288** — ECC and vGPU overhead take
+  1724 MiB. vLLM's default `--gpu-memory-utilization 0.9` is a fraction of the
+  nominal total, so left alone it asks for more memory than exists.
+- **Compute capability 9.0, not the T4's 7.5.** Upstream forces `--dtype
+  float16` on every model for exactly one reason, stated in its own comment: a
+  T4 cannot do bfloat16. We can. Less memory than the reference platform, better
+  arithmetic.
+
+Weight sizes were measured from the Hugging Face API rather than estimated:
+eight of the thirteen catalogue models fit comfortably in the 10.3 GB budget,
+three are tight, and two probably will not start.
+
+**Infrastructure answer: no new instances.** The idle sixth instance
+(`192.168.104.188`) becomes `caios_llm`, a fourth Nomad GPU compute client
+dedicated to this. The three hospital nodes are not touched. The one caveat is
+that it has never been logged into — Stage L0 is ten minutes of finding out
+whether it is a GPU node, and the plan is sequenced so nothing depends on the
+answer until after that.
+
+**One regression risk found, in the existing feature.**
+`scripts/deploy-fl-demo.sh` relies on spread-mode scheduling to land three
+workspaces on three nodes. With a fourth compute node that stops being true, so
+a recording could show Hospital B running on the machine labelled as the LLM
+host. Fixed two ways in the plan: a soft anti-affinity on `meta.role = llm`, and
+deploying the LLM before the FL workspaces on demo day.
+
+**Also found, and worth reporting upstream:** `tools.py:575` tests
+`type in ["openwebui", "both"]`, but the option value is `open-webui`. So a
+standalone UI deployment skips its credential checks entirely, `create-admin`
+posts an empty email and password, and the UI serves with signup open — the
+first person to find the URL becomes the administrator.
+
+**Corrected in the same change:** `docs/feature-coverage.md` had this at one
+engineer-day, based on memory tuning being the whole job. It is four, and the
+section now says why.
+
+**Estimated cost: 4 engineer-days**, about 2.5 calendar with two people. The
+long pole (Stage L2, the patch and configuration) depends on nothing and can
+start immediately, in parallel with identifying node 6.
 
 ---
 

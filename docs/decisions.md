@@ -318,6 +318,24 @@ downstream reads that — but the story, the chart and the site case-mix narrati
 are now written around this dataset. Worth confirming before the demo script is
 recorded.
 
+**Q-09 — Is a medically fine-tuned language model wanted, and if so which one?**
+Every model in the platform's LLM catalogue is general-purpose. The defensible
+claim is privacy — your model, your hardware, your prompts never leave — not
+medical competence. Adding a clinical model is one line in
+`configs/papi/vllm.yaml` plus a fit check against 10.3 GB of usable VRAM, but
+somebody has to name a model they will stand behind in front of reviewers.
+Assumption: ship the general-purpose catalogue and make the privacy claim only.
+
+**Q-10 — Should an LLM deployment stay running between demos?**
+A running vLLM holds a whole GPU indefinitely. Assumption: tear it down between
+rehearsals; deploy live at the start of the real demo and come back to it, which
+also hides the model-load time.
+
+**Q-11 — Does `192.168.104.188` have a role nobody has told us about?**
+It has been idle since day one and has never been logged into. Assumption: it is
+a spare identical to the other five, and becomes `caios_llm`. Stage L0 of
+`docs/llm-plan.md` finds out before anything is touched.
+
 Each of these has a default recorded above or in `docs/scope.md`, so none of them
 blocks work. They are tracked because deciding some of them late is expensive.
 
@@ -344,3 +362,10 @@ headline finding is D-25: upstream's "two medical modules" is really one.
 **2026-08-16, later** — PACS Lab credited in the sidenav footer, replacing an EU
 funding flag that had been rendering on every page. Recorded as D-30, and the
 first dashboard patch.
+
+**2026-08-19** — Stage 6 (LLM deployment) planned, not built. Four documents
+written: `docs/llm-plan.md`, `docs/llm-concepts.md`, `docs/llm-infrastructure.md`
+and `docs/llm-risks.md`. Opened Q-09 through Q-11. **No decisions recorded yet** —
+the plan proposes D-31 through D-35 and they are listed there, awaiting approval,
+rather than here. Corrected `docs/feature-coverage.md`, which had this feature at
+one engineer-day against four blockers it had not found.

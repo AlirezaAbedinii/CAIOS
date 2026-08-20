@@ -169,6 +169,36 @@ in L3 and L4.
 Fallback if the interpolation misbehaves: mount our CA into the tasks and set
 `REQUESTS_CA_BUNDLE`, which is what the PAPI container already does.
 
+**This entry was too narrow, and Stage L4 found the rest of it.** It was written
+about the two helper tasks. **Open WebUI itself had the same problem**, and a
+worse version of it: upstream hands the UI the public HTTPS endpoint of the vLLM
+task sitting beside it in the same allocation, so the chat interface left the
+node, crossed Traefik and came back — into our own CA.
+
+The helpers at least fail loudly, by killing the allocation. Open WebUI catches
+the exception and carries on:
+
+```
+ERROR open_webui.routers.openai:send_get_request - Connection error: ...
+      [SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate in certificate chain
+INFO  "GET /api/models HTTP/1.1" 200
+```
+
+An **empty model list behind an HTTP 200**. Nomad reports the allocation
+healthy, the login page works, the admin account is correct, and the dropdown is
+empty. Nothing outside the container's stderr says why.
+
+It was missed because the endpoint is not in our `nomad.hcl` — it arrives from
+PAPI as `${API_ENDPOINT}`, so there was nothing wrong to see in the file we had
+already audited. **Fixed by patch `0010`**, which redirects only the `both` case
+(a standalone Open WebUI must keep pointing at the endpoint the user supplied).
+Verified before it was written: from inside the `open-webui` container, that
+address answered `401` — a connection that worked.
+
+The general lesson is worth more than the fix: *anything in this stack that
+reaches its own deployment by hostname is suspect,* whether we wrote the line or
+not.
+
 ### R-06 · vLLM's default memory fraction overshoots the usable framebuffer
 
 **Verified by measurement, twice — and the numbers CUDA reports are not the ones
@@ -323,6 +353,56 @@ a deployment that has been accepted but not yet placed gets a dead link. It is a
 few seconds wide and self-healing, so it is a papercut rather than a fault — but
 it is exactly the sort of thing that happens on camera. Worth knowing about
 before the demo, and worth a beat of patience in the script rather than a fix.
+
+### R-22 · Whoever opens the chat interface first becomes its administrator
+
+**Found on 2026-08-20 by falling into it.** Open WebUI grants the `admin` role to
+the first account that registers. Upstream claims that account from outside, with
+a `poststart` task that polls `/api/v1/auths/signup` until it lands:
+
+```
+create-admin  ->  POST http://<alloc>/api/v1/auths/signup
+```
+
+Between uvicorn opening the port and that POST succeeding, the deployment is
+reachable and unclaimed. Anyone who loads the URL in that window and registers
+gets the administrator account, and the deployment's real owner is then refused
+with *"The email or password provided is incorrect"* — an error that describes
+the symptom and not the cause.
+
+**The window is small and it is not theoretical.** Measured on two consecutive
+runs of `scripts/check-llm-ui.sh`:
+
+| run | UI first answered | `create-admin` succeeded | outcome |
+|---|---|---|---|
+| 1 | T+108 s | T+106 s | the deployment won |
+| 2 | T+101 s | later | **the smoke test registered itself as admin** |
+
+The second run is the finding. A script whose only crime was to check whether
+signup was closed took ownership of the deployment it was testing. The demo-day
+equivalent is somebody clicking *Quick access* a moment early — which R-21
+already establishes people will do, because the link appears before it works.
+
+**Fix:** `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` and `WEBUI_ADMIN_NAME`.
+Open WebUI creates the account inside its FastAPI lifespan and sets
+`ui.enable_signup: false` in the same block, and lifespan startup completes
+**before uvicorn creates the listening socket**. There is no moment at which the
+UI is reachable and unclaimed: the window is zero rather than small.
+
+The `create-admin` task is removed rather than kept as a belt-and-braces, and
+that is not tidiness — the two mechanisms cannot coexist. With an admin already
+present, signup answers `403`, which upstream's script neither expects nor gives
+up on: it retries for fifteen minutes and then raises, and as a `poststart` hook
+that fails the whole allocation. It also frees a container, a `pip install` at
+startup, and 300 MB of the group's memory.
+
+`scripts/check-llm-ui.sh` asserts against the **first** `/api/config` the UI ever
+serves. Nothing closes signup after boot any more, so "closed there" can only
+mean "closed before the port opened".
+
+Worth reporting upstream: it affects every AI4OS deployment of this tool, and
+patch `0009` already found the related bug where a standalone `open-webui`
+skipped its credential checks entirely and came up with signup open.
 
 ### R-09 · Secrets are written in clear text into the Nomad job specification
 

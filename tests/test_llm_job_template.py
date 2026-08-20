@@ -99,27 +99,29 @@ def test_images_are_not_force_pulled(job):
 def test_helper_tasks_do_not_leave_the_allocation(job):
     """R-05, the one that would have cost a day.
 
-    Upstream's two helper tasks call their own PUBLIC HTTPS URL, which is served
+    Upstream's helper tasks call their own PUBLIC HTTPS URL, which is served
     with our own CA's certificate. A stock python image does not trust it,
-    `requests` raises, neither script catches, and because both are
-    prestart/poststart hooks the whole allocation dies — with a traceback that
-    never mentions certificates.
+    `requests` raises, the script does not catch it, and because it is a
+    prestart hook the whole allocation dies — with a traceback that never
+    mentions certificates.
+
+    Upstream's second helper, create-admin, had the same problem and is gone
+    for a different reason; see the two tests below.
     """
-    for var in ("VLLM_ENDPOINT", "OPEN_WEBUI_URL"):
-        m = re.search(rf'{var}\s*=\s*"([^"]+)"', job)
-        assert m, f"{var} not found in the template"
-        assert m.group(1).startswith("http://"), (
-            f"{var} is {m.group(1)!r} — it must not go out through Traefik"
-        )
-        assert "NOMAD_ADDR_" in m.group(1), (
-            f"{var} should address the allocation directly"
-        )
+    m = re.search(r'VLLM_ENDPOINT\s*=\s*"([^"]+)"', job)
+    assert m, "VLLM_ENDPOINT not found in the template"
+    assert m.group(1).startswith("http://"), (
+        f"VLLM_ENDPOINT is {m.group(1)!r} — it must not go out through Traefik"
+    )
+    assert "NOMAD_ADDR_" in m.group(1), (
+        "VLLM_ENDPOINT should address the allocation directly"
+    )
 
 
 def test_helper_scripts_survive_a_connection_error(job):
     """Waiting for a model to load means the endpoint refuses connections for
     minutes. That is the normal state, not an error, and it must not escape."""
-    assert job.count("requests.exceptions.RequestException") >= 2
+    assert job.count("requests.exceptions.RequestException") >= 1
 
 
 def test_gpu_memory_utilisation_is_sane_in_the_rendered_args(job):
@@ -192,4 +194,46 @@ def test_ollama_is_switched_off(job):
     """
     assert re.search(r"ENABLE_OLLAMA_API\s*=\s*false", job), (
         "ENABLE_OLLAMA_API is not disabled in the open-webui task"
+    )
+
+
+def test_the_admin_is_created_before_the_port_opens(job):
+    """R-22, and the reason the create-admin task is gone.
+
+    Open WebUI gives administrator to whoever registers first. Upstream claims
+    that account with a poststart task POSTing to /api/v1/auths/signup once the
+    UI is listening — so between the port opening and that POST landing, the
+    account belongs to whoever asks. Stage L4 measured that window at 0-3
+    seconds and then lost the race to it by accident: check-llm-ui.sh, polling
+    the UI, registered itself as the administrator and the deployment's own
+    credentials were refused afterwards.
+
+    WEBUI_ADMIN_* is handled inside Open WebUI's FastAPI lifespan, which
+    completes before uvicorn creates the listening socket. Zero window, rather
+    than a small one.
+    """
+    for var, want in (
+        ("WEBUI_ADMIN_EMAIL", "researcher@example.org"),
+        ("WEBUI_ADMIN_PASSWORD", "hunter2"),
+        ("WEBUI_ADMIN_NAME", "Test Researcher"),
+    ):
+        m = re.search(rf'{var}\s*=\s*"([^"]*)"', job)
+        assert m, f"{var} is not set on the open-webui task"
+        assert m.group(1) == want, (
+            f"{var} renders as {m.group(1)!r} — it must carry what PAPI "
+            f"substitutes, not a literal"
+        )
+
+
+def test_nothing_claims_the_admin_account_over_http(job):
+    """The other half of R-22: create-admin could not have stayed.
+
+    With an admin already present, Open WebUI answers 403 to signup. Upstream's
+    script neither expects that nor gives up on it — it retries for fifteen
+    minutes and then raises, and as a poststart hook that fails the allocation.
+    So this is not a tidy-up: the two mechanisms are mutually exclusive.
+    """
+    assert "create-admin" not in job, "the create-admin task is still in the job"
+    assert "auths/signup" not in job, (
+        "something in this job still claims the admin account over HTTP"
     )

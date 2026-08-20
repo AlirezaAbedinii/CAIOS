@@ -11,7 +11,7 @@ Convention (upstream's, unchanged):
 
 WHAT IS DIFFERENT FROM UPSTREAM, AND WHY
 ========================================
-Four changes. Three of them are the difference between "this tool cannot run
+Five changes. Three of them are the difference between "this tool cannot run
 here" and "this tool runs here"; see docs/llm-risks.md for the full accounts.
 
 1. THE GPU DEVICE CONSTRAINT IS GONE (R-02)
@@ -33,8 +33,8 @@ here" and "this tool runs here"; see docs/llm-risks.md for the full accounts.
    Hence cores for vLLM, plain `cpu` shares for everything else:
 
        cores : 2 dedicated                = 4000 MHz reserved  (of 6000)
-       shares: 1200 + 100 + 100           = 1400 MHz           (of 2000 left)
-       memory: 12000 + 4000 + 300 + 300   = 16600 MB           (of ~30000)
+       shares: 1200 + 100                 = 1300 MHz           (of 2000 left)
+       memory: 12000 + 4000 + 300         = 16300 MB           (of ~30000)
        gpu   : 1                                               (of 1)
 
    tests/test_llm_job_template.py asserts that arithmetic, so it cannot rot.
@@ -62,11 +62,30 @@ here" and "this tool runs here"; see docs/llm-risks.md for the full accounts.
 4. IMAGES ARE PINNED AND NOT FORCE-PULLED (R-10, R-11)
    `vllm/vllm-openai:latest` is 10.5 GB and it moves. force_pull on every
    deployment turns a demo into a fifteen-minute silence, and an overnight
-   upstream release can break a rehearsed demo. All four images are pinned —
-   including python:3.12-slim-bullseye for the two helpers, where upstream's
+   upstream release can break a rehearsed demo. All three images are pinned —
+   including python:3.12-slim-bullseye for the startup check, where upstream's
    bare `python:slim-bullseye` is just as much a moving target — none are
    force-pulled, and all are pre-pulled by ansible/playbook-prepull-images.yml. The Hugging Face cache is
    bind-mounted from the host so a redeploy does not re-download the weights.
+
+5. THE ADMIN ACCOUNT IS MADE BEFORE THE DOOR OPENS, NOT AFTER (R-22)
+   Upstream claims the administrator with a `poststart` task that POSTs to
+   /api/v1/auths/signup once Open WebUI is listening. Open WebUI hands admin to
+   whoever registers first, so between the port opening and that POST landing,
+   the account belongs to whoever asks. Stage L4 measured the window at 0-3
+   seconds and then lost the race to it by accident: a smoke test polling the
+   UI registered ITSELF as the administrator, and the deployment's own
+   credentials were refused afterwards. The equivalent on a demo is somebody
+   opening the Quick Access link a moment early.
+
+   WEBUI_ADMIN_EMAIL / _PASSWORD / _NAME do the same job inside Open WebUI's
+   FastAPI lifespan: the account is created and signup is closed before uvicorn
+   creates the listening socket, so the window is zero rather than small. The
+   create-admin task is therefore gone, along with its container, its
+   `pip install` at startup, and 300 MB of the group's memory. It could not
+   have stayed alongside: with an admin already present, signup answers 403,
+   which upstream's script retries for fifteen minutes and then fails the
+   allocation over.
 */
 
 job "tool-llm-${JOB_UUID}" {
@@ -315,6 +334,13 @@ job "tool-llm-${JOB_UUID}" {
         # Without a fixed secret, every restart invalidates existing sessions and
         # logs the demo out mid-walkthrough.
         WEBUI_SECRET_KEY    = "${API_TOKEN}"
+        # [CAIOS] The administrator, created during startup — see note 5 in the
+        # header. Open WebUI creates it inside its FastAPI lifespan and closes
+        # signup in the same breath, both before uvicorn opens the port, so
+        # there is no moment at which the UI is reachable and unclaimed.
+        WEBUI_ADMIN_EMAIL    = "${OPEN_WEBUI_USERNAME}"
+        WEBUI_ADMIN_PASSWORD = "${OPEN_WEBUI_PASSWORD}"
+        WEBUI_ADMIN_NAME     = "${OWNER_NAME}"
         # [CAIOS] Nothing here serves Ollama. Left on, Open WebUI probes
         # host.docker.internal:11434 on every model listing: a DNS lookup that
         # cannot succeed, a delay on the first page a demo audience sees, and a
@@ -335,92 +361,5 @@ job "tool-llm-${JOB_UUID}" {
         memory = 4000
       }
     }
-
-    task "create-admin" {
-      # Open WebUI cannot be given an admin from configuration, so the account has
-      # to be claimed over HTTP. If this does not run, the first visitor to the
-      # URL becomes the administrator.
-
-      lifecycle {
-        hook    = "poststart"
-        sidecar = false
-      }
-
-      driver = "docker"
-
-      config {
-        force_pull = false
-        image      = "python:3.12-slim-bullseye"
-        command    = "bash"
-        args       = ["local/create_admin.sh"]
-      }
-
-      env {
-        # [CAIOS] Same reasoning as check_vllm_startup: the allocation's own
-        # address, over plain HTTP, inside the node.
-        OPEN_WEBUI_URL = "http://${NOMAD_ADDR_ui}"
-        NAME           = "${OWNER_NAME}"
-        EMAIL          = "${OPEN_WEBUI_USERNAME}"
-        PASSWORD       = "${OPEN_WEBUI_PASSWORD}"
-      }
-
-      resources {
-        cpu    = 100
-        memory = 300
-      }
-
-      template {
-        data = <<-EOF
-        #!/bin/bash
-
-        export PYTHONUNBUFFERED=1
-        pip install --quiet requests
-
-        python -c '
-        import os
-        import time
-
-        import requests
-
-        base_url = os.environ["OPEN_WEBUI_URL"]
-
-        data = {
-            "name": os.environ["NAME"],
-            "email": os.environ["EMAIL"],
-            "password": os.environ["PASSWORD"],
-            "profile_image_url": "/user.png",
-        }
-
-        # Open WebUI takes a while to warm up, and it downloads an embedding
-        # model on first boot, so early attempts are expected to fail.
-        deadline = time.time() + 900
-        while time.time() < deadline:
-            try:
-                r = requests.post(f"{base_url}/api/v1/auths/signup", json=data, timeout=10)
-            except requests.exceptions.RequestException as e:
-                print(f"not up yet: {type(e).__name__}")
-                time.sleep(2)
-                continue
-
-            if r.ok:
-                print(f"Admin created | Status: {r.status_code}")
-                break
-
-            # 400 here usually means the account already exists, which is a
-            # success for our purposes — this task must be safe to re-run.
-            if r.status_code == 400 and "already" in r.text.lower():
-                print("Admin already exists")
-                break
-
-            print(f"Error: status code {r.status_code} | {r.text[:200]}")
-            time.sleep(2)
-        else:
-            raise SystemExit("timed out waiting for Open WebUI to accept the admin signup")
-        '
-        EOF
-        destination = "local/create_admin.sh"
-      }
-    }
-
   }
 }

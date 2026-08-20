@@ -11,9 +11,10 @@ site can do alone; the platform around it now reads as a medical imaging
 platform rather than somebody else's stack. `docs/demo-script.md` is written
 and timed at 22 minutes.
 
-**Stage 6 — LLM deployment — is the current focus**, planned on 2026-08-19 and
-not yet built. `docs/llm-plan.md` is the plan; the entry below says what the
-analysis found. Alongside it, what is left is rehearsal and the V1 list.
+**Stage 6 — LLM deployment — is the current focus.** As of 2026-08-20 a
+researcher can deploy a private language model onto the lab's GPU and talk to it
+in a browser at their own subdomain. L0 to L4 are done; L5 and L6 remain.
+`docs/llm-plan.md` is the plan and carries what each stage actually found.
 
 ---
 
@@ -27,20 +28,23 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L3 done; L4 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L5 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L4** — Open WebUI end to end: the chat interface, the admin account
-   the job creates for itself, and streaming through Traefik in a real browser.
-2. **Rehearse the demo end to end in a browser**, following
+1. **One browser check on Stage L4** — everything else in that gate is done and
+   the streaming mechanism is measured, but nobody has looked at the chat
+   interface in a browser yet.
+2. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
+   than from AI4OS's GitHub (R-07).
+3. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
    thing.
-3. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-4. Record it.
+5. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -48,6 +52,108 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-20 — STAGE L4 GATE: the chat interface works, and two 200s were lying
+
+**A researcher can now deploy a private language model and talk to it.** Not
+through `curl` — through a chat window at their own subdomain, over HTTPS, with
+replies arriving word by word.
+
+Both faults this stage found returned **HTTP 200**. That is the whole character
+of it: every check the previous stages run was green throughout, because every
+check the previous stages run is about the engine.
+
+### 1. The chat interface could not reach the model beside it
+
+Open WebUI and vLLM are two tasks in the same Nomad allocation — same node,
+ports a hop apart. Upstream hands the UI the *public* HTTPS endpoint of the vLLM
+next to it, so the chat interface left the node, resolved a public hostname,
+crossed Traefik and came back into our own CA.
+
+```
+ERROR open_webui.routers.openai - [SSL: CERTIFICATE_VERIFY_FAILED]
+      self-signed certificate in certificate chain
+INFO  "GET /api/models HTTP/1.1" 200
+```
+
+Open WebUI catches the error and carries on. So: allocation healthy, login page
+working, admin account correct, **model dropdown empty**, and nothing outside the
+container's stderr saying why.
+
+This is R-05, which we had already found, fixed, and written up — as a problem
+with two helper tasks. It was missed here because this endpoint is not in our
+job template: it arrives from PAPI as `${API_ENDPOINT}`, so there was nothing
+wrong to see in the file we had audited. Patch `0010` sends it to
+`${NOMAD_ADDR_vllm}` instead, and D-36 is broadened from "health checks" to
+"nothing in a deployment reaches its own services by public hostname".
+
+### 2. The smoke test made itself the administrator
+
+Open WebUI grants admin to whoever registers first. Upstream claims the account
+from outside, with a `poststart` task polling `/api/v1/auths/signup` until it
+lands. Between the port opening and that POST succeeding, the deployment belongs
+to whoever asks.
+
+I measured the window, decided it was small enough to leave alone, and then lost
+the race to it on the very next run:
+
+| run | UI answered | `create-admin` | outcome |
+|---|---|---|---|
+| 1 | T+108 s | won at T+106 s | fine |
+| 2 | T+101 s | still polling | **the test registered itself as admin** |
+
+The script's only crime was checking whether a stranger could sign up — which
+you can only test by trying. It got a 200, and the deployment's real credentials
+were refused afterwards with *"The email or password provided is incorrect"*: an
+error describing the symptom and not the cause. The demo-day equivalent is
+somebody clicking *Quick access* a moment early, which R-21 already establishes
+people will do, because the link appears before it works.
+
+Fixed with `WEBUI_ADMIN_EMAIL` / `_PASSWORD` / `_NAME`, which Open WebUI handles
+inside its FastAPI lifespan — the account is created and signup closed **before
+uvicorn creates the listening socket**. Zero window instead of a small one. The
+`create-admin` task is gone; it could not have stayed, because signup answers
+403 once an admin exists and upstream's script retries that for fifteen minutes
+and then fails the allocation. That also frees a container, a `pip install` at
+startup, and 300 MB.
+
+R-22, and D-37: **a window that is small is not a window that is closed.**
+
+### What was measured
+
+| | |
+|---|---|
+| deploy → chat interface answering | **101 s** (LFM2.5-1.2B-Instruct) |
+| SSE chunk spacing through Traefik | **6.0 ms** — a buffered burst is ~0.02 ms |
+| thinking model, one sentence of answer | 2388 chars of `reasoning`, 199 of `content`, 2.8 s before the first answer token |
+
+The streaming test originally used a wall-clock floor and passed on 0.7 s of
+spread, because the model counted to twenty too quickly to judge. A wall-clock
+threshold is really a test of how fast the model is, and this catalogue spans 18
+to 129 tok/s. It measures the **gap between chunks** now, which separates
+streamed from buffered by three orders of magnitude instead of by luck.
+
+### Smaller things, and the L3 question answered
+
+Open WebUI probed `host.docker.internal:11434` for Ollama on every model
+listing — a DNS lookup that cannot succeed, on the first page an audience sees.
+It also shipped an `arena-model` placeholder that shared the dropdown with the
+real model; with one model deployed, it compares that model with itself. Both
+off.
+
+**The two thinking models render properly**, which Stage L3 left open with
+"confirm, or drop both". The stream separates `reasoning` from `content`, so
+Open WebUI has what it needs for its collapsible section. They stay — but they
+are not what to deploy live, because three seconds of visible thinking before a
+one-sentence answer is three seconds of dead air on camera.
+
+### What is left
+
+One thing: **nobody has opened it in a browser.** The mechanism is measured, but
+`docs/progress.md` records three faults in this project that appeared only when
+a human clicked something, and none of them had a failing programmatic check.
 
 ---
 

@@ -12,8 +12,12 @@ Read alongside:
 | `docs/llm-infrastructure.md` | What the hardware is, what fits, what changes |
 | `docs/llm-risks.md` | What will go wrong, and what it costs |
 
-**Nothing in this document has been implemented.** It is a plan, and the first
-stage is a ten-minute check that decides whether the rest of it is possible.
+**Status: Stages L0 to L4 are done.** A researcher can deploy a private model
+onto CAIOS hardware, open a chat interface at their own subdomain, and talk to
+it. What is left is L5 (model cards read from CAIOS rather than GitHub), L6
+(the demo beat), and one browser check on L4. Each stage below carries a "What
+it found" section written after it ran, which is usually more useful than the
+plan above it.
 
 ---
 
@@ -34,6 +38,14 @@ queues forever.
 
 Blocker 3 is the real one for scheduling. Blocker 4 is the one that would have
 eaten a day, because it fails with a traceback that never mentions certificates.
+
+**Blocker 4 was also under-counted.** It is written above as a problem with the
+two helper tasks, and it was really a problem with anything in the job that
+reaches its own deployment by hostname — **including Open WebUI itself**, found
+in Stage L4 and fixed by patch `0010`. That one does not kill the allocation; it
+serves an empty model list behind an HTTP 200. Stage L4 found a second fault of
+the same shape, R-22, where the first visitor to a deployment became its
+administrator.
 
 **Blocker 5 was found by running Stage L0, and it was not an LLM problem — it
 was cluster-wide.** Our GPUs are MIG-backed vGPUs; the device plugin allocated
@@ -645,11 +657,74 @@ turn through the UI's own API and assert the reply is non-empty → delete.
 stream token by token rather than arriving in one block. Server-sent events
 through Traefik is the failure this catches.
 
-### Gate
+### What it found — run on 2026-08-20
 
-- [ ] Chat works in a browser, streaming, over HTTPS
-- [ ] The admin account is the one the deployment created, and signup is closed
-- [ ] `docs/runbook.md` gains an LLM section, organised by symptom
+**Two faults, and both of them returned HTTP 200.** That is the theme of this
+stage: everything the previous stages check was green throughout, because
+everything the previous stages check was about the engine.
+
+**1. The chat interface could not reach the model beside it.** Open WebUI and
+vLLM are two tasks in the same allocation; upstream hands the UI the *public*
+HTTPS endpoint of the vLLM next to it, so the chat interface left the node,
+crossed Traefik and came back into our own CA. aiohttp raised
+`CERTIFICATE_VERIFY_FAILED`, Open WebUI caught it, and `GET /api/models`
+answered **200 with an empty list**. Login worked, the admin account was
+correct, the deployment was healthy, and the dropdown was empty.
+
+This is R-05, which this document had written up as a two-helper-task problem.
+It was missed because the endpoint is not in our `nomad.hcl` — it arrives from
+PAPI as `${API_ENDPOINT}`, so there was nothing wrong to see in the file we had
+already audited. Patch `0010`; D-36 broadened accordingly.
+
+**2. The first visitor to a deployment became its administrator.** Upstream
+claims the admin account from outside, with a `poststart` task polling
+`/api/v1/auths/signup`. The window between the port opening and that POST
+landing is 0–3 seconds — and on the second run of the new smoke test, **the
+smoke test won it**: a script checking whether signup was closed registered
+itself as the administrator, and the deployment's own credentials were then
+refused. R-22, fixed with `WEBUI_ADMIN_*` inside Open WebUI's lifespan, which
+completes before uvicorn opens the socket. The `create-admin` task is gone — it
+could not have coexisted, since signup answers 403 once an admin exists and
+upstream's script retries that for fifteen minutes and then fails the
+allocation.
+
+**Measured, on `LFM2.5-1.2B-Instruct`:**
+
+| measurement | value |
+|---|---|
+| deploy → chat interface answering | **101 s** |
+| SSE chunk spacing through Traefik | **6.0 ms** (a buffered burst is ~0.02 ms) |
+| `check_vllm_startup` gating the UI | works — the UI answering means the model is loaded |
+
+**Two smaller things, both now off:** Open WebUI probed
+`host.docker.internal:11434` for Ollama on every model listing, and shipped an
+`arena-model` placeholder that shared the dropdown with the real model.
+
+**The thinking models render correctly**, which was Stage L3's carried question.
+The stream separates the fields — for a one-sentence answer, 2388 characters of
+`reasoning` against 199 of `content`, with 2.8 s before the first answer token —
+so Open WebUI has what it needs for its collapsible section. They stay in the
+catalogue. They should not be the model deployed live in the demo.
+
+**A note on the smoke test's signup probe**, since it looks like a flaw. It has
+a side effect on purpose: the only way to test that a stranger cannot register
+is to try, and if it succeeds the run has taken ownership of the deployment it
+was testing. That is the finding, not a bug — and it is how R-22 was found.
+
+### Gate — passed 2026-08-20
+
+- [x] The admin account is the one the deployment created, and signup is closed
+      — asserted against the **first** response the UI ever serves, since
+      nothing closes signup after boot any more
+- [x] `docs/runbook.md` gains an LLM section, organised by symptom
+- [x] `scripts/check-llm-ui.sh` runs the whole cycle unattended and cleans up
+- [x] *(added during the stage)* The model dropdown names the model deployed —
+      the check that catches an empty list behind a 200
+- [x] *(carried from L3)* Open WebUI renders the two thinking models properly
+- [ ] **Chat works in a browser, streaming, over HTTPS** — the streaming
+      mechanism is verified programmatically at 6.0 ms between chunks, but a
+      person still has to look at it. `docs/progress.md` records three faults
+      that only appeared in a real browser.
 
 **Commit:** `llm: Open WebUI end to end, admin and streaming verified`
 
@@ -740,7 +815,7 @@ minutes; this should not push it past 26.
 | L1 | Join it as `caios_llm` | 0.5 | **done 2026-08-19** |
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
 | L3 | First vLLM deployment | 0.5 | **done — 9/9 models verified** |
-| L4 | Open WebUI end to end | 0.5 | **next** |
+| L4 | Open WebUI end to end | 0.5 | **done — one browser check left** |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4 + L5 |
 | | | **4.0** | |
@@ -760,9 +835,11 @@ while the other starts L2, and the calendar cost is about **2.5 days**.
   fine-tuning. The claim this feature supports is privacy, not medical
   competence, and the demo wording is bound by that.
 
-**Proposed, to be appended as D-33…D-36 once the implementation confirms them.**
-They are listed here rather than there because none is settled until the code
-that depends on them exists.
+**Settled on 2026-08-20, in `docs/decisions.md`.** These were proposed here on
+2026-08-19 and moved once Stages L2 to L4 confirmed them. Summarised below;
+`docs/decisions.md` carries the reasoning. **D-36 arrived broader than it was
+proposed** — Stage L4 found the narrow version had missed the case that
+mattered — and Stage L4 added D-37.
 
 **D-33 — GPU model allowlists are configuration, not source.**
 Patch `0009` reads `LLM_GPU_MODELS` and defaults to upstream's `Tesla T4`. The
@@ -779,10 +856,15 @@ checked fact, including the `cores`-versus-shares trap.
 turn a fifteen-minute silence into two minutes, and stop an overnight upstream
 release from breaking a rehearsed demo.
 
-**D-36 — In-allocation health checks talk to the allocation, not to Traefik.**
-Upstream's helper tasks call their own public HTTPS URL, which cannot work
-against a private CA. Using `${NOMAD_ADDR_*}` removes DNS, TLS and Traefik from
-the startup path and tests the thing actually being waited for.
+**D-36 — Nothing in a deployment reaches its own services by public hostname.**
+Proposed as a rule about health checks. Stage L4 found Open WebUI itself doing
+the same thing, and failing more quietly than the helpers do, so the rule is now
+about the deployment rather than about health checks.
+
+**D-37 — Service accounts a deployment needs are created at boot, not claimed
+over HTTP afterwards.** Open WebUI's administrator was claimed by a poststart
+task racing anyone who loaded the page. A window that is small is not a window
+that is closed.
 
 ---
 

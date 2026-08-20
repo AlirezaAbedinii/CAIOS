@@ -358,6 +358,68 @@ also hides the model-load time.
 Each of these has a default recorded above or in `docs/scope.md`, so none of them
 blocks work. They are tracked because deciding some of them late is expensive.
 
+## Settled on 2026-08-20
+
+D-33 to D-36 were written in `docs/llm-plan.md` on 2026-08-19 as proposals, "to
+be appended here once the implementation confirms them". Stages L2 to L4 have
+now done that, so they move here. D-36 arrives broader than it was proposed,
+because Stage L4 found the narrow version had missed the case that mattered.
+
+**D-33 — GPU model allowlists are configuration, not source.**
+Patch `0009` reads `LLM_GPU_MODELS` and defaults to upstream's `Tesla T4`, so an
+unset variable behaves exactly as upstream does. The Nomad-side device
+constraint is dropped entirely rather than retargeted: with one GPU model in the
+cluster it distinguishes nothing and can only go stale — which it did, once,
+when the device plugin upgrade renamed the card under us.
+
+**D-34 — Job resource budgets are asserted by a test, not by a comment.**
+Upstream's LLM job asks for 8 cores on 3-core nodes, and the failure mode is a
+job that pends forever with no error anywhere. `tests/test_llm_job_template.py`
+makes the budget a checked fact, including the `cores`-versus-shares trap, and
+checks the header comment still matches the resources below it.
+
+**D-35 — Container images in job templates are pinned, and never force-pulled.**
+`vllm/vllm-openai:latest` is 30.8 GB on disk and it moves. Pinned tags plus
+pre-pulling turn a fifteen-minute silence into two minutes, and stop an
+overnight upstream release from breaking a rehearsed demo.
+
+**D-36 — Nothing in a deployment reaches its own services by public hostname.**
+*Broadened on 2026-08-20.* Proposed as "in-allocation health checks talk to the
+allocation, not to Traefik", which was true and too narrow: it described the two
+helper tasks, and Stage L4 found **Open WebUI itself** doing the same thing —
+handed the public HTTPS endpoint of the vLLM task beside it in the same
+allocation.
+
+The helpers fail loudly, by killing the allocation. The application catches the
+TLS error and serves an empty model list behind an HTTP 200, which is worse. So
+the rule is now about the deployment and not about health checks: if a task
+needs a service in its own allocation, it addresses it with `${NOMAD_ADDR_*}`
+over plain HTTP. That removes DNS, Traefik and TLS from a path where none of
+them are doing anything useful, and it is enforced by unit tests for both the
+job template and patch `0010`.
+
+Applies beyond this tool. Any AI4OS deployment behind a private CA has this
+fault, and we should report it.
+
+**D-37 — Service accounts a deployment needs are created at boot, not claimed
+over HTTP afterwards.**
+Open WebUI grants administrator to whoever registers first, and upstream claims
+that account with a `poststart` task polling `/api/v1/auths/signup`. Between the
+port opening and that POST landing, the deployment belongs to whoever asks.
+
+Measured at 0–3 seconds, and then hit by accident: a smoke test checking whether
+signup was closed registered *itself* as the administrator, after which the
+deployment's real credentials were refused with an error describing the symptom
+and not the cause. `WEBUI_ADMIN_EMAIL` / `_PASSWORD` / `_NAME` do the same job
+inside Open WebUI's FastAPI lifespan, which completes before uvicorn creates the
+listening socket, so the window is zero rather than small.
+
+The generalisation is the decision: **a window that is small is not a window
+that is closed.** Where a service can be configured to create its own
+credentials at startup, that is preferred over any amount of polling from
+outside, however tight the loop. See R-22.
+
+
 ---
 
 ## Log
@@ -396,3 +458,11 @@ proposals renumbered to D-33 through D-36. `docs/llm-infrastructure.md` gained a
 section explaining exactly what the `/dev/vdb` reformat does and why the node is
 never certified without it — the original text asserted it was necessary without
 showing the mechanism.
+
+**2026-08-20** — Stage L4: Open WebUI end to end. Two faults found, both of
+which returned HTTP 200 while being completely broken — the chat interface could
+not reach the model beside it (patch `0010`, R-05 extended), and the first
+visitor to a deployment became its administrator (R-22). Recorded D-33 through
+D-37; D-36 arrives broader than proposed because the narrow version had missed
+the case that mattered. `scripts/check-llm-ui.sh` is the gate, and the runbook
+gained an LLM section organised by symptom.

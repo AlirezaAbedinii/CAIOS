@@ -469,6 +469,116 @@ at the top of the script; change both.
 
 ---
 
+## Deploying an LLM
+
+**Tools → Deploy your LLM.** Pick a model, fill in an email and a password for
+the chat interface, click Deploy. About **two to four minutes** later there is a
+chat window at its own subdomain and an OpenAI-compatible API endpoint beside it.
+
+```bash
+bash scripts/check-llm-config.sh                       # is it deployable at all
+bash scripts/check-llm-deploy.sh                       # the engine, end to end
+bash scripts/check-llm-ui.sh                           # the chat interface too
+bash scripts/check-llm-ui.sh --keep                    # ...and leave it running
+bash scripts/check-llm-catalogue.sh                    # all nine models, ~1 hour
+```
+
+All of them deploy and then delete. `--keep` prints the URL and the generated
+password and leaves a GPU held until you delete it.
+
+### What to expect, so you can tell slow from broken
+
+| | |
+|---|---|
+| deploy → chat interface answering | 80–200 s, depending on the model |
+| of which model loading | most of it — `torch.compile` and 86 CUDA graphs |
+| the default model is the **slowest** | Qwen3.5-2B, ~180 s. LFM2.5-1.2B-Instruct is ~80 s |
+| generation | 18–129 tok/s across the catalogue |
+| GPU used | ~9 GB of 10.3 GB |
+
+Redeploying the same model saves only about 20 seconds. The weights are cached;
+the compilation is not, and the compilation is the expensive part. **So
+pre-deploy before the demo** — see `docs/demo-script.md`.
+
+Open WebUI starts only after the model has finished loading, because
+`check_vllm_startup` is a non-sidecar `prestart` task. That gives you a useful
+shortcut: **if the chat interface answers at all, the model is ready.**
+
+### The chat interface loads, but the model dropdown is empty
+
+The one to know. Everything returns HTTP 200 — the login page, the API, the
+model list — and the list is empty.
+
+Open WebUI could not reach vLLM. Read the container's stderr, which is the only
+place that says so:
+
+```bash
+nomad alloc logs -namespace caios <alloc> open-webui | grep -i "ssl\|connect"
+```
+
+`CERTIFICATE_VERIFY_FAILED` means PAPI handed the UI the **public** vLLM
+hostname instead of the allocation's own address — patch `0010` is missing from
+the running image. Rebuild it:
+
+```bash
+bash scripts/apply-patches.sh
+cd compose && docker compose --env-file ../configs/env/caios.env up -d --build papi
+```
+
+### "The email or password provided is incorrect", with the right password
+
+Somebody else got there first. Open WebUI gives the administrator account to
+whoever registers first, and if signup was open when a stranger loaded the page,
+the deployment is theirs (R-22).
+
+Check whether the door is still open:
+
+```bash
+curl -sk https://ui-<uuid>.<domain>/api/config | python3 -m json.tool | grep -i signup
+```
+
+`"enable_signup": true` on a running deployment means `WEBUI_ADMIN_EMAIL` and
+`WEBUI_ADMIN_PASSWORD` did not reach the container — check the `open-webui`
+task's env, and that PAPI was restarted after the last change to
+`configs/papi/tools/ai4os-llm/nomad.hcl`, which is bind-mounted and read at
+startup.
+
+There is no recovery for an already-claimed deployment. Delete it and deploy
+again; it costs two minutes.
+
+### The reply appears all at once instead of word by word
+
+Server-sent events are being buffered somewhere between the browser and the
+container — almost always a proxy. `scripts/check-llm-ui.sh` measures the gap
+between chunks and will say so; healthy is around 6 ms, a buffered stream is
+tens of microseconds. Check Traefik has no `buffering` middleware on that router.
+
+### The deployment's link is dead the moment it appears
+
+Wait ten seconds and reload. PAPI publishes the endpoint before Nomad has placed
+the allocation, and until then the hostname still contains `${meta.domain}` and
+cannot resolve (R-21). Self-healing, and worth a beat of patience on camera
+rather than a fix.
+
+### The answer arrives in a "Thinking" block and the reply looks empty
+
+Two models in the catalogue are reasoning models — `LFM2.5-1.2B-Thinking` and
+`DeepSeek-R1-Distill-Qwen-1.5B`. They answer into `reasoning`, not `content`.
+Open WebUI renders that as a collapsible section, which is the intended
+experience; a script reading `content` gets `None` (R-20).
+
+Measured for one sentence of answer: **2388 characters of thinking, 199 of
+answer, 2.8 seconds before the first answer token.** Fine to show, but do not
+make one of them the model you deploy live.
+
+### The dropdown offers "arena-model" as well
+
+`ENABLE_EVALUATION_ARENA_MODELS` is not reaching the container. It is Open
+WebUI's blind A/B comparison placeholder, and with one model deployed it
+compares that model with itself. Harmless, confusing, and off in our template.
+
+---
+
 ## Before the demo *(not yet exercised)*
 
 - [ ] Pre-pull every image onto every node. A cold multi-GB pull mid-demo is the
@@ -503,3 +613,9 @@ at the top of the script; change both.
    `CERTIFICATE_VERIFY_FAILED`.
 10. Catalogue edited but the marketplace unchanged — GitHub's raw CDN caches
     `.gitmodules` for five minutes. Not PAPI's fault; wait, then restart PAPI.
+11. A chat interface with an empty model dropdown — Open WebUI could not reach
+    the vLLM beside it, and reports that as an HTTP 200 with no models. Patch
+    `0010` missing from the running PAPI image.
+12. Somebody opened a fresh LLM deployment before its owner did, and is now its
+    administrator. Should be impossible now (R-22), but the symptom is the
+    owner's own password being refused.

@@ -541,12 +541,56 @@ gone. Idempotent and self-cleaning, so it can run in a loop.
 The throughput number is not vanity. It decides whether the demo can afford a
 live chat or has to show a pre-warmed one.
 
-### Gate
+### What it found — run on 2026-08-19
 
-- [ ] A completion returns, from a model running on `caios_llm`'s GPU
-- [ ] Startup time and tokens/sec recorded in `docs/progress.md`
-- [ ] Second deployment of the same model is measurably faster (cache works)
-- [ ] The model list trimmed to what actually loaded
+**Complete. A model deployed through the dashboard's own API answered a question
+on CAIOS hardware.** The 405 that started this work is gone:
+`POST /v1/deployments/tools?tool_name=ai4os-llm` returns `{"status":"success"}`.
+
+| measurement | value |
+|---|---|
+| deploy → `/v1/models` answering | **175–204 s** |
+| of which weight download (cold cache) | ~22 s |
+| sustained generation | **97.8 tok/s** over 300 tokens |
+| GPU memory used | **8963 MiB**, 1603 MiB still free |
+| placed on | `caios-wn-gpu-3` — the affinity worked |
+
+Everything L2 configured is confirmed live, from PAPI's own view of the
+deployment: `vllm/vllm-openai:v0.27.1` (pinned), `--gpu-memory-utilization 0.80`,
+`cpu_num 2`, `gpu_num 1`, `memory_MB 12000`.
+
+**R-05 is proven, not just reasoned about.** `check_vllm_startup` terminated with
+**exit code 0** at +175 s. Upstream's version would have died on our self-signed
+CA and taken the allocation with it.
+
+**R-06 is confirmed by a running model.** 8963 MiB used against a 9680 MiB
+budget. vLLM's own default of 0.90 would have asked for 10890 MiB, which is more
+than the card had free.
+
+**Two corrections to this plan's own claims.**
+
+**1. The weight cache does not make redeployment quick.** R-11 said "seconds". It
+saves **22 s of ~190 s** — cold 197 s, warm 175 s, alloc creation to health check
+passing. The dominant cost is `torch.compile` and capturing 86 CUDA graphs on a
+16-SM slice, which happens every time. The cache is still worth having for
+bandwidth and for not depending on Hugging Face, but the demo must pre-deploy
+regardless.
+
+**2. The default model returned an empty `content` field.** See R-20 — the
+biggest find of the stage, and the reason the smoke test asserts a non-empty
+completion rather than a 200. Upstream's `--reasoning-parser qwen3` put the whole
+answer in a `reasoning` field, so every ordinary OpenAI client would have read
+`content` and got `None`. Fixed by dropping the parser from the two
+general-purpose Qwen entries, verified by experiment rather than by guessing
+between two candidate causes.
+
+### Gate — passed 2026-08-19
+
+- [x] A completion returns, from a model running on `caios_llm`'s GPU
+- [x] Startup time and tokens/sec recorded
+- [x] Cache benefit measured — and the plan's claim about it corrected
+- [x] `scripts/check-llm-deploy.sh` runs the whole cycle unattended and cleans up
+- [x] The default model returns usable `content` to a plain OpenAI request
 
 **Commit:** `llm: first vLLM deployment serving on CAIOS`
 
@@ -673,8 +717,8 @@ minutes; this should not push it past 26.
 | L0 | Verify node 6, prove CUDA works | 0.5 | **done 2026-08-19** |
 | L1 | Join it as `caios_llm` | 0.5 | **done 2026-08-19** |
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
-| L3 | First vLLM deployment | 0.5 | **unblocked — next** |
-| L4 | Open WebUI end to end | 0.5 | After L3 |
+| L3 | First vLLM deployment | 0.5 | **done 2026-08-19** |
+| L4 | Open WebUI end to end | 0.5 | **next** |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4 + L5 |
 | | | **4.0** | |

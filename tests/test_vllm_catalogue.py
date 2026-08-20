@@ -123,6 +123,38 @@ def test_no_offered_model_needs_a_token(models):
         assert cfg["needs_HF_token"] is False, f"{model_id} is marked as gated"
 
 
+def test_default_model_returns_plain_content(models):
+    """The model the form pre-selects must answer a plain OpenAI request.
+
+    Measured on 2026-08-19 (docs/llm-risks.md R-20): with
+    `--reasoning-parser qwen3`, Qwen3.5 put its entire answer in a `reasoning`
+    field and returned `content: null`. Every ordinary client — the OpenAI SDK,
+    LangChain, an editor plugin, the notebook beat of the demo — reads `content`
+    and would have got None while the deployment looked perfectly healthy.
+
+    A reasoning parser is right for a model whose selling point is showing its
+    working. It is wrong for the default.
+    """
+    default = next(iter(models))
+    assert "--reasoning-parser" not in models[default]["args"], (
+        f"{default} is the deploy form's default and sets a reasoning parser; "
+        "it will return content: null to a plain OpenAI request"
+    )
+
+
+def test_reasoning_parsers_only_on_thinking_models(models):
+    """Kept deliberately on the models where separated reasoning is the point,
+    so that dropping it everywhere is not mistaken for the rule."""
+    expected = {
+        "LiquidAI/LFM2.5-1.2B-Thinking",
+        "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    }
+    actual = {k for k, v in models.items() if "--reasoning-parser" in v["args"]}
+    assert actual <= expected, (
+        f"unexpected reasoning parser on {actual - expected} — see R-20"
+    )
+
+
 def test_default_model_is_deliberate(root, models):
     """PAPI sets the form's default to models[0], so file order is user-visible."""
     first = next(iter(models))

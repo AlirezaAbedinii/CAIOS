@@ -189,7 +189,12 @@ if the model is too big when the model is fine.
 **Fix:** `--gpu-memory-utilization 0.80` on every entry in our curated
 `configs/papi/vllm.yaml`, plus a unit test that fails the build if any model
 omits it or sets it above 0.85. `scripts/check-llm-node.sh` prints this table
-for any node, so it can be re-derived rather than trusted. → Stage L2.
+for any node, so it can be re-derived rather than trusted.
+
+**Confirmed by a running deployment on 2026-08-19.** With Qwen3.5-2B loaded,
+`nvidia-smi` on the node reported **8963 MiB used, 1603 MiB free** against a
+budget of 9680 MiB. So 0.80 fits with room to spare, and 0.90's 10890 MiB target
+would indeed have exceeded what the card had. → Stage L2.
 
 ### R-07 · The dashboard reads its model catalogue from AI4OS's GitHub, not from us
 
@@ -233,6 +238,49 @@ open** — so the first person to open the URL becomes the administrator.
 
 Contained on a private subnet. Still wrong, and cheap to fix in the same patch
 as R-01. Worth reporting upstream. → Stage L2.
+
+### R-20 · The model returns an empty `content` field — **FOUND AND FIXED 2026-08-19**
+
+**The first real deployment answered correctly and looked broken.**
+
+```json
+"content":   null,
+"reasoning": "Federated learning is a machine learning approach where a global
+              model is trained across multiple decentralized devices..."
+```
+
+Qwen3.5 has thinking enabled by default, and upstream's `--reasoning-parser qwen3`
+routes everything before `</think>` into a separate `reasoning` field. The model
+answered *inside* the think block and never emitted the closing tag, so the
+parser classified the entire response as reasoning and left `content` null.
+
+**Why this is a silent failure and not a cosmetic one.** Every OpenAI-compatible
+client reads `content`: the Python SDK, LangChain, editor plugins, and the
+"call it from a notebook in four lines" beat of the demo. All of them get `None`
+and conclude the platform is broken. The only reason it was caught is that
+`scripts/check-llm-deploy.sh` asserts a **non-empty completion** rather than a
+200 — a 200 is exactly what this returns.
+
+Upstream has the same class of problem recorded in its own catalogue: two Phi
+models are commented out with *"openwebui does not render it's response
+correctly."*
+
+**Fix, and it was verified rather than guessed.** Two candidate causes: either
+the parser was mis-classifying output that has no think tags, or the model really
+wraps everything in tags. Those imply opposite fixes, so they were distinguished
+by experiment — `enable_thinking: false` produced clean `content`, and removing
+`--reasoning-parser` produced clean `content` **with no `<think>` markup leaking
+through**. The tags come from the prompt template, not the generation.
+
+So `--reasoning-parser` is dropped from the two general-purpose Qwen entries in
+`configs/papi/vllm.yaml`, and **kept** on `LFM2.5-1.2B-Thinking` and
+`DeepSeek-R1-Distill-Qwen-1.5B`, where separated reasoning is the point of the
+model and Open WebUI renders it as a collapsible section.
+
+**The general rule for this catalogue:** a model offered as a default must return
+`content` to a plain OpenAI request. Anything that only works with extra
+request-level arguments is a demo that breaks the moment someone writes ordinary
+code against it.
 
 ### R-09 · Secrets are written in clear text into the Nomad job specification
 
@@ -303,13 +351,30 @@ reverted. A silent regression here costs 30 GB at the worst possible moment.
 
 Weights land in the container's writable layer, which is discarded when the
 allocation stops. Delete and redeploy and the 4.5 GB comes down from Hugging
-Face again. Fine once; painful during a rehearsal loop.
+Face again.
 
-**Fix:** a host bind mount for the Hugging Face cache
+*Fixed:* a host bind mount for the Hugging Face cache
 (`/mnt/data/hf-cache:/root/.cache/huggingface`) with `HF_HOME` pointed at it.
-Nomad's Docker driver already reports `volumes.enabled = true`, and the
-containerd root is on the 125 GB volume. Second deployment of the same model
-then starts in seconds. → Stage L2, measured in L3.
+Verified working — 4.3 GB of Qwen3.5-2B persisted to the host volume, and the
+directory is created by `playbook-prepull-images.yml` rather than left for Docker
+to invent (the D-29 failure mode).
+
+**Correcting what this entry used to claim.** It said a second deployment would
+"start in seconds". It does not. Measured on 2026-08-19, alloc creation to the
+health check passing:
+
+| | cold cache | warm cache |
+|---|---|---|
+| Qwen3.5-2B (4.5 GB) | **197s** | **175s** |
+
+**The cache saves about 22 seconds of a ~190 second startup.** The dominant cost
+is not the download — it is `torch.compile` plus capturing 86 CUDA graphs on a
+16-SM MIG slice, and that happens on every start regardless.
+
+So the cache is still worth having (it saves bandwidth, and it makes startup
+independent of Hugging Face being reachable and fast) but it is **not** a way to
+make deployment quick. The demo has to deploy the LLM ahead of time either way —
+which is what the ordering rule in R-14 already requires for a different reason.
 
 ### R-12 · vLLM startup is slow even when everything is right
 
@@ -317,10 +382,20 @@ Weight load, `torch.compile`, and CUDA graph capture happen before the first
 token. On 16 SMs expect **two to five minutes** from allocation to a working
 `/v1/models`, with the deployment showing as starting the whole time.
 
+**Measured on 2026-08-19, and the estimate was right:** **175-204 seconds** from
+`POST /v1/deployments/tools` to `/v1/models` answering, for Qwen3.5-2B. Roughly
+30s of that is weight download on a cold cache; the rest is `torch.compile` and
+capturing 86 CUDA graphs.
+
+Once up, it is **fast**: **97.8 tokens/second** sustained over a 300-token
+generation, which is comfortably fluent for a live chat and better than a 16-SM
+slice suggests.
+
 **Fix:** none needed, but the demo must not wait for it live. The demo script
 deploys the LLM first and comes back to it, exactly as it already does for the
-federated-learning bundles. If it is still too slow, `--enforce-eager` removes
-graph capture at some cost to throughput. Measured and recorded in Stage L3.
+federated-learning bundles — which R-14 requires anyway for placement reasons.
+If it ever needs to be faster, `--enforce-eager` removes graph capture at some
+cost to throughput.
 
 ### R-13 · Open WebUI downloads an embedding model on first boot
 

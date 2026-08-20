@@ -27,14 +27,13 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0, L1, L2 done; L3 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L3 done; L4 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L3** — the first real vLLM deployment. Everything it needs is in
-   place: the node, the config, the images, and a job that `nomad job plan` says
-   will allocate.
+1. **Stage L4** — Open WebUI end to end: the chat interface, the admin account
+   the job creates for itself, and streaming through Traefik in a real browser.
 2. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
@@ -49,6 +48,95 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-20 — STAGE L3 GATE PASSED: a private model answered a question
+
+**The second headline feature works.** A researcher's account deployed a language
+model through the dashboard's own API onto the lab's GPU, and it answered:
+
+> Federated learning is a machine learning approach where a global model is
+> trained across multiple decentralized devices or servers, which share only
+> their local data and model updates rather than the raw data itself.
+
+The error that started this work — *"requires NVIDIA T4 GPUs"* — is gone.
+`POST /v1/deployments/tools?tool_name=ai4os-llm` returns `{"status":"success"}`.
+
+| measurement | value |
+|---|---|
+| deploy → `/v1/models` answering | **175–204 s** |
+| sustained generation | **97.8 tok/s** over 300 tokens |
+| GPU memory used | **8963 MiB**, 1603 MiB still free |
+| placed on | `caios-wn-gpu-3` — the affinity worked |
+
+PAPI's own view of the deployment confirms every L2 decision reached the running
+container: `vllm/vllm-openai:v0.27.1` (pinned, not `:latest`),
+`--gpu-memory-utilization 0.80`, `cpu_num 2`, `gpu_num 1`, `memory_MB 12000`.
+The API key came back through the documented Vault path,
+`GET /v1/secrets?subpath=/deployments/<id>`.
+
+**R-05 proven rather than reasoned about.** `check_vllm_startup` terminated with
+**exit code 0** at +175 s. Upstream's version calls its own public HTTPS URL and
+would have died on our self-signed CA, taking the allocation with it.
+
+**R-06 confirmed by a running model.** 8963 MiB used against a 9680 MiB budget.
+vLLM's own default of 0.90 would have wanted 10890 MiB — more than the card had
+free. The prediction and the measurement agree.
+
+### The find of the stage: the model answered, and looked broken
+
+The first completion came back like this:
+
+```json
+"content":   null,
+"reasoning": "Federated learning is a machine learning approach where..."
+```
+
+Qwen3.5 thinks by default, and upstream's `--reasoning-parser qwen3` routes
+everything before `</think>` into a separate field. The model answered *inside*
+the think block and never emitted the closing tag, so the parser took the whole
+response and left `content` null.
+
+**Every ordinary OpenAI client reads `content`** — the Python SDK, LangChain,
+editor plugins, and the "call it from a notebook in four lines" beat of the demo.
+All of them would have got `None` from a deployment that reported itself
+perfectly healthy. It was caught only because `check-llm-deploy.sh` asserts a
+**non-empty completion** rather than a 200, which is exactly what this returns.
+
+Upstream has the same class of bug recorded in its own catalogue: two Phi models
+are commented out with *"openwebui does not render it's response correctly."*
+
+There were two candidate causes implying opposite fixes — a parser mis-classifying
+untagged output, or a model that really wraps everything in tags — so they were
+separated by experiment rather than picked. `enable_thinking: false` gave clean
+`content`; removing `--reasoning-parser` also gave clean `content` **with no
+`<think>` markup leaking**. The tags come from the prompt template, not the
+generation. Parser dropped from the two general-purpose Qwen entries, kept on
+`LFM2.5-1.2B-Thinking` and `DeepSeek-R1-Distill`, where separated reasoning is
+the point.
+
+Two new unit tests encode the rule, and both were checked against this morning's
+configuration to confirm they catch it.
+
+### A correction to this plan's own claim
+
+R-11 said a cached redeploy would "start in seconds". It does not. Alloc creation
+to health check passing:
+
+| | cold cache | warm cache |
+|---|---|---|
+| Qwen3.5-2B | **197 s** | **175 s** |
+
+**The cache saves ~22 s of a ~190 s startup.** The dominant cost is
+`torch.compile` and capturing 86 CUDA graphs on a 16-SM slice, which happens
+every start. The cache still earns its place — bandwidth, and independence from
+Hugging Face being up — but the demo must pre-deploy either way, which R-14's
+ordering rule already required.
+
+**`scripts/check-llm-deploy.sh`** runs the whole cycle unattended: deploy, wait,
+assert a real completion, report throughput and GPU use, delete. Self-cleaning,
+so it can run in a loop.
 
 ---
 

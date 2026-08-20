@@ -65,12 +65,17 @@ models:
     context: '16K'
     needs_HF_token: False
     # weights 4.55 GB -> ~4.1 GB left for KV cache.
+    # NO --reasoning-parser. Measured on 2026-08-19: with it, this model returns
+    # `content: null` and puts the whole answer in a `reasoning` field, because
+    # Qwen3.5 thinks by default and answers inside the think block without ever
+    # emitting `</think>`. Any plain OpenAI client — a notebook, LangChain, an
+    # editor plugin — reads `content` and gets nothing, which looks like a broken
+    # platform. See docs/llm-risks.md R-20.
     args: [
       '--gpu-memory-utilization', '0.80',
       '--max-model-len', '16384',
       '--enable-auto-tool-choice',
       '--tool-call-parser', 'qwen3_coder',
-      '--reasoning-parser', 'qwen3',
       ]
 
   Qwen/Qwen3.5-0.8B:
@@ -81,12 +86,12 @@ models:
     context: '32K'
     needs_HF_token: False
     # weights 1.75 GB -> ~6.8 GB left for KV cache. Comfortable.
+    # No --reasoning-parser, for the same measured reason as Qwen3.5-2B above.
     args: [
       '--gpu-memory-utilization', '0.80',
       '--max-model-len', '32768',
       '--enable-auto-tool-choice',
       '--tool-call-parser', 'qwen3_coder',
-      '--reasoning-parser', 'qwen3',
       ]
 
   # ====================================================================================

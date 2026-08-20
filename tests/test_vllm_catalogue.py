@@ -143,8 +143,15 @@ def test_default_model_returns_plain_content(models):
 
 
 def test_reasoning_parsers_only_on_thinking_models(models):
-    """Kept deliberately on the models where separated reasoning is the point,
-    so that dropping it everywhere is not mistaken for the rule."""
+    """Kept deliberately on exactly two models, and the choice was measured.
+
+    Both options were tried on 2026-08-20. With the parser these return
+    `content: null` and put the answer in `reasoning` — fine in Open WebUI,
+    wrong for a plain OpenAI client. Without it, `content` holds the model's
+    unedited thinking, opening with a literal "<think>" tag in the LFM2.5 case.
+    The parser is kept because a visible think-tag is the worse failure in front
+    of an audience, and their catalogue descriptions warn API callers.
+    """
     expected = {
         "LiquidAI/LFM2.5-1.2B-Thinking",
         "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",

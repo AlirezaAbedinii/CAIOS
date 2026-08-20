@@ -135,12 +135,21 @@ models:
 
   LiquidAI/LFM2.5-1.2B-Thinking:
     name: 'LFM2.5-1.2B-Thinking'
-    description: 'A 1B parameter instruction-tuned model from the LFM 2.5 series, optimized for thinking tasks. Shows its reasoning, which demonstrates well.'
+    description: 'A 1B parameter model from the LFM 2.5 series that works through problems step by step. Its reasoning is returned separately from its answer, so it reads well in the chat interface — but code calling the API must read the `reasoning` field, not `content`.'
     family: 'LiquidAI'
     license: 'LFM 1.0'
     context: '32K'
     needs_HF_token: False
     # weights 2.34 GB -> ~6.2 GB left for KV cache.
+    # KEEPS --reasoning-parser, unlike the general-purpose models. Both options
+    # were measured on 2026-08-20 and both are imperfect:
+    #   with it    -> content: null, reasoning holds the answer (R-20). Fine in
+    #                 Open WebUI, which renders reasoning as a collapsible
+    #                 section; a plain OpenAI client reads content and gets None.
+    #   without it -> content holds the model's raw thinking, opening with a
+    #                 literal "<think>" tag. Looks broken to a human.
+    # The parser is kept because the demo audience is people looking at a chat
+    # window, and a visible "<think>" tag is the worse of the two failures.
     args: [
       '--gpu-memory-utilization', '0.80',
       '--max-model-len', '32768',
@@ -200,12 +209,15 @@ models:
 
   deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B:
     name: 'DeepSeek-R1-Distill-Qwen-1.5B'
-    description: 'A distilled version of DeepSeek-R1, based on Qwen architecture, optimized for efficient reasoning and inference tasks.'
+    description: 'A distilled version of DeepSeek-R1, based on Qwen architecture, optimized for reasoning. Like the other thinking model here, its reasoning is returned separately from its answer, so code calling the API must read the `reasoning` field, not `content`.'
     family: 'deepseek-ai'
     license: 'Apache 2.0'
     context: '32K'
     needs_HF_token: False
     # weights 3.55 GB -> ~5.1 GB left for KV cache.
+    # Keeps --reasoning-parser, for the same measured reason as LFM2.5-Thinking
+    # above: without it, content is the model's unedited thinking rather than an
+    # answer.
     args: [
       '--gpu-memory-utilization', '0.80',
       '--max-model-len', '32768',

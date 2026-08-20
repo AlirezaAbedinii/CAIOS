@@ -282,6 +282,48 @@ model and Open WebUI renders it as a collapsible section.
 request-level arguments is a demo that breaks the moment someone writes ordinary
 code against it.
 
+**The two thinking models are a deliberate exception, and both options were
+measured (2026-08-20).** Removing their parser does not produce a clean answer —
+it produces the model's unedited thinking in `content`, opening with a literal
+`<think>` tag on LFM2.5. So:
+
+| | `content` | how it reads |
+|---|---|---|
+| parser kept | `null` | good in Open WebUI, `None` from a script |
+| parser removed | raw thinking | looks broken to a person |
+
+Kept, because the demo audience is people looking at a chat window. Their
+catalogue descriptions now tell API callers to read `reasoning`. **Stage L4 must
+confirm Open WebUI actually renders them well** — if it does not, drop both.
+Seven uniform models beat nine with two that need explaining.
+
+### R-21 · The deployment endpoint is a dead link until the allocation is placed
+
+**Found on 2026-08-20 by a test harness that trusted it.** `GET /v1/deployments/tools/<id>`
+publishes the endpoint before Nomad has placed the allocation, and at that point
+it still contains Nomad's own placeholder:
+
+```
+https://vllm-<uuid>.${meta.domain}-deployments.192.168.104.105.sslip.io
+                    ^^^^^^^^^^^^^ literal, unsubstituted
+```
+
+`meta.domain` is interpolated by the Nomad *client*, so before placement there is
+nothing to interpolate it with. The hostname cannot resolve — `curl` reports
+status `000`.
+
+It cost an hour here: `scripts/check-llm-deploy.sh` fetched the endpoint once and
+cached it, so any deployment whose first poll landed in that window spent its
+whole timeout curling an unresolvable name, and three perfectly healthy models
+were reported as failures. Fixed by treating anything containing `${` as "not an
+endpoint yet" and re-fetching.
+
+**The same window exists in the dashboard.** A user who clicks *Quick access* on
+a deployment that has been accepted but not yet placed gets a dead link. It is a
+few seconds wide and self-healing, so it is a papercut rather than a fault — but
+it is exactly the sort of thing that happens on camera. Worth knowing about
+before the demo, and worth a beat of patience in the script rather than a fix.
+
 ### R-09 · Secrets are written in clear text into the Nomad job specification
 
 **Verified.** `nomad.hcl` puts `HUGGING_FACE_HUB_TOKEN`, `VLLM_API_KEY` and the

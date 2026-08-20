@@ -51,6 +51,87 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-08-20 — the catalogue is real: 9 of 9 models load and answer
+
+Stage L3's last open gate item closed. Every model the dashboard offers was
+deployed, asked a question, and deleted — `scripts/check-llm-catalogue.sh`, about
+an hour, unattended. Full table in `demo/llm/README.md`.
+
+```
+Qwen3.5-2B (default)            ok    182 s    76.6 tok/s
+Qwen3.5-0.8B                    ok    172 s   128.7
+Ministral-3-3B-Instruct-2512    ok    101 s    18.2
+LFM2.5-1.2B-Instruct            ok     81 s    59.7
+LFM2.5-1.2B-Thinking            ok*    81 s      -
+LFM2.5-VL-450M                  ok     91 s    68.9
+LFM2.5-VL-1.6B                  ok     91 s    63.4
+granite-4.1-3b                  ok    111 s    51.4
+DeepSeek-R1-Distill-Qwen-1.5B   ok*    91 s      -
+```
+
+**Nothing ran out of GPU memory.** Including `granite-4.1-3b`, which this
+repository's own config comments had flagged as "the tightest model we offer; if
+Stage L3 finds it will not load, drop it". It loads in 111 s. The memory
+arithmetic was sound and the warning was wrong in the safe direction — which
+only testing could establish.
+
+Two findings for the demo script: **the default is the slowest model on the
+list** (182 s against LFM2.5-1.2B-Instruct's 81 s), and throughput varies more
+than parameter count predicts, from 18 to 129 tok/s.
+
+### The two thinking models, and a decision made by measurement
+
+`LFM2.5-1.2B-Thinking` and `DeepSeek-R1-Distill` answer into `reasoning` rather
+than `content` — R-20 again. Both alternatives were tried:
+
+| | `content` | how it reads |
+|---|---|---|
+| reasoning parser kept | `null` | Open WebUI renders it as a collapsible section; a script gets `None` |
+| parser removed | the model's raw thinking | opens with a literal `<think>` tag on LFM2.5 |
+
+Removing the parser does not produce a clean answer, it produces unedited
+thinking. So the parser stays: the demo audience is people looking at a chat
+window, and a visible `<think>` tag is the worse failure. Their catalogue
+descriptions now tell API callers to read `reasoning`, and **Stage L4 has to
+confirm Open WebUI really does render them well** — if not, drop both, because
+seven uniform models beat nine with two that need explaining.
+
+### An hour lost to my own test harness, and what it exposed
+
+The first sweep reported three healthy models as timeouts, including
+`Qwen3.5-2B`, which had already been deployed successfully four times that day.
+That mismatch is what prompted reading the failure output instead of believing
+the table.
+
+The cause was mine: PAPI publishes a deployment's endpoint **before** Nomad has
+placed the allocation, and at that point it still reads
+
+```
+https://vllm-<uuid>.${meta.domain}-deployments.192.168.104.105.sslip.io
+```
+
+`meta.domain` is interpolated by the Nomad client, so before placement there is
+nothing to interpolate it with and the hostname cannot resolve. The harness
+fetched the endpoint once and kept it, so any deployment whose first poll landed
+in that window curled an unresolvable name for its whole timeout. Fixed by
+treating anything containing `${` as not-an-endpoint-yet.
+
+**The same window exists in the dashboard** — a user clicking *Quick access* too
+early gets a dead link. Seconds wide and self-healing, so a papercut rather than
+a fault, but exactly the sort of thing that happens on camera. Recorded as R-21.
+
+Two process notes, since both cost real time. An "early bail" added to
+`check-llm-deploy.sh` after the stage was verified regressed the readiness loop,
+and was reverted rather than debugged — changing a verified script and
+immediately using it for a long unattended run was the mistake. And the sweep
+printed nothing when a model failed, only the sections that exist on success, so
+the first failure arrived as a bare `TIMEOUT` with the diagnostic swallowed. Both
+fixed; the broken first pass is kept as
+`demo/llm/catalogue-results-BROKEN-HARNESS.tsv` rather than deleted, because a
+red result is a claim about the test as much as about the thing tested.
+
+---
+
 ## 2026-08-20 — STAGE L3 GATE PASSED: a private model answered a question
 
 **The second headline feature works.** A researcher's account deployed a language

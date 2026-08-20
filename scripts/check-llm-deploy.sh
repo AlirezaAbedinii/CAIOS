@@ -118,11 +118,23 @@ echo "=== 2. wait for the endpoint to answer ==="
 # deployment that had been serving for twelve of them.
 ENDPOINT=""; APIKEY=""; READY_CODE=""
 for _ in $(seq 1 "$((DEPLOY_TIMEOUT / 10))"); do
-    if [[ -z "$ENDPOINT" ]]; then
+    # PAPI returns the endpoint with Nomad's own placeholders still in it until
+    # the allocation has actually been placed:
+    #
+    #   https://vllm-<uuid>.${meta.domain}-deployments.<ip>.sslip.io
+    #
+    # meta.domain is interpolated by the Nomad client, so before placement there
+    # is nothing to interpolate it with. An earlier version of this loop fetched
+    # the endpoint once and kept it, so a deployment whose first poll landed in
+    # that window spent the whole timeout curling a hostname that cannot resolve
+    # (curl status 000) — and got reported as a model that would not start, for
+    # models that were perfectly fine. Anything still carrying a ${...} is not
+    # an endpoint yet.
+    if [[ -z "$ENDPOINT" || "$ENDPOINT" == *'${'* ]]; then
         ENDPOINT="$(api GET "/v1/deployments/tools/$JOB_ID?vo=$VO" \
             | python3 -c 'import json,sys;print((json.load(sys.stdin).get("endpoints") or {}).get("vllm",""))' 2>/dev/null)"
     fi
-    if [[ -n "$ENDPOINT" ]]; then
+    if [[ -n "$ENDPOINT" && "$ENDPOINT" != *'${'* ]]; then
         READY_CODE=$(curl -k -sS --max-time 10 -o /dev/null -w '%{http_code}' \
             "$ENDPOINT/v1/models" 2>/dev/null)
         # 200 or 401 both mean vLLM is listening and has loaded the model.

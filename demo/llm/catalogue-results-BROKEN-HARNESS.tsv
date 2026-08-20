@@ -1,0 +1,7 @@
+model	verdict	ready_s	tok_s	note
+Qwen/Qwen3.5-2B	TIMEOUT	-	-	no endpoint inside 600s
+Qwen/Qwen3.5-0.8B	TIMEOUT	-	-	no endpoint inside 600s
+mistralai/Ministral-3-3B-Instruct-2512	ok	111	18.1	
+LiquidAI/LFM2.5-1.2B-Instruct	ok	101	56.4	
+LiquidAI/LFM2.5-1.2B-Thinking	EMPTY-CONTENT	91	-	answers into a non-content field
+LiquidAI/LFM2.5-VL-450M	TIMEOUT	-	-	no endpoint inside 600s

@@ -584,7 +584,7 @@ answer in a `reasoning` field, so every ordinary OpenAI client would have read
 general-purpose Qwen entries, verified by experiment rather than by guessing
 between two candidate causes.
 
-### Gate — 4 of 5, one still open
+### Gate — passed 2026-08-20
 
 - [x] A completion returns, from a model running on `caios_llm`'s GPU
 - [x] Startup time and tokens/sec recorded
@@ -592,23 +592,27 @@ between two candidate causes.
 - [x] `scripts/check-llm-deploy.sh` runs the whole cycle unattended and cleans up
 - [x] *(added during the stage)* The default model returns usable `content` to a
       plain OpenAI request — see R-20
-- [ ] **The model list trimmed to what actually loaded.** Only 1 of the 9 models
-      the form offers has ever been deployed. The other eight are on the list
-      because arithmetic says they fit, which is the same kind of reasoning that
-      produced the 10.5 GB image-size error and the "starts in seconds" claim.
+- [x] **The model list checked against what actually loads.** All nine deployed
+      and answered — `demo/llm/README.md` has the table. Nothing was trimmed
+      because nothing failed.
 
-**What that leaves open.** `configs/papi/vllm.yaml` warns in its own comments
-that `granite-4.1-3b` is "the tightest model we offer; if Stage L3 finds it will
-not load, drop it" — and Stage L3 has not looked. A user picking it from the
-dropdown would wait four minutes for a CUDA out-of-memory error. The two vision
-models and the two thinking models are equally unverified; the thinking ones may
-well hit R-20's `content: null` behaviour, which is defensible in Open WebUI and
-not defensible from a notebook.
+**What the sweep settled.** No model ran out of GPU memory, including
+`granite-4.1-3b`, which this repository's own config comments had flagged as
+"the tightest model we offer; if Stage L3 finds it will not load, drop it". It
+loads in 111 s. The memory arithmetic was sound, and the warning was wrong in
+the safe direction — which only testing could show.
 
-Closing this means deploying the remaining eight in turn — roughly an hour,
-mostly weight downloads — and removing whatever does not load or does not answer.
-`scripts/check-llm-deploy.sh <model-id>` already takes a model argument for
-exactly this.
+Two smaller findings worth carrying into the demo script: the **default is the
+slowest model on the list** (Qwen3.5-2B at 182 s against LFM2.5-1.2B-Instruct at
+81 s), and throughput varies more than size predicts (18 to 129 tok/s).
+
+The two thinking models keep their reasoning parser and so answer into
+`reasoning` rather than `content`. Both alternatives were measured; without the
+parser they return raw thinking with a literal `<think>` tag, which reads worse
+to a person than an empty field reads to a script. Kept, with the trade-off
+written into their catalogue descriptions — and flagged for Stage L4 to confirm
+Open WebUI renders them properly. If it does not, drop them: seven uniform
+models beat nine with two that need explaining.
 
 **Commit:** `llm: first vLLM deployment serving on CAIOS`
 
@@ -735,7 +739,7 @@ minutes; this should not push it past 26.
 | L0 | Verify node 6, prove CUDA works | 0.5 | **done 2026-08-19** |
 | L1 | Join it as `caios_llm` | 0.5 | **done 2026-08-19** |
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
-| L3 | First vLLM deployment | 0.5 | **4/5 — catalogue unverified** |
+| L3 | First vLLM deployment | 0.5 | **done — 9/9 models verified** |
 | L4 | Open WebUI end to end | 0.5 | **next** |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4 + L5 |

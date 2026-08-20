@@ -8,7 +8,7 @@ How the Compute Canada nodes are used, and why. Read this with
 
 ## The short version
 
-Five nodes, all with GPUs, all on Arbutus, all on the private subnet
+Six nodes, all with GPUs, all on Arbutus, all on the private subnet
 `192.168.104.0/24`. Three of them do the actual AI work and become the three
 "hospital sites" in the federated learning demo. One runs the cluster brain plus
 every web service. One is the front door.
@@ -49,7 +49,7 @@ every web service. One is the front door.
           | "Hospital A"|  | "Hospital B"|  | "Hospital C"|
           +-------------+  +-------------+  +-------------+
 
-          192.168.104.188 — becoming caios_llm, the LLM host. See below.
+          192.168.104.188 — caios_llm, the LLM host (joined). See below.
 ```
 
 ---
@@ -145,7 +145,7 @@ receives no work.
 ext4, untouched — nothing on the control plane needs per-container quotas, and
 this repository lives there.
 
-### 192.168.104.188 — the sixth instance, becoming `caios_llm`
+### 192.168.104.188 — `caios_llm`, the LLM host  *(joined 2026-08-19)*
 
 Six addresses were provided; the node count was given as five. This one was left
 out of the cluster until we knew what it was.
@@ -156,9 +156,15 @@ becomes **`caios_llm`**, a fourth Nomad GPU compute client dedicated to the LLM
 tool, so that vLLM and Open WebUI never compete with the three hospital nodes
 for CPU or GPU.
 
-It has still never been logged into. Stage L0 of `docs/llm-plan.md` measures it
-before Stage L1 joins it — and before Stage L1 reformats its `/dev/vdb`, which
-`docs/llm-infrastructure.md` explains in full.
+**Joined on 2026-08-19** as the cluster's fourth GPU compute client, Nomad agent
+`caios-wn-gpu-3`. Its `/dev/vdb` was reformatted XFS and mounted at `/mnt/data`
+(it held only `lost+found`), and it carries `meta.role = llm` so the LLM job
+prefers it. `docs/llm-infrastructure.md` explains the reformat in full.
+
+**One operational rule came out of it:** deploy the LLM *before* the federated
+learning workspaces. With four compute nodes, spread scheduling will otherwise
+put one "hospital" on this machine — measured, and a soft anti-affinity does not
+prevent it. See `scripts/deploy-fl-demo.sh`.
 
 It is **not** the CVAT host: CVAT needs ~72 GB of RAM in one place and this node
 has 34, so D-16 stands unchanged.

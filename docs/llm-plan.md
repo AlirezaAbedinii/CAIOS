@@ -297,11 +297,59 @@ stale one would fail it.
 still land on `caios_site_a/b/c` and not on `caios_llm`. This is the check that
 proves the new node did not quietly damage the existing headline feature.
 
-### Gate
+### What it found — run on 2026-08-19
 
-- [ ] Four compute nodes ready; `caios_llm` carries `meta.role=llm`
-- [ ] The FL demo still places one workspace per hospital node
-- [ ] `docs/infrastructure.md` updated — it currently says "five nodes"
+**Complete.** Node 6 is `caios-wn-gpu-3`, certified, and the LLM job places.
+
+```
+NAME             STATUS  ELIGIBLE  meta.status  meta.type  meta.tags  meta.role
+caios-wn-gpu-0   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-1   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-2   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-3   ready   eligible  ready        compute    gpu        llm
+
+4 compute node(s) schedulable.
+```
+
+- `/dev/vdb1`, XFS with `prjquota`, mounted at `/mnt/data`. The "box" now has a
+  drawer 1.
+- The GPU fingerprints as `NVIDIA H100L-1-12C MIG 1g.12gb` at 10564 MiB — **the
+  plugin fix propagated by itself**, straight from the group var, with no extra
+  step. That is the payoff for fixing it in Ansible rather than by hand.
+- CUDA computes there: capability 9.0, bfloat16, same 12100/10475 MiB as the
+  other three.
+- **`nomad job plan` on the LLM job: "All tasks successfully allocated."** It
+  reported "Dimension cpu exhausted on 2 nodes" before this stage.
+- The four federated-learning deployments came through untouched.
+
+**Two findings, both of which changed the plan.**
+
+**1. A garbage collector was deleting the pre-pulled images.** `docuum` runs as a
+Nomad system job on every compute node with upstream's threshold of 50 GB. The
+full pre-pull set is 67.9 GB — because `vllm/vllm-openai` is **30.8 GB on disk**,
+not the 10.5 GB compressed figure this plan originally quoted. So the pre-pull
+playbook fetched eleven images, reported success for all eleven, and six were
+deleted before it finished. Fixed by `nomad-jobs/docuum.hcl` at 80 GB, with
+`ansible/playbook-docuum.yml` to reapply it and a check in
+`scripts/verify-cluster.sh` because re-running the Nomad role reverts it. See
+R-10.
+
+**2. The anti-affinity this plan proposed does not work.** Measured rather than
+assumed: three dev-env-shaped jobs land on `gpu-0, gpu-1, gpu-3` — including the
+LLM host — and adding a soft anti-affinity on `meta.role = llm` changed nothing.
+Nomad's spread score for an idle node outweighs a `-100` affinity. **Deploying
+the LLM first does work**, measured the same way, and costs nothing. The
+332-line dev-env template copy is therefore not being carried. See R-14.
+
+### Gate — passed 2026-08-19
+
+- [x] Four compute nodes ready; `caios_llm` carries `meta.role=llm`
+- [x] CUDA computes on the new node
+- [x] `scripts/check-gpu-scheduling.sh` still healthy with four nodes
+- [x] The LLM job places (`nomad job plan`)
+- [x] The four FL deployments survived, on their original nodes
+- [x] Placement behaviour measured, and the ordering fix documented in
+      `scripts/deploy-fl-demo.sh`
 
 **Commit:** `cluster: node 6 joins as caios_llm, the LLM host`
 
@@ -623,9 +671,9 @@ minutes; this should not push it past 26.
 | Stage | Work | Days | Can start |
 |---|---|---|---|
 | L0 | Verify node 6, prove CUDA works | 0.5 | **done 2026-08-19** |
-| L1 | Join it as `caios_llm` | 0.5 | **next — L3 cannot place without it** |
+| L1 | Join it as `caios_llm` | 0.5 | **done 2026-08-19** |
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
-| L3 | First vLLM deployment | 0.5 | After L1 + L2 |
+| L3 | First vLLM deployment | 0.5 | **unblocked — next** |
 | L4 | Open WebUI end to end | 0.5 | After L3 |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4 + L5 |

@@ -127,4 +127,37 @@ echo
 echo "=== Jobs ==="
 nomad job status 2>&1 | grep -v "Web UI" | grep -v "^$" | sed 's/^/  /'
 
+# docuum deletes least-recently-used Docker images above a threshold. Upstream's
+# nomad role hardcodes 50 GB, which is smaller than the pre-pull set once the
+# 30.8 GB vLLM image is included — so it silently deletes images that
+# playbook-prepull-images.yml just fetched, and can evict vLLM itself between a
+# rehearsal and a demo. Re-running playbook-nomad.yml puts 50 GB back.
+echo
+echo "=== docuum image-GC threshold (must be big enough for the vLLM image) ==="
+DOCUUM_ARGS="$(NOMAD_NAMESPACE=default nomad job inspect docuum 2>/dev/null \
+    | python3 -c '
+import json, sys
+try:
+    job = json.load(sys.stdin)["Job"]
+except Exception:
+    raise SystemExit
+for group in job.get("TaskGroups") or []:
+    for task in group.get("Tasks") or []:
+        args = (task.get("Config") or {}).get("args") or []
+        if args:
+            print(" ".join(str(a) for a in args))
+' 2>/dev/null)"
+
+if [[ -z "$DOCUUM_ARGS" ]]; then
+    echo "  docuum is not running — images will accumulate until the disk fills"
+else
+    echo "  threshold: $DOCUUM_ARGS"
+    if grep -q "50 GB" <<<"$DOCUUM_ARGS"; then
+        echo "  PROBLEM: this is upstream's 50 GB, and the full image set is ~68 GB."
+        echo "           Something re-ran the nomad role. Fix:"
+        echo "             cd ansible && ansible-playbook playbook-docuum.yml"
+        VERIFY_FAILED=1
+    fi
+fi
+
 exit "${VERIFY_FAILED:-0}"

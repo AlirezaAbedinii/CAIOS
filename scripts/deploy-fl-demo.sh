@@ -32,6 +32,14 @@
 #
 # PLACEMENT
 #
+# ORDERING NOTE, added 2026-08-19 when caios_llm became a fourth compute node.
+# Deploy the LLM tool BEFORE running this if you are doing both in one session.
+# A running LLM leaves caios_llm as the most-allocated node, so spread avoids it
+# on its own and the three workspaces land on the three hospital nodes. Run this
+# first and one of them can take caios_llm instead — the training is still
+# genuinely federated across three separate machines, but the node names in
+# --status stop matching the story on screen.
+#
 # Nothing here pins a workspace to a node. The cluster scheduler is in "spread"
 # mode (ansible/playbook-scheduler-config.yml), so each deployment goes to the
 # least-allocated node and the three land one per site. --status prints where

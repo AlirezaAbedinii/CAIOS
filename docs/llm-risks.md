@@ -251,20 +251,53 @@ doing it properly means routing these through Vault, which is a PAPI change.
 
 ## Costly — works, but eats the clock
 
-### R-10 · Ten and a half gigabytes of container image, pulled on every deployment
+### R-10 · Thirty gigabytes of container image, and a garbage collector that deletes it
 
-**Verified.** `vllm/vllm-openai:latest` is **10.53 GB**, and the job sets
-`force_pull = true` on all three images. On a first deployment that is a very
-long silence in front of an audience; `playbook-prepull-images.yml` exists
-precisely because a slow pull already killed allocations here once.
+**Corrected and expanded on 2026-08-19 after measuring it on a real node.** The
+original entry said 10.5 GB. That is the *compressed* size in the registry; on
+disk `vllm/vllm-openai:v0.27.1` is **30.8 GB**. The whole pre-pull set is
+**67.9 GB**, measured.
 
-Also, both `:latest` and Open WebUI's `:main` are **moving tags**. A demo that
-worked yesterday can break overnight because someone else released something.
+Two separate problems follow.
 
-**Fix:** pin `vllm/vllm-openai:v0.27.1` and
-`ghcr.io/open-webui/open-webui:v0.11.0`, set `force_pull = false`, and add both
-— plus `python:slim-bullseye`, which the helper tasks use and which is not in
-the list either — to the pre-pull playbook. → Stage L2.
+**The pull itself.** 30.8 GB is a very long silence in front of an audience, and
+upstream sets `force_pull = true` on every deployment. Both `:latest` and Open
+WebUI's `:main` are moving tags, so a demo that worked yesterday can break
+overnight. *Fixed:* pinned tags, `force_pull = false`, and both images added to
+`ansible/playbook-prepull-images.yml` — along with `python:3.12-slim-bullseye`
+for the helper tasks, which upstream references as a bare, moving
+`python:slim-bullseye`.
+
+**And then something deletes it.** `docuum` runs as a Nomad **system job on every
+compute node**, evicting least-recently-used images above a threshold that
+upstream hardcodes at **50 GB** in `roles/nomad/templates/nomad-docuum-job.j2`.
+Running the pre-pull against `caios_llm` pulled all eleven images, reported
+success for all eleven, and docuum deleted six of them **before the playbook
+finished**:
+
+```
+[INFO] Docker images are now using `40.37 GB`, which is within the limit of `50 GB`.
+```
+
+`docker images` showed five. The playbook exists precisely to keep a large pull
+off the demo's critical path, and a garbage collector was undoing its work as it
+ran — reporting success throughout.
+
+The demo-day version of this is worse: vLLM is the largest image on the node, so
+it is the prime eviction candidate. Deploy a dev environment (12.9 GB) after it,
+cross the threshold, lose vLLM, and the next LLM deployment re-downloads 30.8 GB
+live.
+
+*Fixed:* `nomad-jobs/docuum.hcl` raises the threshold to **80 GB** — the full set
+plus ~12 GB, still leaving ~45 GB of the 125 GB volume for allocation
+directories, logs and the model cache. Node 6 now holds 11 of 11 images at
+67.91 GB with nothing being evicted.
+
+**The catch, and why there are two more guards.** Re-running
+`ansible/playbook-nomad.yml` against `nomad_master` re-submits upstream's
+template and puts 50 GB back. So `ansible/playbook-docuum.yml` reapplies ours,
+and `scripts/verify-cluster.sh` prints the live threshold and **fails** if it has
+reverted. A silent regression here costs 30 GB at the worst possible moment.
 
 ### R-11 · Model weights are re-downloaded on every deployment
 
@@ -301,15 +334,41 @@ a restart. → Stage L4.
 
 ### R-14 · Four compute nodes breaks the "three hospitals" picture
 
-Covered in full in `docs/llm-infrastructure.md`. In short: `deploy-fl-demo.sh`
-relies on spread-mode scheduling to land three workspaces on three nodes, and
-with a fourth node in the cluster it can land them anywhere. The training is
-still genuinely federated; the node names on screen stop matching the story.
+**Confirmed by measurement on 2026-08-19, and the fix this document originally
+proposed turned out not to work.**
 
-**Fix:** a soft anti-affinity on `meta.role = llm` in the dev-env job template,
-plus deploying the LLM before the FL workspaces on demo day. → Stages L1 and L6.
+`scripts/deploy-fl-demo.sh` relies on spread-mode scheduling to land three
+workspaces on three nodes. With `caios_llm` in the cluster there are four, and
+three dev-env-shaped jobs land like this:
 
----
+```
+   caios-wn-gpu-0: 1
+   caios-wn-gpu-1: 1
+   caios-wn-gpu-3: 1     <- caios_llm, the LLM host
+```
+
+The training is still genuinely federated across three separate machines; the
+node names on screen stop matching the story, which a viewer will notice.
+
+**What did not work: a soft anti-affinity on `meta.role = llm`.** This document
+proposed it, and it was tested before being written into anything. Placement was
+unchanged — still `gpu-0, gpu-1, gpu-3`. Nomad combines affinity with the
+spread score, and an empty node scores high enough on spread that a `-100`
+affinity does not overcome it. Worth recording as a general lesson: **soft
+affinities do not override spread on an idle node.**
+
+**What does work: deploy the LLM first.** With an LLM-shaped allocation already
+holding `caios_llm`, the same three workspaces land on the hospital nodes and
+none goes near it — measured, not argued. That is now the documented ordering in
+`scripts/deploy-fl-demo.sh` and it becomes a line in the demo script at Stage L6.
+
+**If a guarantee is wanted rather than an ordering convention**, the option is a
+*hard* constraint (`meta.role != llm`) in a `configs/papi/tools/ai4os-dev-env/nomad.hcl`
+override. Not taken, for two reasons: it means carrying a copy of a 332-line
+upstream file whose correctness the primary demo depends on, and a hard
+constraint means a workspace fails to deploy outright when the three hospital
+nodes are full, rather than landing somewhere and looking untidy. Worth revisiting
+only if the ordering convention proves fragile in rehearsal.
 
 ## Accepted — chosen, with reasons
 

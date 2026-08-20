@@ -27,14 +27,14 @@ analysis found. Alongside it, what is left is rehearsal and the V1 list.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0 + L2 done; L1 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0, L1, L2 done; L3 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L1** — join node 6 as `caios_llm`. Gated on approval to reformat its
-   `/dev/vdb`, which L0 has shown holds only `lost+found`. `nomad job plan` now
-   shows the LLM job cannot place anywhere without it, so L3 is blocked on this.
+1. **Stage L3** — the first real vLLM deployment. Everything it needs is in
+   place: the node, the config, the images, and a job that `nomad job plan` says
+   will allocate.
 2. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
    clicking yet — every piece is verified individually, which is not the same
@@ -49,6 +49,87 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-19 — STAGE L1 GATE PASSED: caios_llm is in the cluster
+
+Node 6 joined as `caios-wn-gpu-3`, the dedicated LLM host. The destructive step
+was approved after L0 showed its `/mnt` held only `lost+found`.
+
+```
+NAME             STATUS  ELIGIBLE  meta.status  meta.type  meta.tags  meta.role
+caios-wn-gpu-0   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-1   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-2   ready   eligible  ready        compute    gpu        -
+caios-wn-gpu-3   ready   eligible  ready        compute    gpu        llm
+
+4 compute node(s) schedulable.
+```
+
+- `/dev/vdb` relaid as `/dev/vdb1`, XFS with `prjquota`, at `/mnt/data`.
+- Consul and Nomad joined; the other five nodes untouched throughout.
+- **The GPU plugin fix propagated by itself.** The node fingerprinted
+  `NVIDIA H100L-1-12C MIG 1g.12gb` at 10564 MiB on first boot, straight from the
+  group var — no separate step. That is what fixing it in Ansible bought.
+- CUDA computes there: capability 9.0, bfloat16, 12100/10475 MiB.
+- `ai4-nomad_tests` certified all four nodes; 54 seconds.
+- **`nomad job plan` on the LLM job: "All tasks successfully allocated."** It
+  said "Dimension cpu exhausted on 2 nodes" this morning.
+- All four federated-learning deployments came through on their original nodes.
+
+### A garbage collector was deleting the images as they arrived
+
+`playbook-prepull-images.yml` pulled eleven images onto the new node, reported
+**changed** for all eleven, and finished with five present.
+
+`docuum` runs as a Nomad **system job on every compute node**, evicting
+least-recently-used images above a threshold upstream hardcodes at **50 GB**:
+
+```
+[INFO] Docker images are now using `40.37 GB`, which is within the limit of `50 GB`.
+```
+
+The full set is **67.9 GB**, because `vllm/vllm-openai:v0.27.1` is **30.8 GB on
+disk** — 10.5 GB is the *compressed* registry size, and every disk figure written
+here before today used the smaller number. Corrected throughout.
+
+The demo-day version is worse than wasted bandwidth: vLLM is the biggest image on
+the node and therefore first to be evicted. Deploy a dev environment after it,
+cross the threshold, and the next LLM deployment re-downloads 30 GB live.
+
+Fixed with `nomad-jobs/docuum.hcl` at 80 GB — the full set plus ~12 GB, still
+leaving ~45 GB of the volume for allocation dirs, logs and the model cache. Node
+6 now holds **11 of 11 images at 67.91 GB** with nothing evicted. Because
+re-running `playbook-nomad.yml` restores upstream's 50 GB, there is now
+`ansible/playbook-docuum.yml` to reapply ours and a check in
+`scripts/verify-cluster.sh` that **fails** if it has reverted.
+
+### The fix this plan proposed for placement does not work
+
+With four compute nodes, three dev-env-shaped jobs land on:
+
+```
+   caios-wn-gpu-0: 1
+   caios-wn-gpu-1: 1
+   caios-wn-gpu-3: 1     <- the LLM host
+```
+
+So a fresh FL deployment would show "Hospital C" running on the LLM machine.
+The plan's answer was a soft anti-affinity on `meta.role = llm`. **Tested before
+being written into anything, and it changed nothing** — same three nodes. Nomad
+combines affinity with the spread score, and an idle node's spread score
+outweighs a `-100` affinity.
+
+**Deploying the LLM first does work**, measured the same way: with an LLM-shaped
+allocation holding `caios_llm`, the workspaces go to the hospital nodes and none
+goes near it. That ordering is now documented in `scripts/deploy-fl-demo.sh`,
+`docs/infrastructure.md` and CLAUDE.md, and becomes a line in the demo script.
+
+The 332-line dev-env template copy is therefore **not** being carried. A hard
+constraint would guarantee placement, but it means owning a copy of a file the
+primary demo depends on, and it makes a workspace fail outright when the three
+hospital nodes are full. Recorded as an option in R-14 rather than taken.
 
 ---
 

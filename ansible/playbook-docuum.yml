@@ -1,0 +1,50 @@
+---
+# Re-submit the docuum image garbage collector with the CAIOS threshold.
+#
+#   cd ansible && ansible-playbook playbook-docuum.yml
+#
+# Safe and re-runnable. Submits one Nomad system job; deletes nothing itself.
+#
+# WHY IT IS SEPARATE FROM playbook-nomad.yml
+# ------------------------------------------
+# The nomad role deploys docuum from its own template with `--threshold 50 GB`
+# hardcoded, on the nomad_master. That threshold is too small now: the full
+# pre-pull set is ~68 GB once vllm/vllm-openai (30.8 GB on disk) is included.
+#
+# On 2026-08-19 that combination silently ate six of eleven freshly pulled
+# images while playbook-prepull-images.yml reported success for all eleven.
+#
+#   !!  Running playbook-nomad.yml against nomad_master REVERTS the threshold to
+#       50 GB. Re-run this playbook afterwards. scripts/verify-cluster.sh reports
+#       the live value, so the regression shows up rather than being discovered
+#       when a demo re-downloads 30 GB.
+
+- name: Deploy the docuum image garbage collector
+  hosts: nomad_master
+  gather_facts: false
+
+  vars:
+    caios_docuum_job: "{{ playbook_dir }}/../nomad-jobs/docuum.hcl"
+
+  environment:
+    NOMAD_ADDR: "https://127.0.0.1:4646"
+    NOMAD_CACERT: "{{ nomad_certs }}nomad-ca.pem"
+    NOMAD_CLIENT_CERT: "{{ nomad_certs }}cli.pem"
+    NOMAD_CLIENT_KEY: "{{ nomad_certs }}cli-key.pem"
+    NOMAD_NAMESPACE: "default"
+
+  tasks:
+
+    - name: Check the job file parses before submitting it
+      ansible.builtin.command: "nomad job validate {{ caios_docuum_job }}"
+      changed_when: false
+
+    - name: Submit the job
+      ansible.builtin.command: "nomad job run {{ caios_docuum_job }}"
+      register: caios_docuum_run
+      changed_when: "'Deployment completed successfully' in caios_docuum_run.stdout
+                     or 'Evaluation' in caios_docuum_run.stdout"
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ caios_docuum_run.stdout_lines | select('search', 'Status|Deployed|usergroup') | list }}"

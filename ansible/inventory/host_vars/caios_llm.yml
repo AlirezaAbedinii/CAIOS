@@ -1,0 +1,27 @@
+---
+# Host variables for caios_llm (192.168.104.188), the dedicated LLM host.
+#
+# Everything else about this node is identical to the three site nodes and comes
+# from group_vars/all.yml. Only its Nomad metadata differs.
+
+# Overrides nomad_client_meta in group_vars/all.yml, which is `{status: test}`.
+#
+#   status: test   NOT optional, and not a leftover. ai4-nomad_tests is the only
+#                  thing that flips this to "ready", and every PAPI job template
+#                  constrains on meta.status=ready. Ship it as "ready" and the
+#                  node never gets certified; drop it and the node never gets
+#                  scheduled. It has to start as "test".
+#
+#   role: llm      Ours, not upstream's. Two job templates read it:
+#                    * configs/papi/tools/ai4os-llm/nomad.hcl has an affinity FOR
+#                      it, so LLM deployments prefer this node;
+#                    * configs/papi/tools/ai4os-dev-env/nomad.hcl has an
+#                      anti-affinity, so the federated-learning workspaces prefer
+#                      the three hospital nodes and the demo keeps showing one
+#                      site per machine.
+#                  Both are soft. A hard constraint would mean a full or failed
+#                  LLM node blocks the deployment entirely, which is a worse
+#                  failure than untidy placement.
+nomad_client_meta:
+  status: test
+  role: llm

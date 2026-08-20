@@ -25,10 +25,21 @@ LLM_SUBS = {
         ["--gpu-memory-utilization", "0.80", "--max-model-len", "16384", "Qwen/Qwen3.5-2B"]
     ),
     "API_TOKEN": "0123456789abcdef",
-    "API_ENDPOINT": "https://vllm-abc123def456.${meta.domain}-deployments.192.168.104.105.sslip.io/v1",
+    # What patch 0010 substitutes for a "both" deployment. Upstream puts the
+    # public vLLM hostname here; that is what left Open WebUI with an empty
+    # model list behind an HTTP 200 in Stage L4. The rendered job is the only
+    # place a test can see this value, so it has to be the real one.
+    "API_ENDPOINT": "http://${NOMAD_ADDR_vllm}/v1",
     "HUGGINGFACE_TOKEN": "",
     "OPEN_WEBUI_USERNAME": "researcher@example.org",
     "OPEN_WEBUI_PASSWORD": "hunter2",
+}
+
+# A standalone "open-webui" deployment keeps pointing at whatever endpoint the
+# user supplied, which is the one case where leaving the cluster is correct.
+STANDALONE_UI_SUBS = {
+    **LLM_SUBS,
+    "API_ENDPOINT": "https://someone-elses-llm.example.org/v1",
 }
 
 

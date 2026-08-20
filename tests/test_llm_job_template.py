@@ -147,3 +147,49 @@ def test_budget_is_documented_honestly(root):
         "the comment block no longer matches the resources below it"
     )
     assert str(memory) in raw
+
+
+def test_the_chat_interface_does_not_leave_the_allocation_either(job):
+    """R-05 applied to Open WebUI itself, which the original reading missed.
+
+    The helper tasks above were fixed in Stage L2. Open WebUI was not, because
+    its endpoint arrives from PAPI as ${API_ENDPOINT} rather than being written
+    here — so nothing in this file looked wrong. What it produced was a
+    deployment Nomad called healthy, a login that worked, and an empty model
+    dropdown, with CERTIFICATE_VERIFY_FAILED visible only in stderr behind an
+    HTTP 200. Patch 0010; render.py carries what PAPI now substitutes.
+    """
+    m = re.search(r'OPENAI_API_BASE_URL\s*=\s*"([^"]+)"', job)
+    assert m, "OPENAI_API_BASE_URL not found in the template"
+    url = m.group(1)
+    assert url.startswith("http://"), (
+        f"OPENAI_API_BASE_URL renders as {url!r} — a "
+        "https:// hostname here means the UI is going back out through Traefik"
+    )
+    assert "NOMAD_ADDR_" in url, "the UI should address the allocation directly"
+
+
+def test_a_standalone_ui_still_points_where_the_user_said(root):
+    """The other half of 0010: only "both" is redirected.
+
+    Deploying Open WebUI on its own, against an endpoint somewhere else, is a
+    supported option on the form. Redirecting that into the allocation would
+    point it at a vLLM task the deployment does not even contain.
+    """
+    from render import STANDALONE_UI_SUBS
+
+    job = strip_hcl_comments(render(root / TEMPLATE, STANDALONE_UI_SUBS))
+    m = re.search(r'OPENAI_API_BASE_URL\s*=\s*"([^"]+)"', job)
+    assert m and m.group(1) == "https://someone-elses-llm.example.org/v1"
+
+
+def test_ollama_is_switched_off(job):
+    """Open WebUI probes host.docker.internal:11434 on every model listing.
+
+    Nothing here serves Ollama, so that is a DNS lookup that cannot succeed on
+    the first page a demo audience sees, plus a red ERROR line in the logs with
+    no bearing on anything.
+    """
+    assert re.search(r"ENABLE_OLLAMA_API\s*=\s*false", job), (
+        "ENABLE_OLLAMA_API is not disabled in the open-webui task"
+    )

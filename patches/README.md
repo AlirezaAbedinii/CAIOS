@@ -127,6 +127,49 @@ administrator. Worth reporting upstream.
 
 Neither can be configuration: both are literals inside a function body.
 
+### `ai4-papi/0010-llm-webui-endpoint.patch` — pinned to `e80a2b7`
+
+`routers/v1/deployments/tools.py` again, and the reason Stage L4 exists.
+
+For a `both` deployment, vLLM and Open WebUI are two tasks in **the same Nomad
+allocation** — same node, same network namespace, ports a hop apart. Upstream
+nevertheless hands the UI the public HTTPS endpoint of the vLLM beside it:
+
+```python
+api_endpoint = f"https://vllm-{job_uuid}" + ".${meta.domain}" + f"-{base_domain}/v1"
+```
+
+So the chat interface leaves the node, resolves a public hostname, crosses
+Traefik, and comes back to a port it could have reached directly. On any
+deployment whose TLS is signed by its own CA — ours, D-12 — aiohttp raises
+`CERTIFICATE_VERIFY_FAILED`.
+
+**What makes this worth a patch rather than a shrug is the failure mode.** Open
+WebUI catches the exception and carries on, so:
+
+```
+ERROR open_webui.routers.openai:send_get_request - Connection error: ...
+      [SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate in certificate chain
+INFO  "GET /api/models HTTP/1.1" 200
+```
+
+`GET /api/models` returns **200 with an empty list**. Nomad reports the
+allocation healthy, the login page works, the admin account is correct, and the
+model dropdown is empty. Nothing outside the container's stderr says why.
+
+The fix is D-36 applied to the application instead of to the helper tasks:
+`http://${NOMAD_ADDR_vllm}/v1`, interpolated by the Nomad client at launch.
+Confirmed by hand before it was written — from inside the `open-webui`
+container, that address answered `401` (the key was missing), which is a
+connection that worked.
+
+Only `both` is redirected. A standalone `open-webui` keeps whatever endpoint the
+user supplied, which is the one case where leaving the cluster is the point.
+Unset in every other path, so the patch changes nothing for anyone else.
+
+Still present at upstream `master` as of 2026-08-20. Worth reporting: it affects
+any AI4OS deployment not using a publicly trusted certificate.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

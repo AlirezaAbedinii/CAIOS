@@ -1,0 +1,29 @@
+--- a/ai4papi/routers/v1/deployments/tools.py
++++ b/ai4papi/routers/v1/deployments/tools.py
+@@ -658,6 +658,26 @@
+                     detail="This model requires a valid Huggingface token for deployment.",
+                 )
+ 
++        # [CAIOS] Open WebUI must not reach vLLM through the front door.
++        #
++        # For "both", the two services are in the same allocation, but upstream
++        # hands Open WebUI the PUBLIC HTTPS endpoint of vLLM — so the chat
++        # interface leaves the node, crosses DNS and Traefik, and comes back to
++        # a port it could have reached directly. On any deployment whose TLS is
++        # signed by its own CA, aiohttp then raises CERTIFICATE_VERIFY_FAILED,
++        # which Open WebUI catches and reports as an EMPTY MODEL LIST behind an
++        # HTTP 200. A chat interface that logs in perfectly and has nothing to
++        # talk to, with the cause visible only in the container's stderr.
++        #
++        # Same reasoning as the two helper tasks in our nomad.hcl (D-36), and
++        # the same fix: address the allocation. ${NOMAD_ADDR_vllm} is left alone
++        # by safe_substitute and interpolated by the Nomad client at launch.
++        #
++        # Only "both" is touched. "open-webui" standalone must keep pointing at
++        # whatever endpoint the user supplied, which is the whole point of it.
++        if user_conf["llm"]["type"] == "both":
++            api_endpoint = "http://${NOMAD_ADDR_vllm}/v1"
++
+         # Replace the Nomad job template
+         nomad_conf_str = nomad_template.safe_substitute(
+             {

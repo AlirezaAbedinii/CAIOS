@@ -80,3 +80,28 @@ def test_every_patch_is_referenced_in_the_readme(root):
             assert patch.stem in readme, (
                 f"{repo}/{patch.name} is not explained in patches/README.md"
             )
+
+
+def test_llm_webui_endpoint_patch_keeps_the_ui_inside_the_allocation(root):
+    """0010, found by Stage L4.
+
+    Upstream hands Open WebUI the PUBLIC HTTPS endpoint of the vLLM it is
+    sitting next to. Against a private CA, aiohttp raises
+    CERTIFICATE_VERIFY_FAILED, Open WebUI swallows it, and /api/models answers
+    200 with an empty list — a chat interface with nothing to chat to, and a
+    deployment Nomad reports as healthy.
+    """
+    patch = root / "patches" / "ai4-papi" / "0010-llm-webui-endpoint.patch"
+    if not patch.is_file():
+        pytest.skip("0010 not present")
+    text = patch.read_text(encoding="utf-8")
+    assert '+            api_endpoint = "http://${NOMAD_ADDR_vllm}/v1"' in text, (
+        "the UI must address the allocation, not the ingress"
+    )
+    assert '+        if user_conf["llm"]["type"] == "both":' in text, (
+        'only "both" may be redirected — a standalone UI points at the '
+        "endpoint the user supplied, and that is the whole point of it"
+    )
+    assert "https://vllm-" not in text.replace("# ", ""), (
+        "0010 must not reintroduce a public hostname outside its commentary"
+    )

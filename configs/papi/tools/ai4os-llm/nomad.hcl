@@ -39,7 +39,7 @@ here" and "this tool runs here"; see docs/llm-risks.md for the full accounts.
 
    tests/test_llm_job_template.py asserts that arithmetic, so it cannot rot.
 
-3. THE HELPER TASKS NO LONGER LEAVE THE CLUSTER (R-05)
+3. NOTHING IN THIS JOB LEAVES THE CLUSTER TO REACH ITSELF (R-05)
    Upstream's `check_vllm_startup` and `create-admin` call their own deployment's
    PUBLIC HTTPS URL. Those are served by Traefik with our own CA's certificate,
    which a stock python image has never heard of, so `requests` raises SSLError.
@@ -50,6 +50,14 @@ here" and "this tool runs here"; see docs/llm-risks.md for the full accounts.
    Both now talk to the allocation directly over ${NOMAD_ADDR_*} on plain HTTP.
    No DNS, no Traefik, no TLS in the startup path — and it tests the right
    thing: "is vLLM up", not "is the entire ingress chain up".
+
+   Open WebUI ITSELF had the same problem, found in Stage L4 and missed by the
+   original reading of R-05, which only looked at the two helpers. Its
+   OPENAI_API_BASE_URL comes from PAPI, not from this file, so the fix is patch
+   0010 rather than a line here. Its failure mode is worse than the helpers':
+   aiohttp raises CERTIFICATE_VERIFY_FAILED, Open WebUI catches it, and
+   GET /api/models answers **200 with an empty list**. The deployment is green,
+   login works, and the model dropdown is empty.
 
 4. IMAGES ARE PINNED AND NOT FORCE-PULLED (R-10, R-11)
    `vllm/vllm-openai:latest` is 10.5 GB and it moves. force_pull on every
@@ -299,11 +307,25 @@ job "tool-llm-${JOB_UUID}" {
 
       env {
         OPENAI_API_KEY      = "${API_TOKEN}"
+        # For a "both" deployment PAPI substitutes the allocation's own address
+        # here rather than the public vLLM hostname — patch 0010, and see note 3
+        # in the header. For a standalone UI it stays the endpoint the user gave.
         OPENAI_API_BASE_URL = "${API_ENDPOINT}"
         WEBUI_AUTH          = true
         # Without a fixed secret, every restart invalidates existing sessions and
         # logs the demo out mid-walkthrough.
         WEBUI_SECRET_KEY    = "${API_TOKEN}"
+        # [CAIOS] Nothing here serves Ollama. Left on, Open WebUI probes
+        # host.docker.internal:11434 on every model listing: a DNS lookup that
+        # cannot succeed, a delay on the first page a demo audience sees, and a
+        # red ERROR line in the logs that has nothing to do with anything.
+        ENABLE_OLLAMA_API   = false
+        # [CAIOS] The model dropdown should contain the model, and nothing else.
+        # Open WebUI ships an "arena-model" placeholder for blind A/B comparison
+        # of several models; with one model deployed it compares it with itself.
+        # A researcher opening a private LLM should not have to work out which of
+        # two entries is the one they deployed.
+        ENABLE_EVALUATION_ARENA_MODELS = false
       }
 
       resources {

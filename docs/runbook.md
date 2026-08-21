@@ -504,6 +504,40 @@ Open WebUI starts only after the model has finished loading, because
 `check_vllm_startup` is a non-sidecar `prestart` task. That gives you a useful
 shortcut: **if the chat interface answers at all, the model is ready.**
 
+### Checking it by hand, in a browser
+
+Scripts cannot settle this one. Three faults in this project appeared only when
+a human clicked something, and none of them had a failing programmatic check.
+`scripts/check-llm-ui.sh` measures the streaming *mechanism* — 6 ms between
+chunks — but "does this read like a chat window" is a judgement.
+
+Get one running and leave it there:
+
+```bash
+bash scripts/check-llm-ui.sh --keep
+```
+
+It prints the URL, the login and a generated password. Then, in a browser on the
+VPN:
+
+1. **The certificate warning.** Expected until we have a real domain (V1 item 1).
+   Proceed through it, or install the CA — see *Trusting the CAIOS certificate*
+   above. Worth knowing which one you will do on camera.
+2. **Log in** with the printed credentials. You should land in a chat window,
+   not on a "create an account" page. An account-creation page means the
+   deployment thinks it has no administrator (R-22).
+3. **Check the model dropdown** names the model that was deployed, and nothing
+   else. Empty means the UI cannot reach vLLM; see the next section.
+4. **Ask it something and watch the reply.** It must appear word by word. All at
+   once, after a pause, is a buffered event stream — the symptom below.
+5. **Log out and back in.** Sessions survive because `WEBUI_SECRET_KEY` is fixed;
+   if you are logged out unexpectedly mid-walkthrough, that is what changed.
+
+If the model is `LFM2.5-1.2B-Thinking` or `DeepSeek-R1-Distill-Qwen-1.5B`, the
+reply opens with a collapsible **Thinking** block that fills first — about three
+seconds of it before the answer starts. That is correct behaviour, not a fault,
+and it is why neither should be the model deployed live in the demo.
+
 ### The chat interface loads, but the model dropdown is empty
 
 The one to know. Everything returns HTTP 200 — the login page, the API, the

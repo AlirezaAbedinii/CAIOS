@@ -136,13 +136,24 @@ The dashboard is the one service built from source rather than pulled, so it is
 the one with a real build step.
 
 ```bash
-bash scripts/build-dashboard.sh
-cd compose && docker compose --env-file ../configs/env/caios.env up -d dashboard
+sudo bash scripts/build-dashboard.sh
+cd compose && sudo docker compose --env-file ../configs/env/caios.env up -d --force-recreate dashboard
 bash ../scripts/check-dashboard.sh
+bash ../scripts/check-branding.sh
 ```
 
+`sudo`, because Docker needs it on this host — without it the script stages
+everything correctly, prints its progress, and then stops at
+`permission denied while trying to connect to the docker API`. It does exit
+non-zero, so it is only silent if you pipe it into something.
+
+`--force-recreate`, because `up -d` alone sees a running container of the same
+name and leaves it there, serving the previous image. That is the failure where
+you rebuild three times and the page never changes.
+
 The build takes several minutes — it is a full Angular compile — and needs
-network access for `npm ci`.
+network access for `npm ci`. Add `--stage` to prepare `build/` without building
+the image, which is enough to check what would be staged.
 
 ### What is baked in versus injected at start
 

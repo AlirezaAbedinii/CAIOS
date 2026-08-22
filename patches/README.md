@@ -292,6 +292,35 @@ everything else visible in a walkthrough is tenant configuration.
 `vendor/` into `build/` and would otherwise overwrite whatever
 `apply-patches.sh` had put there.
 
+### `ai4-dashboard/0002-vllm-catalogue-url.patch`
+
+`tools.service.ts` fetches the LLM model catalogue from **AI4OS's GitHub**:
+
+```ts
+const url =
+    'https://raw.githubusercontent.com/ai4os/ai4-papi/refs/heads/master/etc/vllm.yaml';
+```
+
+That is the file *their* PAPI serves. Ours serves a curated subset — the models
+that fit in 10.3 GB of usable VRAM, with the gated Llama entries dropped — so
+the page had two disagreeing sources: the model **cards** and the
+`needs_HF_token` logic came from upstream's thirteen, while the deploy form's
+**dropdown** came from our PAPI's nine. Cards for models we do not offer, no
+card for the ones we do, and a Hugging Face field that appears for the wrong
+models.
+
+It is also a third-party fetch made by the user's browser, from a page that is
+supposed to be self-contained on a private subnet — the same objection as the
+analytics beacon removed in Stage 0, and it fails outright if GitHub is
+unreachable.
+
+Now `/assets/config/vllm.yaml`, staged by `scripts/build-dashboard.sh` from
+`configs/papi/vllm.yaml`, so PAPI and this page read one file. Leading slash and
+`HttpClient` match `app-config.service.ts`, which already loads
+`/assets/config/config.json` that way.
+
+It cannot be configuration: the URL is a string literal in a service method.
+
 ### `ai4-dashboard` — otherwise deliberately **not** patched for MVP
 
 The dashboard has hardcoded `cloud.ai4eosc.eu` endpoints, but on inspection

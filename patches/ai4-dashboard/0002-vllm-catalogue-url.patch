@@ -1,0 +1,29 @@
+--- a/src/app/modules/catalog/services/tools-service/tools.service.ts
++++ b/src/app/modules/catalog/services/tools-service/tools.service.ts
+@@ -105,8 +105,24 @@
+     }
+ 
+     getVllmModelConfiguration(): Observable<VllmModelConfig[]> {
+-        const url =
+-            'https://raw.githubusercontent.com/ai4os/ai4-papi/refs/heads/master/etc/vllm.yaml';
++        // [CAIOS] Read the model catalogue from this deployment, not from
++        // AI4OS's GitHub.
++        //
++        // Upstream fetches raw.githubusercontent.com/ai4os/ai4-papi/.../etc/
++        // vllm.yaml, which is the file THEIR PAPI serves. Ours serves a curated
++        // subset — the models that fit in 10.3 GB of usable VRAM — so the model
++        // CARDS on this page and the `needs_HF_token` logic came from one list
++        // while the deploy form's DROPDOWN came from our PAPI. Models with no
++        // description, and a token field appearing for the wrong models.
++        //
++        // It is also a third-party fetch made by the user's browser from a page
++        // that is meant to be self-contained on a private subnet — the same
++        // objection as the analytics beacon we already removed.
++        //
++        // scripts/build-dashboard.sh stages configs/papi/vllm.yaml here, so
++        // PAPI and this page read one file. Leading slash and HttpClient match
++        // app-config.service.ts, which loads /assets/config/config.json.
++        const url = '/assets/config/vllm.yaml';
+         return this.http.get(url, { responseType: 'text' }).pipe(
+             map((yamlText) => {
+                 const parsedYaml = yaml.load(yamlText) as {

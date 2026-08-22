@@ -70,6 +70,21 @@ def strip(o):
 json.dump(strip(json.load(open(sys.argv[1]))), open(sys.argv[2], "w"), indent=4)
 PYSTRIP
 
+# 1b. the LLM model catalogue
+#
+# One file, two consumers. PAPI reads configs/papi/vllm.yaml to build the deploy
+# form's dropdown; the dashboard reads it to draw the model cards and to decide
+# whether the Hugging Face token field is required. Upstream had the dashboard
+# fetching AI4OS's copy from raw.githubusercontent.com, so the cards described
+# thirteen models while the dropdown offered our nine — see patch 0002.
+#
+# Copied verbatim: unlike the tenant config there are no annotations to strip,
+# because YAML comments are comments and js-yaml drops them. The comments in
+# that file explain measured vLLM behaviour and are worth keeping in the source.
+cp configs/papi/vllm.yaml "$DST/src/assets/config/vllm.yaml"
+models=$(grep -cE '^  [A-Za-z0-9_./-]+:$' "$DST/src/assets/config/vllm.yaml")
+echo "    staged the LLM catalogue ($models models)"
+
 # 2. theme
 mkdir -p "$DST/src/theme/caios"
 cp "$CFG/theme/caios/variables.scss" "$CFG/theme/caios/_material.scss" "$DST/src/theme/caios/"

@@ -133,6 +133,62 @@ if [[ -n "$bundle_main" ]] && curl -k -sS --max-time 30 "$DASH/$bundle_main" -o 
 fi
 
 echo
+echo "=== 3c. the LLM catalogue is ours, and it is one file ==="
+# R-07. Upstream's dashboard fetched this list from raw.githubusercontent.com,
+# so the model CARDS came from AI4OS's thirteen while the deploy form's DROPDOWN
+# came from our PAPI's nine. Two sources disagreeing about what exists.
+#
+# Content, not status: every missing path under this dashboard answers 200 with
+# index.html, and js-yaml parses HTML into something shapeless rather than
+# throwing — so "did it 200" tells you nothing at all here.
+curl -k -sS --max-time 20 "$DASH/assets/config/vllm.yaml" -o "$TMP/vllm.yaml" 2>/dev/null
+if head -c 20 "$TMP/vllm.yaml" | grep -qi "<!doctype\|<html"; then
+    bad "/assets/config/vllm.yaml served index.html — build-dashboard.sh did not stage it"
+else
+    python3 - "$TMP/vllm.yaml" configs/papi/vllm.yaml <<'PY'
+import sys
+
+import yaml
+
+try:
+    served = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))["models"]
+except Exception as e:
+    print("  [FAIL] the served catalogue is not the YAML we expect: %s" % e)
+    raise SystemExit(1)
+ours = yaml.safe_load(open(sys.argv[2], encoding="utf-8"))["models"]
+
+if list(served) != list(ours):
+    only_served = [m for m in served if m not in ours]
+    only_ours = [m for m in ours if m not in served]
+    print("  [FAIL] the served catalogue is not configs/papi/vllm.yaml")
+    if only_served:
+        print("         served but not ours: %s" % only_served)
+    if only_ours:
+        print("         ours but not served: %s" % only_ours)
+    raise SystemExit(1)
+print("  [ ok ] %d models, and they are ours" % len(served))
+
+missing = [m for m, c in served.items() if not c.get("description")]
+if missing:
+    print("  [FAIL] cards with no description: %s" % missing)
+    raise SystemExit(1)
+print("  [ ok ] every card has a description")
+PY
+    [[ $? -eq 0 ]] || fail=1
+fi
+
+# The browser must not go to GitHub for it either. The URL is compiled into the
+# bundle, so this catches a rebuild that dropped patch 0002 even if the asset
+# above is staged correctly and looks perfect.
+if [[ -s "$TMP/main.js" ]]; then
+    if grep -q 'ai4-papi/refs/heads/master/etc/vllm.yaml' "$TMP/main.js"; then
+        bad "the bundle still fetches the model list from raw.githubusercontent.com"
+    else
+        ok "no third-party fetch for the model list"
+    fi
+fi
+
+echo
 echo "=== 4. the marketplace fits the audience ==="
 PW_VAR="CAIOS_PW_RESEARCHER"
 TOKEN="$(bash scripts/get-token.sh researcher "${!PW_VAR:-}" 2>/dev/null)"

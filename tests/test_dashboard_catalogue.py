@@ -83,3 +83,57 @@ def test_no_model_in_our_catalogue_needs_a_hugging_face_token(catalogue):
     has a form field that must be filled in and nobody has a token."""
     gated = [k for k, m in catalogue.items() if m.get("needs_HF_token")]
     assert not gated, f"these need a Hugging Face token: {gated}"
+
+
+def test_the_model_id_is_not_rebuilt_from_display_fields(root):
+    """Patch 0003.
+
+    Upstream carried only `family` and `name` and reconstructed the model id as
+    `family + '/' + name` in three places: the card click that preselects the
+    deploy dropdown, the "Card" chip that opens Hugging Face, and the
+    `needs_HF_token` lookup. That is only correct when the Hugging Face
+    organisation happens to equal the family label.
+    """
+    patch = root / "patches" / "ai4-dashboard" / "0003-vllm-model-id.patch"
+    if not patch.is_file():
+        pytest.skip("0003 not present")
+    text = patch.read_text(encoding="utf-8")
+
+    # The reconstruction is removed, not merely added around.
+    for removed in (
+        "-            state: { llmId: this.llm.family + '/' + this.llm.name },",
+        "-                (m) => m.family + '/' + m.name === model",
+    ):
+        assert removed in text, f"still present: {removed.lstrip('-').strip()}"
+
+    # The key stops being discarded: it is destructured as `id` and spread last.
+    assert "-                        name, // model name" in text, (
+        "the line that let config.name overwrite the key is still there"
+    )
+    assert "+                    ([id, config]) => ({" in text
+    assert "+                        id," in text, (
+        "the service must keep the YAML key as the model id"
+    )
+
+
+def test_no_model_id_can_be_rebuilt_from_family_and_name(catalogue):
+    """The data half of the same bug, and the reason it is not theoretical.
+
+    This asserts the catalogue CONTAINS entries where the reconstruction fails,
+    which reads backwards until you see why: if every model here happened to
+    agree, patch 0003 would look like a refactor and someone would drop it. Two
+    of our nine disagree, and both are models the demo can offer.
+    """
+    mismatched = [
+        model_id
+        for model_id, m in catalogue.items()
+        if f"{m['family']}/{m['name']}" != model_id
+    ]
+    assert mismatched, (
+        "no model in the catalogue distinguishes id from family/name any more. "
+        "If that is deliberate, patch 0003 is still correct — the id is the id "
+        "— but this test no longer proves anything and should say so."
+    )
+    for model_id in mismatched:
+        assert "/" in model_id, f"{model_id} is not a Hugging Face model id"
+

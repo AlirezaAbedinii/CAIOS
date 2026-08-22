@@ -1,0 +1,147 @@
+--- a/src/app/shared/interfaces/module.interface.ts
++++ b/src/app/shared/interfaces/module.interface.ts
+@@ -257,6 +257,13 @@
+ }
+ 
+ export interface VllmModelConfig {
++    // [CAIOS] The Hugging Face model id, and the key of the entry in
++    // vllm.yaml: "mistralai/Ministral-3-3B-Instruct-2512". It is what PAPI's
++    // deploy form offers and what a deployment is made with. Upstream carried
++    // only `family` and `name` and rebuilt the id from them where it was
++    // needed, which is wrong whenever the organisation is not the family
++    // label — four of upstream's own thirteen models, two of our nine.
++    id: string;
+     name: string;
+     description: string;
+     family: string;
+--- a/src/app/modules/catalog/services/tools-service/tools.service.ts
++++ b/src/app/modules/catalog/services/tools-service/tools.service.ts
+@@ -126,13 +126,17 @@
+         return this.http.get(url, { responseType: 'text' }).pipe(
+             map((yamlText) => {
+                 const parsedYaml = yaml.load(yamlText) as {
+-                    models: Record<string, Omit<VllmModelConfig, 'name'>>;
++                    models: Record<string, Omit<VllmModelConfig, 'id'>>;
+                 };
+ 
++                // [CAIOS] Keep the key. Upstream spread `config` AFTER `name`,
++                // so the entry's own `name` overwrote it and the key — the
++                // actual model id — was silently discarded. Everything that
++                // needed the id then rebuilt it as `family + '/' + name`.
+                 return Object.entries(parsedYaml.models).map(
+-                    ([name, config]) => ({
+-                        name, // model name
++                    ([id, config]) => ({
+                         ...config,
++                        id,
+                     })
+                 );
+             })
+--- a/src/app/modules/catalog/services/tools-service/tools-service.mock.ts
++++ b/src/app/modules/catalog/services/tools-service/tools-service.mock.ts
+@@ -17,8 +17,20 @@
+ import { llmDefaultFormValues } from '@app/modules/catalog/components/train/tool-train/llm/llm.component.mock';
+ import { nvflareDefaultFormValues } from '@app/modules/catalog/components/train/tool-train/nvflare/nvflare-conf-form/nvflare-conf-form.component.mock';
+ 
++// [CAIOS] These fixtures did not match the file they stand in for. The YAML
++// used the DISPLAY NAME as the key and carried no `name` at all, so upstream's
++// `{ name, ...config }` filled `name` in from the key and the test passed —
++// while the real vllm.yaml keys on the model id and every entry has its own
++// `name`. The mock therefore exercised a shape that does not exist, which is
++// how `family + '/' + name` survived: with these fixtures it is always right.
++//
++// Now keyed on the model id, with `name` present, like the real file. Note the
++// second entry: the id is `Qwen/Qwen2.5-7B-Instruct-AWQ` and family + '/' +
++// name agrees, while the first is `meta-llama/...` against a family of
++// `meta-llama` — pick a mismatching pair if you want the regression covered.
+ export const mockedVllmsConfig: VllmModelConfig[] = [
+     {
++        id: 'meta-llama/Llama-3.2-3B-Instruct',
+         name: 'Llama-3.2-3B-Instruct',
+         description: 'A mock LLM model',
+         family: 'meta-llama',
+@@ -28,9 +40,10 @@
+         args: [],
+     },
+     {
+-        name: 'Qwen2.5-7B-Instruct-AWQ',
+-        description: 'Another mock LLM model',
+-        family: 'Qwen',
++        id: 'ibm-granite/granite-4.1-3b',
++        name: 'granite-4.1-3b',
++        description: 'Another mock LLM model, whose family is not its org',
++        family: 'IBM',
+         needs_HF_token: false,
+         license: '',
+         context: '',
+@@ -40,16 +53,18 @@
+ 
+ export const mockedYamlVllmsConfig = `
+ models:
+-  Llama-3.2-3B-Instruct:
++  meta-llama/Llama-3.2-3B-Instruct:
++    name: Llama-3.2-3B-Instruct
+     description: A mock LLM model
+     family: meta-llama
+     needs_HF_token: true
+     license: ''
+     context: ''
+     args: []
+-  Qwen2.5-7B-Instruct-AWQ:
+-    description: Another mock LLM model
+-    family: Qwen
++  ibm-granite/granite-4.1-3b:
++    name: granite-4.1-3b
++    description: Another mock LLM model, whose family is not its org
++    family: IBM
+     needs_HF_token: false
+     license: ''
+     context: ''
+--- a/src/app/modules/catalog/components/modules-cards/llm-card/llm-card.component.ts
++++ b/src/app/modules/catalog/components/modules-cards/llm-card/llm-card.component.ts
+@@ -64,15 +64,21 @@
+     }
+ 
+     loadLLM() {
++        // [CAIOS] The id, not family + '/' + name. This value preselects the
++        // deploy form's model dropdown, whose options are the keys PAPI serves.
++        // Reconstructed, it produced "Mistral/Ministral-3-3B-Instruct-2512" for
++        // a model whose id is "mistralai/Ministral-3-3B-Instruct-2512" — a
++        // value not in the list, so the dropdown opened with nothing selected.
+         this.router.navigate(['catalog/llms/ai4os-llm/deploy'], {
+-            state: { llmId: this.llm.family + '/' + this.llm.name },
++            state: { llmId: this.llm.id },
+         });
+     }
+ 
+     openLink(e: MouseEvent) {
+         e.stopPropagation();
+-        const url =
+-            'https://huggingface.co/' + this.llm.family + '/' + this.llm.name;
++        // [CAIOS] Same reason. Reconstructed, the "Card" chip opened
++        // huggingface.co/Mistral/... and huggingface.co/IBM/..., both 404.
++        const url = 'https://huggingface.co/' + this.llm.id;
+         window.open(url);
+     }
+ }
+--- a/src/app/modules/catalog/components/train/general-conf-form/general-conf-form.component.ts
++++ b/src/app/modules/catalog/components/train/general-conf-form/general-conf-form.component.ts
+@@ -468,10 +468,15 @@
+ 
+     modelChanged() {
+         const model = this.generalConfFormGroup.get('vllmModelSelect')?.value;
++        // [CAIOS] Match on the id. Reconstructing it meant find() returned
++        // undefined for any model whose organisation differs from its family
++        // label, and `?? false` then quietly decided no token was needed. Every
++        // model in the CAIOS catalogue is ungated so the answer happened to be
++        // right, but it was right by accident: a gated model would have shown
++        // no token field and failed at PAPI with a 400.
+         this.modelNeedsToken =
+-            this.vllModelsConfigurations.find(
+-                (m) => m.family + '/' + m.name === model
+-            )?.needs_HF_token ?? false;
++            this.vllModelsConfigurations.find((m) => m.id === model)
++                ?.needs_HF_token ?? false;
+ 
+         if (this.modelNeedsToken) {
+             this.generalConfFormGroup.get('huggingFaceTokenInput')?.enable();

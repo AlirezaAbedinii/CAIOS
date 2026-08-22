@@ -321,6 +321,48 @@ Now `/assets/config/vllm.yaml`, staged by `scripts/build-dashboard.sh` from
 
 It cannot be configuration: the URL is a string literal in a service method.
 
+The patch also updates `tools.service.spec.ts`, which asserts the URL the
+catalogue is fetched from. Left alone it would assert the behaviour we just
+removed; updated, it is the thing that stops the third-party fetch coming back.
+
+### `ai4-dashboard/0003-vllm-model-id.patch`
+
+The dashboard never kept the model id. `getVllmModelConfiguration()` reads
+`vllm.yaml`, whose keys **are** the ids, and then throws the key away:
+
+```ts
+Object.entries(parsedYaml.models).map(([name, config]) => ({
+    name,        // the key...
+    ...config,   // ...immediately overwritten by the entry's own `name`
+}));
+```
+
+So three places rebuilt it as `family + '/' + name`, which is right only when
+the Hugging Face organisation equals the family label. It does not for
+`mistralai/Ministral-3-3B-Instruct-2512` (family `Mistral`) or
+`ibm-granite/granite-4.1-3b` (family `IBM`) — **two of our nine, and four of
+upstream's own thirteen**, so this is inherited rather than caused by curating.
+
+| where | what went wrong |
+|---|---|
+| `llm-card.loadLLM()` | preselects the deploy dropdown with a value not in it, so it opens blank |
+| `llm-card.openLink()` | the "Card" chip opens `huggingface.co/Mistral/...` — a 404 |
+| `general-conf-form.modelChanged()` | `find()` misses, `?? false` decides no Hugging Face token is needed |
+
+The third is the dangerous one. Every model in the CAIOS catalogue is ungated,
+so the answer is right — by accident. A gated model would show no token field
+and fail at PAPI with a 400 the form had all the information to prevent.
+
+The fix is to keep the key as `id` and use it in all three places.
+
+It also repairs the fixtures, which is how the bug survived: the mock YAML keyed
+on the **display name** and carried no `name` field, so upstream's
+`{ name, ...config }` filled `name` in from the key and every test passed
+against a shape the real file never has. The fixtures now key on the model id
+and include a family that differs from its organisation.
+
+Worth reporting upstream, with the two mismatching entries as the reproduction.
+
 ### `ai4-dashboard` — otherwise deliberately **not** patched for MVP
 
 The dashboard has hardcoded `cloud.ai4eosc.eu` endpoints, but on inspection

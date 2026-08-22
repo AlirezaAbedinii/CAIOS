@@ -27,3 +27,19 @@
          return this.http.get(url, { responseType: 'text' }).pipe(
              map((yamlText) => {
                  const parsedYaml = yaml.load(yamlText) as {
+--- a/src/app/modules/catalog/services/tools-service/tools.service.spec.ts
++++ b/src/app/modules/catalog/services/tools-service/tools.service.spec.ts
+@@ -251,8 +251,11 @@
+     });
+ 
+     it('getVllmModelConfiguration should parse YAML and return models', (done) => {
+-        const expectedUrl =
+-            'https://raw.githubusercontent.com/ai4os/ai4-papi/refs/heads/master/etc/vllm.yaml';
++        // [CAIOS] Was the raw.githubusercontent.com URL. This test is the
++        // reason the change is safe to make: it pins where the catalogue is
++        // fetched from, so a future edit that reintroduces the third-party
++        // fetch fails here rather than in a browser on demo day.
++        const expectedUrl = '/assets/config/vllm.yaml';
+ 
+         service.getVllmModelConfiguration().subscribe((data) => {
+             try {

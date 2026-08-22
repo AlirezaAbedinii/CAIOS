@@ -175,7 +175,7 @@ calls, no new dependency, and **no dashboard change needed**, because `starting`
 and `queued` are already badges upstream and *Quick access* is already gated on
 `status === 'running'`.
 
-**1. `running` becomes `starting` until every user-facing task has started.**
+**1. `running` becomes `starting` until a user can actually open it.**
 
 ```python
 status = a["TaskStates"]["main"]["State"] if a.get("TaskStates") else "queued"
@@ -190,7 +190,34 @@ because the Consul service carries no check but the node's own liveness.
 
 The patch adds `unstarted_user_tasks()`: tasks with a `lifecycle` block are
 plumbing, tasks without one are what a user opens, and Nomad has not started one
-until it has a `StartedAt`. R-23, D-38.
+until it has a `StartedAt`.
+
+**That alone was not enough, and the smoke test caught it.** Moving the signal
+from the wrong container to the right container still leaves it a signal about a
+*container*: measured on 2026-08-22, Nomad started `open-webui` at T+182 s and
+the first HTTP response came at T+220 s. Uvicorn opens its socket only after the
+FastAPI lifespan has created the administrator and closed signup (D-37), so 38
+seconds of green badge survived the first fix.
+
+So `deployment_is_ready()` adds a second condition: where the group defines
+health checks, Nomad must also have marked the allocation healthy. Nomad's
+`update.health_check` already defaults to `checks`, so with checks present that
+means "the port answers". The checks were added to
+`configs/papi/tools/ai4os-llm/nomad.hcl` in the same change, and the two are
+useless apart — the check without the gate leaves the badge wrong, the gate
+without the check has nothing to read.
+
+One layer remained after that, and it is not in Nomad: Traefik's consul-catalog
+provider polls Consul at 15 s intervals, so the public URL goes live up to that
+long after the check passes. `min_healthy_time = "25s"` in the job template
+covers it. No patch can — the check runs on the node, against the allocation,
+and the late component is the reverse proxy in front of it.
+
+Groups with no checks fall back to the task condition alone, so nothing that
+cannot express readiness can wedge at `starting`. That matters more than it
+looks: the instrumented run showed `DeploymentStatus` **absent** for the whole
+window, never `False`, so a naive `Healthy is False` test would have passed
+every unit test and done nothing on the cluster. R-23, D-38.
 
 **For every single-task deployment this is a no-op** — modules, the dev
 environment and the federated server have one task named `main` with no
@@ -216,10 +243,14 @@ while the first held the only free GPU, shown as a red error with no text, and
 deleted by the user three seconds after Nomad finally placed it. It had been
 47 seconds from working.
 
-`placement_status()` reports `queued` when any evaluation carries a non-empty
-`BlockedEval`, and builds the message from whichever evaluation actually has
-`FailedTGAllocs` — turning `DimensionExhausted` and `ConstraintFiltered` into a
-sentence rather than a Python dict. R-24, D-39.
+`placement_status()` splits the one case into three. No `FailedTGAllocs` on any
+evaluation means Nomad has not run a scheduling pass yet — `queued`, and the
+instrumented run showed this is a real state every deployment passes through, so
+upstream flashed red for the first second of its life. A non-empty `BlockedEval`
+means Nomad will retry when capacity changes — also `queued`. Only the remainder
+is an `error`. In every case the message is built from whichever evaluation
+actually has `FailedTGAllocs`, turning `DimensionExhausted` and
+`ConstraintFiltered` into a sentence rather than a Python dict. R-24, D-39.
 
 Worth reporting upstream. Neither fault is CAIOS-specific: the first affects any
 tool using lifecycle hooks, and the second affects any deployment on any cluster

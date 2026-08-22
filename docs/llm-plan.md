@@ -12,12 +12,12 @@ Read alongside:
 | `docs/llm-infrastructure.md` | What the hardware is, what fits, what changes |
 | `docs/llm-risks.md` | What will go wrong, and what it costs |
 
-**Status: Stages L0 to L4 are done.** A researcher can deploy a private model
+**Status: Stages L0 to L4b are done.** A researcher can deploy a private model
 onto CAIOS hardware, open a chat interface at their own subdomain, and talk to
 it. The browser check L4 was waiting for happened on 2026-08-21 and found two
-faults in how PAPI reports a deployment's state — **Stage L4b** below. What is
-left is L4b, L5 (model cards read from CAIOS rather than GitHub) and L6 (the
-demo beat). Each stage carries a "What it found" section written after it ran,
+faults in how PAPI reports a deployment's state — **Stage L4b** below, closed on
+2026-08-22. What is left is L5 (model cards read from CAIOS rather than GitHub)
+and L6 (the demo beat). Each stage carries a "What it found" section written after it ran,
 which is usually more useful than the plan above it.
 
 ---
@@ -806,11 +806,25 @@ was checked before the stage was written, and it is the reason the stage is half
 a day rather than two.
 
 **`configs/papi/tools/ai4os-llm/nomad.hcl`** — a `tcp` check on each of the two
-service stanzas, so Consul stops telling Traefik that a port nobody is listening
-on is healthy. **Defence in depth, and it needs verifying before it is kept:** it
-turns the 502 into a 404 for anyone who reaches the URL directly, which is not
-obviously an improvement, and Traefik's consul-catalog health filtering has not
-been confirmed on our deployment. Keep it only if the test below shows it helps.
+service stanzas, plus an explicit `update` block.
+
+This was planned as optional defence in depth and turned out to be **half the
+fix**. Without a check, Nomad's allocation health falls back to "every task is
+running", which is the same container-shaped signal one layer down; with one,
+`DeploymentStatus.Healthy` means "the port answers", because
+`update.health_check` already defaults to `checks`. The gate above has nothing
+to read without it.
+
+TCP rather than HTTP: Open WebUI creates its administrator and closes signup
+inside the FastAPI lifespan and opens its socket only afterwards (D-37), so "the
+socket is open" already implies both, and it depends on no path that a future
+release could rename.
+
+`healthy_deadline` is raised from Nomad's 5-minute default to 10 minutes. It is
+measured from allocation start and so includes the image pull, and
+`vllm/vllm-openai` is 30.8 GB on disk with docuum evicting it (gotcha 14) — a
+cold deployment can legitimately take longer than five minutes to become
+healthy, and failing it at that point would be wrong.
 
 ### Tests
 
@@ -829,6 +843,10 @@ Recorded fixtures, not a live cluster, so it runs in CI and it runs in seconds.
 exists to make: **poll PAPI and the UI together, and fail if PAPI ever reports
 `running` while the endpoint does not answer.** That is the bug, stated as a
 test. It costs nothing — the script already polls both.
+
+It earned its place immediately: the first version of patch `0011` passed all
+thirteen unit tests and this assertion failed it, at 22 s. Without it the stage
+would have been declared done with a fifth of the bug still in place.
 
 **Manual** — deploy from the dashboard and watch the badge: yellow `starting`
 with *Quick access* greyed out for two to three minutes, then green, then the
@@ -876,6 +894,84 @@ to; there is not one until Stage L6. The capacity limit and the loading window
 went into *Before you start* instead, which is where a warning about what not to
 do on camera actually gets read.
 
+### The first fix was wrong, and the test written for it said so
+
+Patch `0011` v1 passed all thirteen unit tests and then failed its own smoke
+assertion on the cluster:
+
+```
+PAPI status trail: queued -> starting -> running
+[FAIL] PAPI said 'running' at T+178s; the UI only answered at T+200s (R-23)
+       22s of green badge and an enabled Quick access button
+```
+
+184 seconds down to 22, and to 38 on the next run. The remainder is the *same*
+mistake one layer down: v1 moved the signal from the wrong container to the
+right container, and a container starting is still not a socket listening.
+
+An instrumented deployment settled the rest, sampling every signal every five
+seconds:
+
+```
+T+    papi      http   DeploymentStatus   tasks started
+0s    error     -      absent             -
+6s    starting  404    absent             check_vllm_startup,main
+...
+182s  running   404    absent             check_vllm_startup,main,open-webui
+...
+215s  running   404    absent             check_vllm_startup,main,open-webui
+220s  running   200    Healthy=True       check_vllm_startup,main,open-webui
+```
+
+Three things came out of that table, and none of them were guessable:
+
+1. **`DeploymentStatus` is absent for the whole window, never `False`.** The
+   obvious test — `Healthy is False` — would have passed every unit test and
+   done nothing whatsoever on the cluster.
+2. **`Healthy=True` and the first HTTP 200 land in the same sample.** With a
+   check present it is an accurate readiness signal, not an approximation.
+3. **T+0 reports `error`.** Between accepting a deployment and the first
+   scheduling pass there is an evaluation, no allocation and no failure — and
+   upstream called that an error. So *every* deployment on this platform has
+   always flashed red for its first second, LLM or not. Found only because the
+   instrumentation sampled from T+0 instead of starting when it got interesting.
+
+The `404` column is the health check working: Traefik stops publishing a route
+whose check is critical, which also answers the question the gate left open.
+
+### And the last three seconds were not in Nomad at all
+
+With the check in, the assertion failed again — at **3 seconds**. The residual
+has a different cause from the other two, and it is the sort of thing only a
+clock finds:
+
+| | |
+|---|---|
+| T+206 s | Open WebUI's port opens; the Consul check goes passing |
+| T+216 s | Nomad marks the allocation healthy — `min_healthy_time`, 10 s default |
+| T+219 s | Traefik finishes polling Consul and the public URL serves |
+
+**Traefik's consul-catalog provider polls**, at 15 s by default, so the route
+goes live up to fifteen seconds after the check passes. Nomad has no way to
+observe that hop, and no health check can — the check runs on the node, against
+the allocation, and the thing that is late is the reverse proxy in front of it.
+
+`min_healthy_time = "25s"` clears the poll with margin. The badge is now
+conservative by ten to twenty seconds instead of optimistic by three, which is
+the harmless direction: a promise kept late is still kept.
+
+**184 s → 22 s → 3 s → 0**, and each of the first two fixes passed the complete
+unit suite before the smoke test found the next layer.
+
+### The Consul check: kept, and the earlier reasoning was wrong
+
+The plan called it optional defence in depth, to be dropped unless it
+demonstrably helped. It was briefly dropped on the argument that turning a 502
+into a 404 helps nobody. That argument was about the wrong thing: the check's
+value is not what an early visitor sees, it is that **`DeploymentStatus.Healthy`
+is meaningless without it**. Nomad falls back to task states when a group has no
+checks, and task states are exactly what R-23 is about. Kept.
+
 ### Gate
 
 - [x] A second LLM deployment reads `queued` with a message naming the missing
@@ -886,16 +982,18 @@ do on camera actually gets read.
       jobs still read `running` through the patched PAPI
 - [x] `docs/demo-script.md` warns that only one LLM fits while the federated
       demo is up, and that the loading window is dead air
-- [ ] **The badge is `starting` and *Quick access* is disabled for the whole
-      loading window, verified by clicking.** Needs one deployment on a free
-      GPU, which means deleting the LLM currently running — the cluster fits
-      exactly one, which is R-24's finding biting the test of R-23's fix.
-- [ ] `scripts/check-llm-ui.sh` fails if `running` ever precedes a working
-      endpoint — written and syntax-checked; exercised by the same run
-- [ ] The Consul check is kept only if it demonstrably improves the direct-URL
-      case; otherwise dropped, with the reason recorded here. **Deliberately not
-      written yet** — the gate says keep it only if it demonstrably helps, and
-      it cannot be demonstrated without that same deployment
+- [x] **The badge is `starting` for the whole loading window** — verified on the
+      cluster 2026-08-22: `queued -> starting`, and `running` only after the
+      chat interface answered. *Quick access* follows from it, being gated on
+      `status === 'running'` in the one place the dashboard checks
+- [x] `scripts/check-llm-ui.sh` fails if `running` ever precedes a working
+      endpoint — and it did, twice, on fixes that had passed every unit test
+- [x] The Consul check is kept, and the reasoning that nearly dropped it is
+      recorded above. It is not defence in depth; it is what makes
+      `DeploymentStatus.Healthy` mean anything
+- [x] Nothing else regressed — full smoke test passes end to end: Open WebUI
+      0.11.0, signup closed, admin correct, model dropdown correct, 229 SSE
+      chunks at 10.0 ms, 75.1 tok/s
 
 **Commit:** `papi: a deployment is not running until you can open it`
 
@@ -1001,7 +1099,7 @@ minutes; this should not push it past 26.
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
 | L3 | First vLLM deployment | 0.5 | **done — 9/9 models verified** |
 | L4 | Open WebUI end to end | 0.5 | **done — browser check passed 2026-08-21** |
-| L4b | Deployment status tells the truth | 0.5 | **next** — found by that check |
+| L4b | Deployment status tells the truth | 0.5 | **done 2026-08-22** |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4b + L5 |
 | | | **4.5** | |

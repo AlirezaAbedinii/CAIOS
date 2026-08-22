@@ -449,13 +449,60 @@ placement, spanning exactly the window `docs/runbook.md` already tells you to
 expect ("80–200 s, depending on the model"). The runbook knew the deployment was
 slow. The dashboard did not.
 
-**Fix:** Nomad has the answer and PAPI is already holding it. Only the tasks
-*without* a `lifecycle` block are the ones a user opens; while any of them has no
-`StartedAt`, the deployment is `starting`, not `running`. One condition over data
-already fetched, no extra API calls — and the dashboard needs no change at all:
-`starting` is already a yellow badge in `deployment-badge.ts`, and *Quick access*
-is gated on `status === 'running'`, so it disables itself. Stage L4b in
-`docs/llm-plan.md`.
+**Fix, and it took three goes.** The obvious part is that only the tasks *without*
+a `lifecycle` block are the ones a user opens, so while any of them has no
+`StartedAt` the deployment is `starting`. That shrank the window from 184 s to
+**22-38 s across two runs**, and the smoke test written for this stage failed on
+the remainder — which is the same mistake one layer down. A container starting
+is not a socket listening: Nomad starts `open-webui` at T+178/T+182 s, and
+uvicorn opens its port only after the FastAPI lifespan has created the
+administrator and closed signup (D-37), at T+200/T+220 s.
+
+The honest signal is a **health check on the service**, which the deployment did
+not have. With one, Nomad's `update.health_check` — already defaulting to
+`checks` — makes `DeploymentStatus.Healthy` mean "the port answers" rather than
+"every container started, plus ten seconds". Measured: `Healthy` flipped true in
+the same 5-second sample as the first HTTP 200.
+
+Two changes, useless apart:
+
+| | |
+|---|---|
+| `nomad.hcl` | a `tcp` check on each service, so Consul stops calling a dead port healthy |
+| patch `0011` | `deployment_is_ready()` — user tasks started **and**, where checks exist, Nomad says healthy |
+
+A group with no checks falls back to the task condition alone, so nothing that
+cannot express readiness wedges at `starting`. **`DeploymentStatus` is absent
+during the window, never `False`** — a naive `Healthy is False` test would have
+passed every unit test and done nothing at all on the cluster.
+
+**And that still left three seconds, because of a hop Nomad cannot see.** The
+check passing means the container's port is open. It does not mean the *public
+URL* works, because Traefik's consul-catalog provider **polls** Consul — 15 s by
+default — so the route appears up to that long afterwards:
+
+| | |
+|---|---|
+| T+206 s | Open WebUI's port opens; the Consul check goes passing |
+| T+216 s | Nomad marks the allocation healthy (`min_healthy_time`, 10 s default) |
+| T+219 s | Traefik finishes its poll and the public URL serves |
+
+Closed by `min_healthy_time = "25s"`, which clears the poll with margin. The
+badge is now conservative by ten to twenty seconds rather than optimistic by
+three, and that is the harmless direction: a promise kept late is still kept.
+
+**The whole arc, measured:** 184 s → 22 s → 3 s → 0. Every step of it was found
+by a test rather than by reasoning, and the first two fixes each passed the
+complete unit suite.
+
+The dashboard needs no change: `starting` is already a yellow badge in
+`deployment-badge.ts`, and *Quick access* is gated on `status === 'running'`, so
+it disables itself. Stage L4b in `docs/llm-plan.md`.
+
+**Side effect worth knowing:** with the check in place Traefik stops publishing
+the route while it is critical, so a direct visit during loading now returns
+**404 rather than 502**. Neither is friendly, but the Consul catalogue is no
+longer lying to anything else that reads it.
 
 ### R-24 · A deployment queued for capacity is reported as an error, with an empty message
 
@@ -494,10 +541,14 @@ DimensionExhausted = {"devices: no devices match request": 1, "cores": 1, "cpu":
 ConstraintFiltered = {"${meta.type} = compute": 1}
 ```
 
-**Fix:** an evaluation carrying a non-empty `BlockedEval` means Nomad intends to
-retry — report `queued` (already an orange badge upstream) with a sentence
-saying so, and build the message from the evaluation that actually has
-`FailedTGAllocs` rather than from whichever one came back first. Stage L4b.
+**Fix:** three cases where upstream had one. An evaluation carrying a non-empty
+`BlockedEval` means Nomad intends to retry — `queued`, already an orange badge
+upstream. *No* `FailedTGAllocs` anywhere means Nomad has not run a scheduling
+pass yet — also `queued`, and the instrumented run of 2026-08-22 showed every
+deployment passes through that state, so upstream flashed a red `error` for the
+first second of every deployment's life. Only the remainder is an error. In all
+three the message comes from the evaluation that actually has `FailedTGAllocs`,
+not from whichever came back first. Stage L4b.
 
 **Underneath it is a real capacity limit, and that part is not a bug.** While the
 federated demo is up, this cluster hosts **exactly one LLM**. Measured at the

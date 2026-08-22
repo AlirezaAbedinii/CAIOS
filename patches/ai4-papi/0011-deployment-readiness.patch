@@ -1,10 +1,10 @@
 --- a/ai4papi/nomad_utils.py
 +++ b/ai4papi/nomad_utils.py
-@@ -48,6 +48,66 @@
+@@ -48,6 +48,93 @@
      return jobs
  
  
-+# [CAIOS] Two helpers for describing a deployment honestly. Both are pure
++# [CAIOS] Three helpers for describing a deployment honestly. All are pure
 +# functions over data `get_deployment` has already fetched, so they cost no
 +# extra Nomad calls and can be unit-tested without a cluster.
 +
@@ -30,20 +30,51 @@
 +    return unstarted
 +
 +
++def deployment_is_ready(tasks, services, alloc):
++    """Whether a user can open this deployment, not merely whether it started.
++
++    Two conditions, because a container starting is not a socket listening:
++
++    * every task without a `lifecycle` block has started. `main` may itself be
++      a prestart sidecar, in which case its state says nothing useful;
++    * and, where the group defines its own health checks, Nomad has marked the
++      allocation healthy. Nomad's `update.health_check` defaults to `checks`,
++      so with checks present that means "the port answers" — which no task
++      state ever does. Measured on 2026-08-22: Open WebUI's container started
++      at T+178 s and the first HTTP response came at T+200 s.
++
++    A group with no checks falls back to the first condition alone, so nothing
++    that cannot express readiness can get stuck reporting `starting` forever.
++    """
++    if unstarted_user_tasks(tasks, alloc):
++        return False
++    if any(s.get("Checks") for s in (services or [])):
++        return (alloc.get("DeploymentStatus") or {}).get("Healthy") is True
++    return True
++
++
 +def placement_status(evals):
 +    """Turn a job's evaluations into a (status, message) pair.
 +
-+    A non-empty `BlockedEval` is Nomad saying it will retry when capacity
-+    changes. That is `queued`, not `error`. The detail lives on whichever
-+    evaluation actually carries `FailedTGAllocs` — `/v1/job/:id/evaluations`
-+    returns evaluations unordered, and the first one back is frequently the
-+    blocked evaluation, which carries none.
++    Three cases where upstream had one. No failure recorded means Nomad has
++    simply not run a scheduling pass yet; a non-empty `BlockedEval` means it
++    will retry when capacity changes; only the remainder is an error. The
++    detail lives on whichever evaluation actually carries `FailedTGAllocs` —
++    `/v1/job/:id/evaluations` returns them unordered, and the first one back is
++    frequently the blocked evaluation, which carries none.
 +    """
 +    blocked = any(e.get("BlockedEval") for e in evals)
 +    failed = next((e for e in evals if e.get("FailedTGAllocs")), None)
 +
++    if failed is None:
++        return (
++            "queued",
++            "Scheduling. Nomad has accepted this deployment and has not placed "
++            "it on a node yet.",
++        )
++
 +    reasons = []
-+    for group in (failed or {}).get("FailedTGAllocs", {}).values():
++    for group in failed["FailedTGAllocs"].values():
 +        for dim, n in sorted((group.get("DimensionExhausted") or {}).items()):
 +            reasons.append(f"{dim!r} exhausted on {n} node(s)")
 +        for constraint, n in sorted((group.get("ConstraintFiltered") or {}).items()):
@@ -57,17 +88,13 @@
 +            "when resources free up; deleting another deployment frees them "
 +            f"sooner.{detail}",
 +        )
-+    return (
-+        "error",
-+        "This deployment could not be placed on any node."
-+        + (detail or " Nomad reported no placement detail."),
-+    )
++    return ("error", f"This deployment could not be placed on any node.{detail}")
 +
 +
  def get_deployment(
      deployment_uuid: str,
      namespace: str,
-@@ -238,6 +298,19 @@
+@@ -238,6 +325,21 @@
              status, status
          )  # if not mapped, then return original status
  
@@ -75,19 +102,21 @@
 +        # for a tool with a prestart sidecar that is NOT the task a user opens.
 +        # The LLM tool's "main" is vLLM, which reports "running" while it is
 +        # still loading the model and while Nomad has not started Open WebUI at
-+        # all. Measured: green badge at T+1 s, chat interface answering at
-+        # T+185 s — and Quick access is enabled for all of it, in front of a
-+        # 502 from Traefik. See R-23 and D-38.
++        # all. Before this, the dashboard showed a green badge and an enabled
++        # Quick access button in front of a Traefik 502 for 184 seconds.
 +        #
 +        # For every single-task deployment this is a no-op: "main" has no
-+        # lifecycle block, so it is a user task and it has already started.
-+        if info["status"] == "running" and unstarted_user_tasks(tasks, a):
++        # lifecycle block, so it is a user task, it has started, and the group
++        # defines no checks. See R-23 and D-38.
++        if info["status"] == "running" and not deployment_is_ready(
++            tasks, services, a
++        ):
 +            info["status"] = "starting"
 +
          # Add error messages if needed
          if info["status"] == "failed":
              info["error_msg"] = a["TaskStates"]["main"]["Events"][0]["Message"]
-@@ -310,10 +383,14 @@
+@@ -310,10 +412,13 @@
              info["status"] = a["ClientStatus"]
  
      elif evals:
@@ -95,13 +124,12 @@
 -        # We have to return `placement failures message`.
 -        info["status"] = "error"
 -        info["error_msg"] = f"{evals[0].get('FailedTGAllocs', '')}"
-+        # [CAIOS] Nomad distinguishes "I cannot place this" from "I will place
-+        # this when there is room", and upstream flattened both into `error` —
-+        # with an EMPTY message, because this endpoint returns evaluations
-+        # unordered and evals[0] is frequently the blocked evaluation, which
-+        # carries no FailedTGAllocs. A deployment 47 seconds from starting was
-+        # deleted because the dashboard called it an error and said nothing
-+        # else. See R-24 and D-39.
++        # [CAIOS] Nomad distinguishes "I have not looked yet" and "I will place
++        # this when there is room" from "I cannot place this", and upstream
++        # flattened all three into `error` — with an EMPTY message, because this
++        # endpoint returns evaluations unordered and evals[0] is frequently the
++        # blocked evaluation, which carries no FailedTGAllocs. A deployment 47
++        # seconds from starting was deleted because of it. See R-24 and D-39.
 +        info["status"], info["error_msg"] = placement_status(evals)
  
      else:

@@ -1,0 +1,31 @@
+{
+  "_recorded": "TaskGroups[0].Services of the LLM job after the tcp checks were added on 2026-08-22. With checks present Nomad's update.health_check (which already defaults to `checks`) makes DeploymentStatus.Healthy mean 'the port answers' instead of 'the container started'.",
+  "Services": [
+    {
+      "Name": "4da5adaf-9dce-11f1-866a-f998bfd2f7cd-ui",
+      "PortLabel": "ui",
+      "Checks": [
+        {
+          "Name": "ui-listening",
+          "Type": "tcp",
+          "PortLabel": "ui",
+          "Interval": 10000000000,
+          "Timeout": 2000000000
+        }
+      ]
+    },
+    {
+      "Name": "4da5adaf-9dce-11f1-866a-f998bfd2f7cd-vllm",
+      "PortLabel": "vllm",
+      "Checks": [
+        {
+          "Name": "vllm-listening",
+          "Type": "tcp",
+          "PortLabel": "vllm",
+          "Interval": 10000000000,
+          "Timeout": 2000000000
+        }
+      ]
+    }
+  ]
+}

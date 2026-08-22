@@ -1,0 +1,25 @@
+{
+  "_recorded": "TaskGroups[0].Services of a federated-learning workspace. No checks \u2014 the shape every deployment except the LLM has, and the reason the readiness gate must fall back to task states rather than wait for a health signal that will never arrive.",
+  "Services": [
+    {
+      "Name": "5b2f9bce-98f3-11f1-b823-e52fe1a7274c-api",
+      "PortLabel": "api",
+      "Checks": []
+    },
+    {
+      "Name": "5b2f9bce-98f3-11f1-b823-e52fe1a7274c-monitor",
+      "PortLabel": "monitor",
+      "Checks": []
+    },
+    {
+      "Name": "5b2f9bce-98f3-11f1-b823-e52fe1a7274c-ide",
+      "PortLabel": "ide",
+      "Checks": []
+    },
+    {
+      "Name": "5b2f9bce-98f3-11f1-b823-e52fe1a7274c-custom",
+      "PortLabel": "custom",
+      "Checks": []
+    }
+  ]
+}

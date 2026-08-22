@@ -10,7 +10,7 @@ Both faults are in `nomad_utils.py` and both are fixed by patch
 recorded from that incident, trimmed to the fields the code reads — the raw
 Nomad JSON carries live credentials (R-09) and must never be committed.
 
-Offline: the two functions under test are pure, so they are lifted out of the
+Offline: the functions under test are pure, so they are lifted out of the
 patched source with `ast` rather than imported. Importing `ai4papi.nomad_utils`
 would pull in nomad, fastapi, requests and a config file, none of which belong
 in a test that has to run in seconds.
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-HELPERS = ("unstarted_user_tasks", "placement_status")
+HELPERS = ("unstarted_user_tasks", "deployment_is_ready", "placement_status")
 PATCH = "0011-deployment-readiness.patch"
 
 
@@ -35,7 +35,7 @@ PATCH = "0011-deployment-readiness.patch"
 
 @pytest.fixture(scope="session")
 def helpers(root):
-    """The two helpers, lifted from `vendor/` with the CAIOS patches applied.
+    """The helpers, lifted from `vendor/` with the CAIOS patches applied.
 
     Patched into a temporary directory rather than read from `build/`, so the
     test always reflects the patch in the repository and never a stale build.
@@ -158,6 +158,70 @@ def test_a_missing_task_state_is_not_a_start_time(helpers, fixtures):
     assert helpers["unstarted_user_tasks"](tasks, {}) == ["open-webui"]
 
 
+# --- R-23, second half: a container starting is not a socket listening ----
+
+
+def test_a_started_container_is_not_yet_ready(helpers, fixtures):
+    """The 22 seconds the first fix did not close.
+
+    Measured 2026-08-22: Nomad started the `open-webui` container at T+178 s
+    and the first HTTP response came at T+200 s. Uvicorn opens its socket only
+    after the FastAPI lifespan has created the administrator and closed signup
+    (D-37), so "the container started" is still the wrong question.
+    """
+    tasks = fixtures("tasks-llm.json")["Tasks"]
+    services = fixtures("services-llm.json")["Services"]
+    alloc = {
+        "TaskStates": {
+            "main": {"State": "running", "StartedAt": "2026-08-22T02:10:00Z"},
+            "check_vllm_startup": {"State": "dead", "StartedAt": "2026-08-22T02:07:00Z"},
+            "open-webui": {"State": "running", "StartedAt": "2026-08-22T02:10:00Z"},
+        },
+        "DeploymentStatus": None,
+    }
+
+    assert helpers["deployment_is_ready"](tasks, services, alloc) is False
+
+
+def test_ready_once_nomad_says_the_checks_pass(helpers, fixtures):
+    tasks = fixtures("tasks-llm.json")["Tasks"]
+    services = fixtures("services-llm.json")["Services"]
+    alloc = dict(
+        fixtures("alloc-llm-ready.json"),
+        DeploymentStatus={"Healthy": True, "Canary": False},
+    )
+
+    assert helpers["deployment_is_ready"](tasks, services, alloc) is True
+
+
+def test_a_group_without_checks_does_not_wait_for_a_health_signal(helpers, fixtures):
+    """The wedge this must never cause.
+
+    Nothing but the LLM tool defines checks. If the gate demanded
+    DeploymentStatus.Healthy unconditionally, every module and workspace would
+    sit at `starting` for as long as Nomad left that field absent — and the
+    instrumented run on 2026-08-22 showed it absent, not False, for the whole
+    of a deployment.
+    """
+    tasks = fixtures("tasks-single-task.json")["Tasks"]
+    services = fixtures("services-single-task.json")["Services"]
+    alloc = dict(fixtures("alloc-single-task.json"), DeploymentStatus=None)
+
+    assert helpers["deployment_is_ready"](tasks, services, alloc) is True
+
+
+def test_absent_deployment_status_is_not_healthy(helpers, fixtures):
+    """`Healthy` is absent during the window, never False. Anything testing
+    `is False` would have passed the tests and failed on the cluster."""
+    tasks = fixtures("tasks-llm.json")["Tasks"]
+    services = fixtures("services-llm.json")["Services"]
+    ready = fixtures("alloc-llm-ready.json")
+
+    for status in (None, {}, {"Healthy": None}, {"Healthy": False}):
+        alloc = dict(ready, DeploymentStatus=status)
+        assert helpers["deployment_is_ready"](tasks, services, alloc) is False, status
+
+
 # --- R-24: "waiting" and "failed" are different words ---------------------
 
 
@@ -211,9 +275,24 @@ def test_unplaceable_evaluation_is_still_an_error(helpers, fixtures):
     assert msg.strip()
 
 
-def test_no_evaluation_detail_still_produces_a_sentence(helpers):
+def test_an_evaluation_with_no_failure_yet_is_queued_not_error(helpers):
+    """T+0, seen on the instrumented run of 2026-08-22.
+
+    Between accepting a deployment and running the first scheduling pass, Nomad
+    has an evaluation and no allocation and nothing has failed. Upstream called
+    that `error`, so every deployment flashed red for its first second.
+    """
+    status, msg = helpers["placement_status"]([{"ID": "x", "Status": "pending"}])
+
+    assert status == "queued"
+    assert msg.strip()
+
+
+def test_a_real_failure_with_no_detail_is_still_an_error(helpers):
     """Belt and braces: never hand the dashboard an empty string again."""
-    status, msg = helpers["placement_status"]([{"ID": "x", "Status": "complete"}])
+    status, msg = helpers["placement_status"](
+        [{"ID": "x", "Status": "complete", "FailedTGAllocs": {"usergroup": {}}}]
+    )
 
     assert status == "error"
     assert msg.strip()
@@ -226,7 +305,7 @@ def test_patch_calls_both_helpers(root):
     """A helper nothing calls is a helper that silently stops mattering."""
     patch = (root / "patches" / "ai4-papi" / PATCH).read_text(encoding="utf-8")
 
-    assert "+        if info[\"status\"] == \"running\" and unstarted_user_tasks(tasks, a):" in patch
+    assert "+        if info[\"status\"] == \"running\" and not deployment_is_ready(" in patch
     assert '+        info["status"], info["error_msg"] = placement_status(evals)' in patch
     assert "-        info[\"status\"] = \"error\"" in patch, (
         "the unconditional error must be removed, not merely added around"

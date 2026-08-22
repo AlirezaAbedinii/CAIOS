@@ -15,7 +15,7 @@ and timed at 22 minutes.
 researcher can deploy a private language model onto the lab's GPU and talk to it
 in a browser at their own subdomain. L0 to L4 are done. The browser check L4 was
 waiting for happened on 2026-08-21 and found two faults in how PAPI reports
-deployment state, now **Stage L4b**; L4b, L5 and L6 remain. `docs/llm-plan.md`
+deployment state — **Stage L4b**, closed on 2026-08-22. L5 and L6 remain. `docs/llm-plan.md`
 is the plan and carries what each stage actually found.
 
 ---
@@ -30,23 +30,19 @@ is the plan and carries what each stage actually found.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L4b shipped, one check left** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4b done; L5 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Finish Stage L4b** — patch `0011` is shipped and the `queued` half is
-   verified live. The `starting` half needs one deployment on a free GPU, which
-   means deleting the LLM currently running, since the cluster fits only one.
-2. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
+1. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
    than from AI4OS's GitHub (R-07).
-3. **Rehearse the demo end to end in a browser**, following
-   `docs/demo-script.md`. Nothing in the walkthrough has been driven by a human
-   clicking yet — every piece is verified individually, which is not the same
-   thing.
-4. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
+2. **Rehearse the demo end to end in a browser**, following
+   `docs/demo-script.md`. The LLM half has now been driven by a human clicking,
+   and it found two faults; the federated half has not.
+3. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
    browser warning that currently opens the demo.
-5. Record it.
+4. Record it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -89,11 +85,71 @@ which we had written down as a risk about job *specifications* without noticing
 it applies to anything recorded from one. Fixtures are trimmed to the fields the
 code reads, and a test keeps them that way.
 
-**What is left is one deployment on a free GPU** — watching the badge sit at
-`starting` with *Quick access* greyed out, exercising the new assertion in
-`check-llm-ui.sh`, and deciding whether the Consul health check earns its place.
-All three need the same run, and the cluster fits exactly one LLM: R-24's
-finding biting the test of R-23's fix.
+**Then the smoke test failed the fix.** Patch `0011` v1 passed all thirteen unit
+tests and the assertion written for this very stage caught it on the cluster:
+
+```
+PAPI status trail: queued -> starting -> running
+[FAIL] PAPI said 'running' at T+178s; the UI only answered at T+200s (R-23)
+       22s of green badge and an enabled Quick access button
+```
+
+184 seconds down to 22, and to 38 on the next run — the remainder is the same
+mistake one layer down. v1 moved the signal from the wrong container to the
+right container, but a container starting is not a socket listening. Open WebUI
+opens its port only after the FastAPI lifespan has created the administrator and
+closed signup, so Nomad's "task started" is 22-38 seconds early.
+
+**An instrumented deployment settled it**, sampling PAPI, HTTP, Nomad and Consul
+every five seconds from T+0. Three findings, none of them guessable:
+
+| | |
+|---|---|
+| `DeploymentStatus` is **absent** through the window, never `False` | the obvious `Healthy is False` test would have passed every unit test and done nothing on the cluster |
+| `Healthy=True` and the first HTTP 200 land in the **same sample** | with a health check present it is an accurate readiness signal, not an approximation |
+| T+0 reports `error` | between acceptance and the first scheduling pass there is an evaluation, no allocation and no failure — so **every** deployment on this platform has always flashed red for its first second |
+
+**And the Consul check, which had just been dropped, turned out to be half the
+fix.** It was dropped on the argument that turning a 502 into a 404 helps
+nobody. That was about the wrong thing: without a check, Nomad falls back to
+task-state health, so `DeploymentStatus.Healthy` means "every container started"
+— exactly what R-23 is about. The gate has nothing to read without it. Kept, with
+an explicit `healthy_deadline` of 10 minutes because Nomad measures it from
+allocation start and a cold `vllm/vllm-openai` pull is 30.8 GB.
+
+Two changes, useless apart: a `tcp` check on each service, and
+`deployment_is_ready()` requiring both the user tasks started and — where checks
+exist — Nomad's own healthy verdict.
+
+**Then it failed again, at three seconds, on a hop Nomad cannot see.**
+
+| | |
+|---|---|
+| T+206 s | Open WebUI's port opens; the Consul check goes passing |
+| T+216 s | Nomad marks the allocation healthy — `min_healthy_time`, 10 s default |
+| T+219 s | Traefik finishes polling Consul and the public URL serves |
+
+Traefik's consul-catalog provider **polls**, at 15 s by default. No health check
+can cover that: the check runs on the node against the allocation, and the thing
+that is late is the reverse proxy in front of it. `min_healthy_time = "25s"`
+clears the poll with margin, leaving the badge conservative by ten to twenty
+seconds instead of optimistic by three — the harmless direction.
+
+**184 s → 22 s → 3 s → 0.** Each of the first two fixes passed the complete unit
+suite. Every layer was found by a test, none by reasoning about it.
+
+### Gate passed 2026-08-22
+
+```
+PAPI status trail: queued -> starting
+  [ ok ] PAPI never reported 'running' before the UI answered
+  [ ok ] page title is "Open WebUI"        [ ok ] signup is closed
+  [ ok ] the account is an administrator   [ ok ] dropdown offers Qwen/Qwen3.5-2B
+  [ ok ] 229 SSE chunks at 10.0 ms         75.1 tok/s
+```
+
+Stage L4b is done. Three deployments were spent finding a bug two conditions
+wide, which is the correct ratio when the failure mode is a green badge.
 
 ---
 

@@ -150,6 +150,36 @@ job "tool-llm-${JOB_UUID}" {
 
   group "usergroup" {
 
+    # [CAIOS] Health is check-based, and the deadline has to fit a model load.
+    #
+    # Nomad already defaults HealthCheck to "checks" — but with no check defined
+    # it falls back to "every task is running", which for this job means "Nomad
+    # started the Open WebUI container", not "Open WebUI answers". Measured on
+    # 2026-08-22 across two runs: container at T+178/T+182 s, first HTTP
+    # response at T+200/T+220 s. The checks below close that 22-38 s gap; see
+    # R-23 and the note on the services.
+    #
+    # min_healthy_time covers the one hop Nomad cannot see. The check passing
+    # means the container's port is open; it does not mean Traefik is routing to
+    # it yet, because the consul-catalog provider POLLS Consul — 15 s by default
+    # — so the public URL goes live up to that long afterwards. Measured on
+    # 2026-08-22: port open at T+206 s, Nomad healthy at T+216 s with the
+    # default 10 s, route actually serving at T+219 s. Three seconds of green
+    # badge in front of a dead URL, and D-37 is on file saying a window that is
+    # small is not a window that is closed. 25 s clears the poll with margin,
+    # and erring late is the harmless direction: the badge is a promise.
+    #
+    # healthy_deadline is raised from Nomad's 5-minute default because it is
+    # measured from allocation start and therefore includes the image pull.
+    # `vllm/vllm-openai` is 30.8 GB on disk and docuum evicts it (gotcha 14), so
+    # a cold deployment can legitimately spend longer than five minutes getting
+    # to a healthy state. Failing it at that point would be wrong.
+    update {
+      min_healthy_time  = "25s"
+      healthy_deadline  = "10m"
+      progress_deadline = "15m"
+    }
+
     disconnect {
       lost_after = "48h"
       replace    = false
@@ -173,6 +203,24 @@ job "tool-llm-${JOB_UUID}" {
         "traefik.http.routers.${JOB_UUID}-ui.tls=true",
         "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
       ]
+
+      # [CAIOS] Without this, the only check on the service is Consul's own
+      # "is the node alive", so Traefik publishes the route the instant the
+      # allocation registers and proxies to a port nothing is listening on —
+      # `502 Bad Gateway`, for the two to three minutes the model takes to load.
+      #
+      # TCP rather than HTTP on purpose. Open WebUI creates its administrator
+      # and closes signup inside the FastAPI lifespan, and uvicorn opens the
+      # listening socket only after that completes (D-37). So "the socket is
+      # open" already means "the account exists and signup is shut", and it
+      # needs no path that a future Open WebUI release could rename.
+      check {
+        name     = "ui-listening"
+        type     = "tcp"
+        port     = "ui"
+        interval = "10s"
+        timeout  = "2s"
+      }
     }
 
     service {
@@ -183,6 +231,21 @@ job "tool-llm-${JOB_UUID}" {
         "traefik.http.routers.${JOB_UUID}-vllm.tls=true",
         "traefik.http.routers.${JOB_UUID}-vllm.rule=Host(`vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
       ]
+
+      # Same reasoning as the UI service. vLLM binds its port only once the
+      # engine is loaded, so this is also the honest answer to "is the model
+      # ready" — which is what `check_vllm_startup` polls for from inside.
+      #
+      # No `check_restart`: a check that fails here means the model is still
+      # loading or has died, and restarting the task would turn a slow start
+      # into a loop. Nomad's healthy_deadline above is the backstop.
+      check {
+        name     = "vllm-listening"
+        type     = "tcp"
+        port     = "vllm"
+        interval = "10s"
+        timeout  = "2s"
+      }
     }
 
     ephemeral_disk {

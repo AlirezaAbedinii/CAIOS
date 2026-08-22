@@ -50,8 +50,21 @@ SITES=(site_a site_b site_c)
 [[ -f "$SITES_DIR/test.npz" ]] || { echo "No data — run demo/fl/partition.py first."; exit 1; }
 [[ -f "$CA_SRC" ]] || { echo "No CA at $CA_SRC — run scripts/make-traefik-certs.sh."; exit 1; }
 
-rm -rf "$DIST"
+# Empty the directory; do NOT replace it.
+#
+# `rm -rf "$DIST"` followed by mkdir gives a NEW INODE, and compose/caddy has
+# this directory bind-mounted at /srv/fl. A bind mount follows the inode, not
+# the path, so Caddy would go on serving the deleted one: /srv/fl empty inside
+# the container, every /fl/* URL a 404, and the bundles sitting on the host
+# looking perfectly fine. That is beat 5 of the demo — the bootstrap one-liner
+# each hospital pastes — broken by the very script the runbook tells you to
+# re-run after editing client.py.
+#
+# Found on 2026-08-22 while rebuilding for the LLM beat, with the cluster in
+# exactly that state. Emptying in place keeps the inode, so Caddy never needs
+# restarting and the failure cannot recur.
 mkdir -p "$DIST"
+find "$DIST" -mindepth 1 -delete
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
@@ -110,5 +123,5 @@ code{background:#f4f4f5;padding:.15em .4em;border-radius:3px}pre{background:#f4f
 EOF
 
 echo
-echo "  published at $BASE_URL/  (reload Caddy if this is the first build:"
+echo "  published at $BASE_URL/  (if this is the first build, reload Caddy:"
 echo "  docker compose -f compose/docker-compose.yml --env-file $ENV_FILE up -d caddy)"

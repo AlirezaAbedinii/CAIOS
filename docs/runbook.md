@@ -320,6 +320,11 @@ bash scripts/build-fl-bundles.sh
 
 `build-fl-bundles.sh` must be re-run after any change to `client.py`,
 `model.py`, or the data — the workspaces fetch the bundle, not the repository.
+It empties `demo/fl/dist/` in place rather than replacing it, because Caddy has
+that directory bind-mounted: recreating it would leave Caddy serving a deleted
+inode, with every `/fl/*` URL 404ing while the bundles sit on disk looking
+fine. Check with `curl -k -sS -o /dev/null -w '%{http_code}\n'
+https://<dashboard>/fl/bootstrap.sh` if a workspace cannot bootstrap.
 
 The Nomad scheduler must be in `spread` mode or two hospitals land on one
 machine (D-19). Idempotent, so just run it:

@@ -504,6 +504,13 @@ Open WebUI starts only after the model has finished loading, because
 `check_vllm_startup` is a non-sidecar `prestart` task. That gives you a useful
 shortcut: **if the chat interface answers at all, the model is ready.**
 
+It also gives you a trap. **The dashboard turns the badge green and enables
+*Quick access* as soon as vLLM's container starts, roughly three minutes before
+the chat interface exists** — so the button lights up, and the link 502s (R-23).
+Until Stage L4b lands, treat a green badge as "the model started loading", and
+give it the 80–200 s above before clicking. On camera, click it once and let it
+work rather than clicking early and recovering.
+
 ### Checking it by hand, in a browser
 
 Scripts cannot settle this one. Three faults in this project appeared only when
@@ -537,6 +544,58 @@ If the model is `LFM2.5-1.2B-Thinking` or `DeepSeek-R1-Distill-Qwen-1.5B`, the
 reply opens with a collapsible **Thinking** block that fills first — about three
 seconds of it before the answer starts. That is correct behaviour, not a fault,
 and it is why neither should be the model deployed live in the demo.
+
+### The badge says `running` but *Quick access* gives "Bad Gateway"
+
+**Wait. It is loading, and the dashboard is wrong, not the deployment.**
+
+Until Stage L4b lands, `running` means "the vLLM container started" — not "the
+chat interface answers". vLLM then spends one to three minutes loading the model,
+and Nomad does not start Open WebUI until it has finished. Traefik publishes the
+route immediately, so the URL exists, resolves, and proxies to a port nothing is
+listening on. That is a 502 (R-23).
+
+Measured on a real deployment: badge green at **T+1 s**, UI actually answering at
+**T+185 s**.
+
+To see where it really is:
+
+```bash
+nomad alloc status -namespace caios <alloc> | grep -A4 'Task "open-webui"'
+```
+
+`Started At = N/A` means the model is still loading. Once that task has a start
+time, give it ten more seconds and reload.
+
+Faster, from the browser: the deployment **detail** page computes
+`active_endpoints` and the table does not, so open the deployment rather than
+staring at the row.
+
+### "Deploy your LLM" comes back with a red `error` and no message
+
+**Almost certainly the cluster is full, and the deployment is queued rather than
+dead.** Do not delete it — it will start by itself when something frees up
+(R-24).
+
+Confirm:
+
+```bash
+nomad eval list -namespace caios -job <job-id> -verbose   # look for Placement Failures = true
+nomad eval status -namespace caios -verbose <eval-id>     # says which dimension ran out
+```
+
+`Evaluation "..." waiting for additional capacity to place remainder` means Nomad
+is holding it, not refusing it.
+
+**While the federated demo is running, only one LLM fits.** One LLM deployment
+needs 2 exclusive CPU cores plus 1300 MHz, 16.3 GB and a GPU. The LLM node holds
+the one that is already running; the three hospital nodes have a free GPU each
+but only 3 cores, and a workspace is using one. Free a GPU by deleting the other
+LLM, or tear down the federated demo first.
+
+If instead the message names a **constraint** rather than a dimension, that is a
+different problem — see "A deployment is stuck in pending" above and run
+`scripts/verify-cluster.sh`.
 
 ### The chat interface loads, but the model dropdown is empty
 

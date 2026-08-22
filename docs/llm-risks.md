@@ -10,7 +10,8 @@ fixed. *Silent* — it works in a way that looks fine and is not, which is worse
 with it, and here is why.
 
 Every "verified" claim below was checked against upstream source at the pinned
-commit `e80a2b7`, or against the live cluster, on 2026-08-19.
+commit `e80a2b7`, or against the live cluster, on 2026-08-19. R-21 to R-24 were
+found later, by running the thing; each carries its own date.
 
 ---
 
@@ -403,6 +404,117 @@ mean "closed before the port opened".
 Worth reporting upstream: it affects every AI4OS deployment of this tool, and
 patch `0009` already found the related bug where a standalone `open-webui`
 skipped its credential checks entirely and came up with signup open.
+
+### R-23 · The dashboard says `running` about three minutes before anything answers
+
+**Found on 2026-08-21 by the browser check Stage L4 was waiting for.** A
+deployment was created, the deployments table showed a green `running` badge,
+*Quick access* became clickable — and the link returned Traefik's `Bad Gateway`
+for the next three minutes.
+
+Both halves of that are working as designed, which is why nothing caught it.
+
+**PAPI reports the state of one container, not of the deployment.**
+`nomad_utils.py` reads `TaskStates["main"]["State"]`, and PAPI renames the first
+task in the template to `main`. In our job `main` is vLLM — and vLLM is a
+`prestart` **sidecar**, so it reaches `running` the moment its container starts,
+with the model still to load. Open WebUI is a different task, and at that point
+Nomad has not started it at all.
+
+**Consul registers the route with no health check on it.** Queried live:
+
+```
+service b4d12680-...-ui   192.168.104.188:31960
+  checks: [('Serf Health Status', 'passing')]
+```
+
+The node's liveness, and nothing else. Traefik's consul-catalog provider sees a
+passing service the instant the allocation registers, and proxies to a port
+nothing is listening on. A refused dial is a `502 Bad Gateway`.
+
+Measured on the deployment that found it:
+
+| Time (UTC) | |
+|---|---|
+| 22:43:19 | allocation placed; Consul registers, Traefik publishes the route |
+| 22:43:20 | vLLM container starts → **PAPI reports `running`**, *Quick access* enabled |
+| 22:46:14 | vLLM finishes loading (174 s); the `open-webui` container starts |
+| 22:46:24 | Nomad marks the allocation healthy — the UI answers |
+
+**184 seconds** of a green badge and a live button in front of a 502.
+
+This is R-21 one phase later, and much wider. R-21 is a few seconds of
+unresolvable hostname *before* placement; this is three minutes *after*
+placement, spanning exactly the window `docs/runbook.md` already tells you to
+expect ("80–200 s, depending on the model"). The runbook knew the deployment was
+slow. The dashboard did not.
+
+**Fix:** Nomad has the answer and PAPI is already holding it. Only the tasks
+*without* a `lifecycle` block are the ones a user opens; while any of them has no
+`StartedAt`, the deployment is `starting`, not `running`. One condition over data
+already fetched, no extra API calls — and the dashboard needs no change at all:
+`starting` is already a yellow badge in `deployment-badge.ts`, and *Quick access*
+is gated on `status === 'running'`, so it disables itself. Stage L4b in
+`docs/llm-plan.md`.
+
+### R-24 · A deployment queued for capacity is reported as an error, with an empty message
+
+**Found on 2026-08-21, in the same session.** A second LLM deployment was
+submitted while the first was still running. The dashboard showed a red `error`
+badge, the deployment never started, and it was deleted.
+
+Nomad had not failed. It had created a **blocked evaluation**:
+
+```
+Evaluation "2fde368b" waiting for additional capacity to place remainder
+```
+
+It then placed the job 47 seconds later, the moment the first deployment was
+deleted and its GPU came free. It was deleted 3 seconds after that.
+
+`nomad_utils.py` has no notion of "queued for capacity":
+
+```python
+elif evals:
+    info["status"] = "error"
+    info["error_msg"] = f"{evals[0].get('FailedTGAllocs', '')}"
+```
+
+Any job with an evaluation and no allocation is an `error`, whether Nomad has
+given up or is waiting for room. **And the message is empty.**
+`/v1/job/:id/evaluations` returns evaluations unordered; `evals[0]` was the
+blocked evaluation, and a blocked evaluation carries no `FailedTGAllocs`. So the
+badge is red and there is nothing beside it. Confirmed by replaying the call:
+`'FailedTGAllocs' in evals[0]` is `False`.
+
+The information exists, on the *other* evaluation:
+
+```
+DimensionExhausted = {"devices: no devices match request": 1, "cores": 1, "cpu": 2}
+ConstraintFiltered = {"${meta.type} = compute": 1}
+```
+
+**Fix:** an evaluation carrying a non-empty `BlockedEval` means Nomad intends to
+retry — report `queued` (already an orange badge upstream) with a sentence
+saying so, and build the message from the evaluation that actually has
+`FailedTGAllocs` rather than from whichever one came back first. Stage L4b.
+
+**Underneath it is a real capacity limit, and that part is not a bug.** While the
+federated demo is up, this cluster hosts **exactly one LLM**. Measured at the
+moment of the failure:
+
+| Node | Running | CPU free | RAM free | GPU free |
+|---|---|---|---|---|
+| `caios-wn-gpu-0` | docuum + 1 FL workspace | 3900 MHz | 24.9 GB | yes |
+| `caios-wn-gpu-1` | docuum + 1 FL workspace | 3900 MHz | 24.9 GB | yes |
+| `caios-wn-gpu-2` | docuum + FL workspace + FL server | 1900 MHz | 20.9 GB | yes |
+| `caios-wn-gpu-3` | docuum + the running LLM | 600 MHz | 14.1 GB | **no** |
+
+One LLM deployment needs **5300 MHz (2 exclusive cores plus 1300), 16.3 GB and
+one GPU**. The three hospital nodes each have a free GPU and still cannot take
+it: two exclusive cores do not fit in what is left of a 3-core machine once a
+workspace holds one. Nothing to fix — but it must be in the demo script, because
+the failure is one click away and currently unexplained.
 
 ### R-09 · Secrets are written in clear text into the Nomad job specification
 

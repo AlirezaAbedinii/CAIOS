@@ -13,8 +13,10 @@ and timed at 22 minutes.
 
 **Stage 6 — LLM deployment — is the current focus.** As of 2026-08-20 a
 researcher can deploy a private language model onto the lab's GPU and talk to it
-in a browser at their own subdomain. L0 to L4 are done; L5 and L6 remain.
-`docs/llm-plan.md` is the plan and carries what each stage actually found.
+in a browser at their own subdomain. L0 to L4 are done. The browser check L4 was
+waiting for happened on 2026-08-21 and found two faults in how PAPI reports
+deployment state, now **Stage L4b**; L4b, L5 and L6 remain. `docs/llm-plan.md`
+is the plan and carries what each stage actually found.
 
 ---
 
@@ -28,14 +30,15 @@ in a browser at their own subdomain. L0 to L4 are done; L5 and L6 remain.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L5 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L4b next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **One browser check on Stage L4** — everything else in that gate is done and
-   the streaming mechanism is measured, but nobody has looked at the chat
-   interface in a browser yet.
+1. **Stage L4b** — a deployment must not report `running` before a user can
+   open it, and a deployment Nomad has queued for capacity must not be called an
+   error. Both found by the L4 browser check on 2026-08-21. PAPI patch `0011`;
+   no dashboard change needed.
 2. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
    than from AI4OS's GitHub (R-07).
 3. **Rehearse the demo end to end in a browser**, following
@@ -52,6 +55,95 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-21 — the browser check: the chat window is fine, the dashboard is not
+
+**Stage L4's last open item was "somebody has to open it in a browser".**
+Somebody did. The chat interface itself passed on every count — certificate
+warning, login, model dropdown, word-by-word streaming, session survives a
+logout. What failed was everything *around* it, and neither fault is in the LLM
+tool. Both are in how PAPI describes any deployment.
+
+This is the fifth time in this project that a fault appeared only when a human
+clicked something, and the fifth time no programmatic check was failing.
+
+### The reconstruction
+
+Every line below is from `caios_papi` and Nomad, not from memory.
+
+| Time (UTC) | |
+|---|---|
+| 22:41:58 | second LLM submitted. PAPI 200. Eval `e1ae7636` → **placement failure**, blocked eval created |
+| 22:42:41 | first LLM deleted — frees the GPU, 2 cores, 16 GB on `caios-wn-gpu-3` |
+| 22:42:45 | the blocked eval unblocks and **places the second LLM** |
+| 22:42:48 | the second LLM is deleted, 3 seconds after it finally started |
+| 22:43:19 | third LLM submitted, placed straight away |
+| 22:43:20 | vLLM container starts → **PAPI reports `running`**, *Quick access* enabled |
+| 22:46:14 | vLLM finishes loading (174 s); `open-webui` starts |
+| 22:46:24 | Nomad marks the allocation healthy — the UI answers |
+
+### 1. A green badge in front of a 502, for 184 seconds
+
+`nomad_utils.py` reads `TaskStates["main"]["State"]`, and PAPI renames the first
+task in a template to `main`. In our job `main` is vLLM, which is a `prestart`
+**sidecar** — so it is `running` while the model is still loading and while
+Nomad has not started Open WebUI at all.
+
+Consul then does the other half. The service registers with one check on it:
+
+```
+service b4d12680-...-ui   192.168.104.188:31960
+  checks: [('Serf Health Status', 'passing')]
+```
+
+The node is alive. That is the whole assertion. Traefik publishes the route
+against it and proxies to a port nothing is listening on, which is a
+`Bad Gateway`. R-23.
+
+### 2. "Queued for a GPU" and "this will never run" are the same red badge
+
+The second deployment was never rejected. Nomad said:
+
+```
+Evaluation "2fde368b" waiting for additional capacity to place remainder
+```
+
+and placed it 47 seconds later. But PAPI has no `queued`-for-capacity state —
+any job with an evaluation and no allocation is `error`. **And the message was
+empty**, because `/v1/job/:id/evaluations` returns evaluations unordered,
+upstream reads `evals[0]`, and the one that came back first was the blocked
+evaluation, which carries no `FailedTGAllocs`. Red badge, nothing beside it, and
+a deployment that was 47 seconds from working got deleted. R-24.
+
+### The capacity limit underneath, which is not a bug
+
+| Node | Running | CPU free | RAM free | GPU free |
+|---|---|---|---|---|
+| `caios-wn-gpu-0` | docuum + 1 FL workspace | 3900 MHz | 24.9 GB | yes |
+| `caios-wn-gpu-1` | docuum + 1 FL workspace | 3900 MHz | 24.9 GB | yes |
+| `caios-wn-gpu-2` | docuum + FL workspace + FL server | 1900 MHz | 20.9 GB | yes |
+| `caios-wn-gpu-3` | docuum + the running LLM | 600 MHz | 14.1 GB | **no** |
+
+An LLM needs 5300 MHz — 2 exclusive cores plus 1300 — 16.3 GB, and a GPU. The
+three hospital nodes have a free GPU each and still cannot take it: two
+exclusive cores do not fit in what is left of a 3-core machine once a workspace
+holds one. **While the federated demo is up, this cluster hosts exactly one
+LLM.** That belongs in the demo script, because the failure is one click away.
+
+### What it costs to fix: half a day, and no dashboard change
+
+Checked before writing the stage: `starting` (yellow) and `queued` (orange) are
+already in the dashboard's `deployment-badge.ts`, and *Quick access* is already
+gated on `status === 'running'`. Fix PAPI and the button disables itself. So
+Stage L4b is one patch — `0011` — of two conditions over data
+`nomad_utils.py` has already fetched, plus a unit test built from the recorded
+JSON of this incident. Written up in `docs/llm-plan.md`; proposes D-38 and D-39.
+
+`docs/llm-risks.md` gains R-23 and R-24, `docs/runbook.md` gains both symptoms,
+and its "what to expect" table now warns that a green badge means the model has
+started *loading*.
 
 ---
 

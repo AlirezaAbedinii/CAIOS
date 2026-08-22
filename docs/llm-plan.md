@@ -14,10 +14,11 @@ Read alongside:
 
 **Status: Stages L0 to L4 are done.** A researcher can deploy a private model
 onto CAIOS hardware, open a chat interface at their own subdomain, and talk to
-it. What is left is L5 (model cards read from CAIOS rather than GitHub), L6
-(the demo beat), and one browser check on L4. Each stage below carries a "What
-it found" section written after it ran, which is usually more useful than the
-plan above it.
+it. The browser check L4 was waiting for happened on 2026-08-21 and found two
+faults in how PAPI reports a deployment's state — **Stage L4b** below. What is
+left is L4b, L5 (model cards read from CAIOS rather than GitHub) and L6 (the
+demo beat). Each stage carries a "What it found" section written after it ran,
+which is usually more useful than the plan above it.
 
 ---
 
@@ -721,12 +722,149 @@ was testing. That is the finding, not a bug — and it is how R-22 was found.
 - [x] *(added during the stage)* The model dropdown names the model deployed —
       the check that catches an empty list behind a 200
 - [x] *(carried from L3)* Open WebUI renders the two thinking models properly
-- [ ] **Chat works in a browser, streaming, over HTTPS** — the streaming
-      mechanism is verified programmatically at 6.0 ms between chunks, but a
-      person still has to look at it. `docs/progress.md` records three faults
-      that only appeared in a real browser.
+- [x] **Chat works in a browser, streaming, over HTTPS** — done 2026-08-21.
+      Login, model dropdown and word-by-word streaming are all correct. It also
+      found two faults that only a person clicking could find, neither of them
+      in the LLM tool: R-23 and R-24, now **Stage L4b**. `docs/progress.md`
+      records three earlier faults that appeared the same way; this makes five.
 
 **Commit:** `llm: Open WebUI end to end, admin and streaming verified`
+
+---
+
+## Stage L4b — Tell the truth about `running`  ·  half a day  ·  **PAPI only**
+
+Stage L4's outstanding item was "somebody has to open it in a browser". Somebody
+did, on 2026-08-21, and it found two things — R-23 and R-24. Neither is in the
+LLM tool. Both are in how PAPI describes *any* deployment, and both were invisible
+to every check we run because every check we run waits patiently and polls.
+
+A person does not poll. A person clicks the button the moment it lights up.
+
+### The two faults, in one sentence each
+
+- **R-23** — `running` means "the first container started", so the dashboard
+  enables *Quick access* **184 seconds** before the chat interface answers, and
+  the link returns `Bad Gateway` for all of it.
+- **R-24** — a deployment that Nomad has queued for capacity is reported as
+  `error`, with an empty message, and it is deleted by a user who has no way to
+  know it was about to start.
+
+### Work
+
+**`patches/ai4-papi/0011-deployment-readiness.patch`** — two changes in
+`ai4papi/nomad_utils.py`, both over data the function has already fetched.
+
+*1. `running` becomes `starting` until every user-facing task has started.*
+
+The tasks with a `lifecycle` block are plumbing — `prestart` sidecars and
+one-shot setup. The tasks without one are what a person opens. While any of
+those has no `StartedAt`, the deployment is not ready:
+
+```python
+# `main` is whichever task PAPI renamed, which for tools with a prestart
+# sidecar is not the task a user visits. Nomad has not started a lifecycle-less
+# task until it has a StartedAt.
+if info["status"] == "running":
+    waiting = [
+        t["Name"] for t in tasks
+        if not t.get("Lifecycle")
+        and not (a["TaskStates"].get(t["Name"]) or {}).get("StartedAt")
+    ]
+    if waiting:
+        info["status"] = "starting"
+```
+
+For every single-task deployment — modules, the dev environment, the federated
+server — `main` has no `Lifecycle` and this is a no-op the moment it starts. The
+blast radius is deployments that use lifecycle hooks, which today is the LLM
+tool and nothing else.
+
+*2. A blocked evaluation becomes `queued`, with a message.*
+
+An evaluation carrying a non-empty `BlockedEval` is Nomad saying "I will retry
+when capacity changes". That is `queued`, not `error`. And the message has to
+come from the evaluation that actually holds `FailedTGAllocs`, because
+`/v1/job/:id/evaluations` returns them unordered and upstream reads `evals[0]`:
+
+```python
+failed = next((e for e in evals if e.get("FailedTGAllocs")), None)
+blocked = any(e.get("BlockedEval") for e in evals)
+info["status"] = "queued" if blocked else "error"
+info["error_msg"] = _placement_message(failed, blocked)
+```
+
+`_placement_message` turns `DimensionExhausted` and `ConstraintFiltered` into a
+sentence a researcher can act on — "no node currently has a free GPU and 2 free
+CPU cores; this will start on its own when a deployment finishes" — instead of a
+Python dict, or, as today, an empty string.
+
+**No dashboard change.** `starting` (yellow) and `queued` (orange) are already in
+`deployment-badge.ts`, and *Quick access* is already gated on
+`status === 'running'`, so it disables itself for the whole loading window. This
+was checked before the stage was written, and it is the reason the stage is half
+a day rather than two.
+
+**`configs/papi/tools/ai4os-llm/nomad.hcl`** — a `tcp` check on each of the two
+service stanzas, so Consul stops telling Traefik that a port nobody is listening
+on is healthy. **Defence in depth, and it needs verifying before it is kept:** it
+turns the 502 into a 404 for anyone who reaches the URL directly, which is not
+obviously an improvement, and Traefik's consul-catalog health filtering has not
+been confirmed on our deployment. Keep it only if the test below shows it helps.
+
+### Tests
+
+**Unit** — `tests/test_deployment_status.py`, against recorded Nomad JSON from
+this incident (allocation `412b7030` mid-load, allocation `0de29a3c` ready,
+evaluations `e1ae7636` and `2fde368b`). Four assertions:
+
+- a sidecar `main` running with `open-webui` unstarted → `starting`
+- both tasks started → `running`
+- a single-task allocation, `main` running → `running` *(the no-op case)*
+- a blocked evaluation → `queued`, and the message names the exhausted dimension
+
+Recorded fixtures, not a live cluster, so it runs in CI and it runs in seconds.
+
+**Smoke** — extend `scripts/check-llm-ui.sh` with the assertion this whole stage
+exists to make: **poll PAPI and the UI together, and fail if PAPI ever reports
+`running` while the endpoint does not answer.** That is the bug, stated as a
+test. It costs nothing — the script already polls both.
+
+**Manual** — deploy from the dashboard and watch the badge: yellow `starting`
+with *Quick access* greyed out for two to three minutes, then green, then the
+button works on the first click. Then, with one LLM already running, deploy a
+second and confirm the badge is an orange `queued` with a sentence explaining
+what it is waiting for.
+
+### Gate
+
+- [ ] The badge is `starting` and *Quick access* is disabled for the whole
+      loading window, verified by clicking, not by polling
+- [ ] A second LLM deployment reads `queued` with a message naming the missing
+      resource, and is not called an error
+- [ ] `tests/test_deployment_status.py` passes, including the single-task no-op
+- [ ] `scripts/check-llm-ui.sh` fails if `running` ever precedes a working
+      endpoint
+- [ ] The Consul check is kept only if it demonstrably improves the direct-URL
+      case; otherwise reverted, with the reason recorded here
+- [ ] `docs/demo-script.md` says out loud that only one LLM fits while the
+      federated demo is up
+
+**Commit:** `papi: a deployment is not running until you can open it`
+
+### Decisions this proposes
+
+**D-38 — `running` means "a user can open it", not "a container started".**
+Every readiness signal in this stack is about the first container, and this
+project has now been bitten by that three times: the endpoint that does not
+resolve (R-21), the model dropdown that is empty behind a 200 (R-05/D-36), and a
+green badge in front of a 502 (R-23). A status a user acts on has to describe
+the thing the user acts on.
+
+**D-39 — "waiting" and "failed" are different words.** Nomad distinguishes a
+blocked evaluation from an unplaceable one, and PAPI must not flatten them. The
+cost of flattening is measured: a deployment that was 47 seconds from starting
+was deleted because the dashboard called it an error and said nothing else.
 
 ---
 
@@ -815,10 +953,11 @@ minutes; this should not push it past 26.
 | L1 | Join it as `caios_llm` | 0.5 | **done 2026-08-19** |
 | L2 | Patch and configure PAPI | 1.0 | **done 2026-08-19** |
 | L3 | First vLLM deployment | 0.5 | **done — 9/9 models verified** |
-| L4 | Open WebUI end to end | 0.5 | **done — one browser check left** |
+| L4 | Open WebUI end to end | 0.5 | **done — browser check passed 2026-08-21** |
+| L4b | Deployment status tells the truth | 0.5 | **next** — found by that check |
 | L5 | Dashboard catalogue | 0.5 | After L2 |
-| L6 | Demo, docs, rehearsal | 0.5 | After L4 + L5 |
-| | | **4.0** | |
+| L6 | Demo, docs, rehearsal | 0.5 | After L4b + L5 |
+| | | **4.5** | |
 
 L2 is the long pole and depends on nothing, so with two engineers one starts L0
 while the other starts L2, and the calendar cost is about **2.5 days**.
@@ -865,6 +1004,13 @@ about the deployment rather than about health checks.
 over HTTP afterwards.** Open WebUI's administrator was claimed by a poststart
 task racing anyone who loaded the page. A window that is small is not a window
 that is closed.
+
+**Proposed on 2026-08-21 by Stage L4b, awaiting approval.** Written out in full
+in that stage; summarised here so this list stays the index.
+
+- **D-38** — `running` means "a user can open it", not "a container started".
+- **D-39** — "waiting" and "failed" are different words, and PAPI must not
+  flatten a blocked Nomad evaluation into an error.
 
 ---
 

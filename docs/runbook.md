@@ -608,6 +608,41 @@ If instead the message names a **constraint** rather than a dimension, that is a
 different problem — see "A deployment is stuck in pending" above and run
 `scripts/verify-cluster.sh`.
 
+### The marketplace's LLM page looks wrong
+
+The catalogue page and the deploy form read **one file**,
+`configs/papi/vllm.yaml`: PAPI mounts it, and `scripts/build-dashboard.sh` stages
+a copy as `/assets/config/vllm.yaml` for the dashboard. Almost everything that
+looks wrong on that page is one of the two copies being stale.
+
+| symptom | cause |
+|---|---|
+| cards describe models the dropdown does not offer | the dashboard was not rebuilt after the catalogue changed |
+| the dropdown offers models with no card | the same, the other way round |
+| a card shows a broken image | no `{family}_logo.png` for that family |
+| the page is empty and the console shows a CORS or network error | the staged asset is missing, so js-yaml got `index.html` |
+
+Check what is actually served — never the status code, because every missing
+path here answers 200 with `index.html`:
+
+```bash
+curl -sk https://<dashboard>/assets/config/vllm.yaml | head -3
+bash scripts/check-branding.sh          # section 3c does all of this
+```
+
+After **any** change to `configs/papi/vllm.yaml`, both consumers need updating:
+restart PAPI, and rebuild the dashboard.
+
+```bash
+cd compose && sudo docker compose --env-file ../configs/env/caios.env up -d --force-recreate papi
+sudo bash scripts/build-dashboard.sh && cd compose && sudo docker compose --env-file ../configs/env/caios.env up -d --force-recreate dashboard
+```
+
+**Adding a model with a new `family`** also needs a badge, or its card renders a
+broken image. `bash scripts/run-tests.sh` fails and names the family; generate
+one with `demo/.venv/bin/python scripts/make-brand-assets.py` after adding it to
+`COMPANY_BADGES`.
+
 ### The chat interface loads, but the model dropdown is empty
 
 The one to know. Everything returns HTTP 200 — the login page, the API, the

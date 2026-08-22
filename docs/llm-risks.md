@@ -251,6 +251,76 @@ private subnet.
 **Fix:** dashboard patch `0002` pointing at a relative asset, and
 `scripts/build-dashboard.sh` staging our curated file into the image. → Stage L5.
 
+**Closed on 2026-08-22.** `/assets/config/vllm.yaml`, staged from
+`configs/papi/vllm.yaml`, so PAPI and the page read one file. Verified live:
+PAPI's dropdown and the dashboard's cards are the same nine ids, in the same
+order. `scripts/check-branding.sh` section 3c checks it by content, because a
+missing asset here answers **200 with index.html** and js-yaml parses HTML into
+something shapeless rather than throwing.
+
+Stage L5 found two more faults on the same page, below.
+
+### R-25 · The model id is rebuilt from two display fields, and does not always survive
+
+**Found on 2026-08-22 by reading the dashboard for R-07.** `vllm.yaml` keys each
+entry on the Hugging Face model id. The dashboard reads it and throws that key
+away:
+
+```ts
+Object.entries(parsedYaml.models).map(([name, config]) => ({
+    name,        // the key...
+    ...config,   // ...immediately overwritten by the entry's own `name`
+}));
+```
+
+So three call sites rebuild it as `family + '/' + name`. That is correct only
+when the Hugging Face organisation happens to equal the family label, and it
+does not for **two of our nine** — `mistralai/Ministral-3-3B-Instruct-2512`
+(family `Mistral`) and `ibm-granite/granite-4.1-3b` (family `IBM`) — nor for
+**four of upstream's own thirteen**. We inherit this; curating did not cause it.
+
+| where | symptom |
+|---|---|
+| the card click | preselects the deploy dropdown with a value that is not one of its options, so it opens blank |
+| the "Card" chip | opens `huggingface.co/Mistral/...` — a 404, in front of the audience |
+| `modelChanged()` | `find()` misses, and `?? false` decides no Hugging Face token is needed |
+
+The third is the one that outlives the demo. Every model we offer is ungated, so
+the answer is right *by accident*; a gated model would render no token field and
+then fail at PAPI with a 400 the form had everything it needed to prevent.
+
+**Fixed by patch `0003`** — keep the key as `id`, use it in all three places.
+
+The patch also repairs upstream's fixtures, which is *how* this survived: the
+mock YAML keyed on the display name and had no `name` field, so
+`{ name, ...config }` filled it in from the key and every test passed against a
+shape the real file never has. A test that agrees with a bug is worse than no
+test. Worth reporting upstream with the two mismatching ids as the reproduction.
+
+### R-26 · Six of the nine model cards render a broken image
+
+**Found and fixed on 2026-08-22.** Each card renders
+`assets/images/llm-companies/{family}_logo.png`. Our nine models span five
+families; upstream ships a badge for two of them, plus `meta-llama`, which we
+dropped.
+
+Nothing reported it, and nothing could: nginx answers every missing path under
+this dashboard with **index.html and HTTP 200**. `file` on the response says
+"HTML document"; the browser draws a broken image. This is the third time this
+exact pattern has cost something here — the dashboard once shipped with no logo
+and no favicon at the same way, which is why `check-branding.sh` has tested
+artwork by content since Stage 5.
+
+**Fix:** generated lettermarks in the CAIOS palette for Mistral, LiquidAI and
+IBM, in `scripts/make-brand-assets.py`. Deliberately not the vendors' own marks:
+no licensing question in a grant demo, and the page reads as one set. Replacing
+the files is the whole job if somebody wants the real logos later.
+
+Guarded twice, because the two moments differ: a unit test fails if any family
+in `configs/papi/vllm.yaml` has no badge — so adding a model with a new family
+fails at test time — and `check-branding.sh` checks what is actually served, per
+family, by content.
+
 ### R-08 · A standalone Open WebUI deploys with no administrator
 
 **Verified — upstream bug, and it has a security consequence.**

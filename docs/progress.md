@@ -13,10 +13,12 @@ and timed at 22 minutes.
 
 **Stage 6 — LLM deployment — is the current focus.** As of 2026-08-20 a
 researcher can deploy a private language model onto the lab's GPU and talk to it
-in a browser at their own subdomain. L0 to L4 are done. The browser check L4 was
+in a browser at their own subdomain. L0 to L5 are done. The browser check L4 was
 waiting for happened on 2026-08-21 and found two faults in how PAPI reports
-deployment state — **Stage L4b**, closed on 2026-08-22. L5 and L6 remain. `docs/llm-plan.md`
-is the plan and carries what each stage actually found.
+deployment state — **Stage L4b**, closed on 2026-08-22. L5 closed the same day,
+and the marketplace page a researcher picks a model on is now served entirely by
+this cluster. Only L6 remains. `docs/llm-plan.md` is the plan and carries what
+each stage actually found.
 
 ---
 
@@ -30,13 +32,14 @@ is the plan and carries what each stage actually found.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4b done; L5 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L5 done; L6 next** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
-   than from AI4OS's GitHub (R-07).
+1. **Stage L6** — the demo beat: a new section in `docs/demo-script.md`, the
+   LLM deployed before the FL workspaces, and the notebook that calls the
+   endpoint in four lines.
 2. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. The LLM half has now been driven by a human clicking,
    and it found two faults; the federated half has not.
@@ -50,6 +53,102 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-22 — STAGE L5 GATE PASSED: the marketplace stops phoning GitHub
+
+The dashboard's LLM catalogue page is now served entirely by this cluster. The
+planned change was one hardcoded URL. Reading the page it serves found two more
+faults, both of which the audience would have seen, and neither of which any
+status-code check could report.
+
+### The planned part: one file, two consumers
+
+`tools.service.ts` fetched the model list from
+`raw.githubusercontent.com/ai4os/ai4-papi/.../etc/vllm.yaml` — the file *AI4OS's*
+PAPI serves. Ours serves a curated nine. So the model **cards** described
+upstream's thirteen while the deploy **dropdown** came from our PAPI: cards for
+models we do not offer, no card for four that we do, and a Hugging Face token
+field keyed off the wrong list. It was also a third-party fetch made by the
+user's browser from a page meant to be self-contained on a private subnet.
+
+Now `/assets/config/vllm.yaml`, staged from `configs/papi/vllm.yaml`. Verified
+live: PAPI's nine options and the dashboard's nine cards are the same ids in the
+same order, and the default is in the card list. R-07 closed, D-40.
+
+### Fault 1: the model id was two labels glued together
+
+`vllm.yaml` keys each entry on the Hugging Face id. The dashboard read it and
+threw the key away — `{ name, ...config }`, where the entry's own `name`
+overwrites the key — then rebuilt it as `family + '/' + name` in three places.
+
+That is right only when the organisation equals the family label. It is not for
+`mistralai/Ministral-3-3B-Instruct-2512` (family `Mistral`) or
+`ibm-granite/granite-4.1-3b` (family `IBM`): **two of our nine, and four of
+upstream's own thirteen**, so this is inherited, not caused by curating.
+
+| where | what a user saw |
+|---|---|
+| clicking the card | the deploy dropdown opened blank — the preselected value was not one of its options |
+| the "Card" chip | `huggingface.co/Mistral/…` → 404 |
+| `needs_HF_token` | `find()` missed, `?? false` decided no token was needed |
+
+The third is the one that outlives the demo. Everything we offer is ungated, so
+the answer is right **by accident**; a gated model would have rendered no token
+field and then failed at PAPI with a 400 — three components away from the cause.
+Patch `0003`, R-25, D-41.
+
+**How it survived upstream is the interesting part.** Their mock YAML keyed on
+the *display name* and carried no `name` field at all, so `{ name, ...config }`
+filled `name` in from the key and every test passed — against a shape the real
+file never has. A test that agrees with a bug is worse than no test. The patch
+repairs the fixtures and gives one of them a family that differs from its
+organisation, so the regression is covered rather than assumed.
+
+### Fault 2: six of the nine cards rendered a broken image
+
+Each card renders `assets/images/llm-companies/{family}_logo.png`. Our nine
+models span five families; upstream ships a badge for two of them, plus
+`meta-llama`, which we dropped. Missing: Mistral, LiquidAI and IBM — and
+LiquidAI alone is four of the nine.
+
+**Nothing reported it, and nothing could.** nginx answers every missing path
+under this dashboard with `index.html` and HTTP 200. `file` on the response says
+"HTML document"; the browser draws a broken image. Third time this exact pattern
+has cost something here: it is how the dashboard once shipped with no logo and
+no favicon, and it is why `check-branding.sh` has tested artwork by content
+rather than by status since Stage 5.
+
+Fixed with generated lettermarks in the CAIOS palette rather than downloaded
+trademarks — no licensing question in a grant demo, and a page of six real logos
+and three approximations looks worse than one that is visibly consistent.
+Guarded twice, because the moments differ: a unit test fails if any family in
+`vllm.yaml` has no badge, so adding a model with a new family fails at test time;
+`check-branding.sh` checks what is actually served, per family. R-26, D-42.
+
+### What this stage is really about
+
+Both faults were found by reading the component that consumes the file the stage
+was about, not by running anything. Every check in this repository was green
+before and after fault 2 existed, because every one of them would have had to
+look at a response body to see it — which is the rule this project already had,
+applied one level further out than anyone had applied it.
+
+### Also fixed while here
+
+- The runbook's dashboard rebuild recipe was missing `sudo` (Docker needs it on
+  this host) and `--force-recreate` (without it, `up -d` leaves the old
+  container serving the old image — the failure where you rebuild three times
+  and the page never changes).
+- D-38 and D-39 were written into `docs/llm-plan.md` when L4b shipped and cited
+  in `CLAUDE.md`, but never appended to `docs/decisions.md`. Recorded now.
+
+### What is left
+
+The catalogue page has not been looked at in a browser. Everything above is
+measured from the served bytes. L4's browser check found two faults no script
+had; this page has not had its equivalent.
 
 ---
 

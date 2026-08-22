@@ -420,6 +420,80 @@ credentials at startup, that is preferred over any amount of polling from
 outside, however tight the loop. See R-22.
 
 
+## Settled on 2026-08-22 — carried over from Stage L4b
+
+Written in `docs/llm-plan.md` when L4b shipped and cited in `CLAUDE.md`, but
+never appended here. Recorded now so the numbering means something.
+
+**D-38 — `running` means "a user can open it", not "a container started".**
+Every readiness signal in this stack is about the first container, and this
+project has been bitten by that three times: an endpoint that does not resolve
+(R-21), a model dropdown that is empty behind a 200 (R-05, D-36), and a green
+badge in front of a 502 (R-23). A status a user acts on has to describe the
+thing the user acts on.
+
+**D-39 — "waiting" and "failed" are different words.**
+Nomad distinguishes a blocked evaluation from an unplaceable one, and PAPI must
+not flatten them. The cost of flattening is measured: a deployment that was 47
+seconds from starting was deleted because the dashboard called it an error and
+said nothing else.
+
+
+## Settled on 2026-08-22
+
+**D-40 — Anything the dashboard needs at runtime is served by this cluster.**
+Stage L5 removed the last third-party fetch: the LLM model catalogue, which
+upstream pulled from `raw.githubusercontent.com` in the user's browser. It now
+comes from `/assets/config/vllm.yaml`, staged from `configs/papi/vllm.yaml`, so
+PAPI and the dashboard read one file.
+
+Two reasons, and the second is the one that generalises. The narrow one is
+correctness: our catalogue is nine models and theirs is thirteen, so the cards
+and the deploy dropdown described different platforms. The broad one is that
+this is a **private subnet** — a page that needs the public internet to render
+correctly is a page that breaks in the room where we demo it. The analytics
+beacon (D-27) was the same argument about a different resource.
+
+The rule going forward: if the dashboard fetches it, we serve it. Gotcha 6 in
+`CLAUDE.md` lists the places upstream reaches out; `check-branding.sh` is where
+a new one gets caught.
+
+**D-41 — An identifier is carried, never reconstructed.**
+The dashboard read a YAML file keyed on Hugging Face model ids, discarded the
+keys, and rebuilt them where needed as `family + '/' + name`. That works for
+most models and silently fails for the ones where an organisation is not a tidy
+family label — two of our nine, four of upstream's thirteen.
+
+The failures were a dropdown that opened blank, a "Card" link that 404s, and a
+`needs_HF_token` lookup that missed and defaulted to `false`. The last is the
+instructive one: **it was right for us by accident**, because everything in our
+catalogue is ungated, and it would have become wrong the day somebody added a
+gated model — with the symptom appearing at PAPI as a 400, three components away
+from the cause.
+
+Patch `0003` keeps the key. The general form is worth stating because it is
+cheap to get right and expensive to find: a derived identifier is a guess about
+a naming convention, and naming conventions have exceptions.
+
+**D-42 — Placeholder artwork for third-party marks, generated not downloaded.**
+Six of the nine LLM cards rendered a broken image, because the card asks for
+`{family}_logo.png` and upstream ships badges for two of our five families.
+
+The three missing ones are generated lettermarks in the CAIOS palette
+(`scripts/make-brand-assets.py`), not the vendors' real logos. Downloading
+trademarks into the repository for a grant demo raises a licensing question
+nobody needs to answer, and a page mixing three real logos with three
+approximations looks worse than one that is visibly consistent. Replacing the
+files is the whole job if the real marks are ever wanted — the filename is the
+only contract.
+
+The guard matters more than the artwork: **a missing asset under this dashboard
+answers 200 with `index.html`**, so nothing anywhere reports it. There is now a
+unit test that fails when a family in `vllm.yaml` has no badge, and a live check
+that reads the served bytes with `file`. Third time this pattern has cost
+something here — see D-28.
+
+
 ---
 
 ## Log
@@ -466,3 +540,11 @@ visitor to a deployment became its administrator (R-22). Recorded D-33 through
 D-37; D-36 arrives broader than proposed because the narrow version had missed
 the case that mattered. `scripts/check-llm-ui.sh` is the gate, and the runbook
 gained an LLM section organised by symptom.
+
+**2026-08-22** — Stage L5: the dashboard's LLM catalogue now comes from CAIOS.
+The planned change was one URL; reading the page it serves found two more
+faults, both demo-visible and neither detectable by a status code — the model id
+was rebuilt from two display fields (R-25) and six of nine cards rendered a
+broken image (R-26). Recorded D-40 through D-42. Dashboard patches `0002` and
+`0003`; `0002` also repairs the spec it invalidated, and `0003` the fixtures
+that had been agreeing with the bug.

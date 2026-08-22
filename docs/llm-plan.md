@@ -12,12 +12,13 @@ Read alongside:
 | `docs/llm-infrastructure.md` | What the hardware is, what fits, what changes |
 | `docs/llm-risks.md` | What will go wrong, and what it costs |
 
-**Status: Stages L0 to L4b are done.** A researcher can deploy a private model
+**Status: Stages L0 to L5 are done.** A researcher can deploy a private model
 onto CAIOS hardware, open a chat interface at their own subdomain, and talk to
-it. The browser check L4 was waiting for happened on 2026-08-21 and found two
-faults in how PAPI reports a deployment's state — **Stage L4b** below, closed on
-2026-08-22. What is left is L5 (model cards read from CAIOS rather than GitHub)
-and L6 (the demo beat). Each stage carries a "What it found" section written after it ran,
+it — and the marketplace page they pick the model on is now served entirely by
+this cluster. The browser check L4 was waiting for happened on 2026-08-21 and
+found two faults in how PAPI reports a deployment's state — **Stage L4b** below,
+closed on 2026-08-22. What is left is L6 (the demo beat), plus a look at the LLM
+catalogue page in a browser, which L5 has not had. Each stage carries a "What it found" section written after it ran,
 which is usually more useful than the plan above it.
 
 ---
@@ -1042,10 +1043,51 @@ our models — content, not a status code.
 descriptions, and the Hugging Face token field behaves correctly — with the
 gated Llama models dropped from our list, it should never become required.
 
-### Gate
+### What it found — run on 2026-08-22
 
-- [ ] No third-party fetch from the dashboard for model metadata
-- [ ] Cards and dropdown agree, because they read the same file
+The planned patch was one line of URL. Reading the page it serves turned up two
+more faults, both of which a demo audience would have seen.
+
+**1. The model id is rebuilt from two display fields.** `vllm.yaml` keys on the
+Hugging Face id; the dashboard discards the key and reconstructs it as
+`family + '/' + name` in three places. Correct only when the organisation equals
+the family label — **two of our nine** and **four of upstream's thirteen** fail
+it. Clicking the Ministral or granite card preselected the deploy dropdown with
+a value not in its options, so it opened blank; the "Card" chip opened a Hugging
+Face 404; and the `needs_HF_token` lookup silently missed. That last one is
+right for us by accident — everything we offer is ungated — and would have shown
+no token field for a gated model, then failed at PAPI with a 400. Patch `0003`,
+R-25.
+
+**2. Six of the nine cards rendered a broken image.** The card renders
+`{family}_logo.png`; upstream ships a badge for two of our five families.
+Nothing reported it because nginx answers every missing path with **index.html
+and HTTP 200** — the third time that pattern has cost something on this project.
+Generated lettermarks, R-26.
+
+**Neither was visible from the plan**, and neither shows up in any check that
+reads a status code. Both were found by reading the component that consumes the
+file this stage was about.
+
+**And the fixtures were repaired, which is how fault 1 survived upstream.**
+Their mock YAML keyed on the display name and carried no `name` field, so
+`{ name, ...config }` filled it in from the key and every test passed against a
+shape the real file never has. A test that agrees with a bug is worse than no
+test.
+
+### Gate — passed 2026-08-22
+
+- [x] No third-party fetch from the dashboard for model metadata — the URL is
+      gone from the compiled bundle, checked by `check-branding.sh` 3c
+- [x] Cards and dropdown agree, because they read the same file — verified live:
+      PAPI's nine options and the dashboard's nine cards are the same ids in the
+      same order, and the default is in the card list
+- [x] *(added during the stage)* Clicking a card preselects a model that is
+      actually in the dropdown, for every model — R-25
+- [x] *(added during the stage)* Every card renders a real image — R-26
+- [ ] **The catalogue page has not been looked at in a browser.** Everything
+      above is measured from the served bytes. L4's browser check found two
+      faults no script had; this page has not had its equivalent.
 
 **Commit:** `dashboard: read the LLM catalogue from CAIOS, not from GitHub`
 
@@ -1100,7 +1142,7 @@ minutes; this should not push it past 26.
 | L3 | First vLLM deployment | 0.5 | **done — 9/9 models verified** |
 | L4 | Open WebUI end to end | 0.5 | **done — browser check passed 2026-08-21** |
 | L4b | Deployment status tells the truth | 0.5 | **done 2026-08-22** |
-| L5 | Dashboard catalogue | 0.5 | After L2 |
+| L5 | Dashboard catalogue | 0.5 | **done — not yet seen in a browser** |
 | L6 | Demo, docs, rehearsal | 0.5 | After L4b + L5 |
 | | | **4.5** | |
 

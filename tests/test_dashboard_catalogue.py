@@ -137,3 +137,23 @@ def test_no_model_id_can_be_rebuilt_from_family_and_name(catalogue):
     for model_id in mismatched:
         assert "/" in model_id, f"{model_id} is not a Hugging Face model id"
 
+
+
+def test_every_card_asks_for_a_logo_that_exists(root, catalogue):
+    """`family` is also an image filename: assets/images/llm-companies/
+    {family}_logo.png. A family with no logo renders a broken image on the card,
+    and because every missing path under this dashboard answers 200 with
+    index.html, nothing anywhere reports it."""
+    families = sorted({m["family"] for m in catalogue.values()})
+    logos = root / "configs" / "dashboard" / "images" / "llm-companies"
+    upstream = root / "vendor" / "ai4-dashboard" / "src" / "assets" / "images" / "llm-companies"
+    missing = [
+        f
+        for f in families
+        if not (logos / f"{f}_logo.png").is_file()
+        and not (upstream / f"{f}_logo.png").is_file()
+    ]
+    assert not missing, (
+        f"no card logo for {missing}. Generate them with "
+        f"scripts/make-brand-assets.py, or the cards render a broken image."
+    )

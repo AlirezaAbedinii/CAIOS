@@ -177,6 +177,26 @@ PY
     [[ $? -eq 0 ]] || fail=1
 fi
 
+# Every card renders a {family}_logo.png. Our nine models span five families and
+# upstream ships a badge for two of them, so six of the nine cards showed a
+# broken image until the missing three were generated. `file`, not the status
+# code: a missing asset here is a 200 carrying index.html.
+families=$(python3 -c "
+import yaml
+d = yaml.safe_load(open('configs/papi/vllm.yaml'))['models']
+print(' '.join(sorted({m['family'] for m in d.values()})))
+" 2>/dev/null)
+for family in $families; do
+    curl -k -sS --max-time 20 -o "$TMP/badge.png" \
+        "$DASH/assets/images/llm-companies/${family}_logo.png" 2>/dev/null
+    kind="$(file -b "$TMP/badge.png" 2>/dev/null)"
+    case "$kind" in
+        PNG*)  ok "${family} card badge is $(echo "$kind" | cut -d, -f1,2)" ;;
+        HTML*) bad "${family}_logo.png served index.html — that card shows a broken image" ;;
+        *)     bad "${family}_logo.png is not an image: $kind" ;;
+    esac
+done
+
 # The browser must not go to GitHub for it either. The URL is compiled into the
 # bundle, so this catches a rebuild that dropped patch 0002 even if the asset
 # above is staged correctly and looks perfect.

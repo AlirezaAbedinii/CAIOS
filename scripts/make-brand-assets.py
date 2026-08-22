@@ -10,6 +10,7 @@ into the build as src/assets/images/caios/:
     favicon.ico          browser tab
     forbidden.png        403 page
     not-found.png        404 page
+    llm-companies/*.png  the model-family badges on the LLM catalogue cards
 
 WHY THIS IS A SCRIPT AND NOT FOUR COMMITTED BLOBS
 
@@ -139,6 +140,60 @@ def make_error_page(filename, code, message):
     return filename
 
 
+# The families in configs/papi/vllm.yaml that upstream ships no badge for.
+# Upstream has Qwen, deepseek-ai and meta-llama; ours adds these three, and four
+# of our nine models are LiquidAI, so this is not a corner case — six of nine
+# cards rendered a broken image before these existed.
+#
+# Deliberately NOT the vendors' own logos. These are placeholders in the CAIOS
+# palette, so the catalogue page reads as one set rather than as a ransom note
+# of downloaded trademarks, and there is no licensing question in a grant demo.
+# If somebody later wants the real marks, replacing these files is the whole
+# job — the filename is `{family}_logo.png` and nothing else refers to them.
+COMPANY_BADGES = {
+    "Mistral": "M",
+    "LiquidAI": "LFM",
+    "IBM": "IBM",
+}
+
+
+def make_company_badge(family, letters):
+    """A rounded square with a lettermark, matching the card's other badges.
+
+    Sized to upstream's: Qwen_logo.png is 600x600, and the card scales it down,
+    so anything square and reasonably large looks right beside it.
+    """
+    size = 160 * SS
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+
+    draw.rounded_rectangle(
+        [0, 0, size - 1, size - 1], radius=34 * SS, fill=ACCENT
+    )
+
+    # One font size does not fit "M" and "IBM". Step down until it fits the box
+    # with a margin, rather than hardcoding a size per string — a fourth family
+    # gets added one day and nobody will remember to retune it.
+    for pt in range(84, 20, -4):
+        fnt = font(FONT_BOLD, pt * SS)
+        width = draw.textlength(letters, font=fnt)
+        if width <= size * 0.68:
+            break
+    box = draw.textbbox((0, 0), letters, font=fnt)
+    draw.text(
+        ((size - (box[2] - box[0])) / 2 - box[0], (size - (box[3] - box[1])) / 2 - box[1]),
+        letters,
+        font=fnt,
+        fill=PRIMARY,
+    )
+
+    out = OUT / "llm-companies"
+    out.mkdir(parents=True, exist_ok=True)
+    name = f"{family}_logo.png"
+    image.resize((size // SS, size // SS), Image.LANCZOS).save(out / name)
+    return f"llm-companies/{name}"
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     written = [
@@ -147,12 +202,16 @@ def main() -> int:
         make_error_page("forbidden.png", "403", "You do not have access to this page"),
         make_error_page("not-found.png", "404", "That page does not exist"),
     ]
+    written += [
+        make_company_badge(family, letters)
+        for family, letters in COMPANY_BADGES.items()
+    ]
     for name in written:
         path = OUT / name
         with Image.open(path) as check:
-            print(f"  {name:22s} {check.size[0]}x{check.size[1]}  {path.stat().st_size:>6} bytes")
+            print(f"  {name:26s} {check.size[0]}x{check.size[1]}  {path.stat().st_size:>6} bytes")
     print(f"\n  wrote {len(written)} files to {OUT.relative_to(ROOT)}/")
-    print("  now run: bash scripts/build-dashboard.sh")
+    print("  now run: sudo bash scripts/build-dashboard.sh")
     return 0
 
 

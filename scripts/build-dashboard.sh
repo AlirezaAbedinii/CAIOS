@@ -135,6 +135,29 @@ else
     cp "$SRC"/src/assets/images/kmd4eosc/* "$DST/src/assets/images/caios/"
 fi
 
+# 3b. LLM catalogue card badges
+#
+# The card renders assets/images/llm-companies/{family}_logo.png, where family
+# comes from vllm.yaml. Our nine models span five families; upstream ships a
+# badge for two of them (Qwen, deepseek-ai) plus meta-llama, which we dropped.
+# The other three are Mistral, LiquidAI and IBM, and LiquidAI alone is four of
+# the nine — so without these, six of nine cards render a broken image. Because
+# nginx answers every missing path with index.html and HTTP 200, nothing reports
+# it. Same failure that once shipped this dashboard with no logo at all.
+#
+# tests/test_dashboard_catalogue.py fails if a family here has no badge, so
+# adding a model with a new family cannot quietly reintroduce it.
+if compgen -G "$CFG/images/llm-companies/*.png" >/dev/null; then
+    mkdir -p "$DST/src/assets/images/llm-companies"
+    cp "$CFG"/images/llm-companies/*.png "$DST/src/assets/images/llm-companies/"
+    echo "    added $(ls "$CFG"/images/llm-companies/*.png | wc -l) model-family badges"
+else
+    echo "    WARNING: no model-family badges in $CFG/images/llm-companies/"
+    echo "             cards for families upstream does not ship will show a"
+    echo "             broken image. Generate them with:"
+    echo "               demo/.venv/bin/python scripts/make-brand-assets.py"
+fi
+
 # 4. angular.json build + serve targets
 python3 - "$DST/angular.json" "$CFG/angular-configurations.json" <<'PY'
 import json, sys

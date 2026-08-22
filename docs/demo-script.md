@@ -36,6 +36,20 @@ a round hangs, you cut to it rather than debugging in front of people.
 > self-signed certificate. A real deployment uses a real domain." Then click
 > through and never mention it again.
 
+**Two things about the LLM, until Stage L6 gives it a beat of its own.**
+
+*Only one fits while the federation is up.* An LLM deployment wants two
+exclusive CPU cores, 16.3 GB and a GPU. The LLM node holds any that is already
+running, and the three hospital nodes have a free GPU each but only three cores
+— one of which a workspace is using. A second deployment therefore sits at an
+orange `queued` badge until something is deleted. That is correct behaviour and
+the badge now says so, but do not discover it on camera.
+
+*A deployment takes one to three minutes before you can open it.* The badge goes
+yellow `starting` and *Quick access* stays greyed out for the whole of it, which
+is the honest thing to show — but it is dead air. Deploy it at the start of a
+beat and come back to it, exactly as beat 5 does with the federated rounds.
+
 ---
 
 ## Beat 1 — Log in, and see a catalogue that speaks your language (2 min)

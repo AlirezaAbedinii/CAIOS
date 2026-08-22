@@ -836,19 +836,66 @@ button works on the first click. Then, with one LLM already running, deploy a
 second and confirm the badge is an orange `queued` with a sentence explaining
 what it is waiting for.
 
+### What it found — run on 2026-08-22
+
+**The fix is smaller than the bug.** Both faults are two conditions over data
+`get_deployment` had already fetched, and the dashboard needed no change at all
+— checked before the stage was written, not assumed: `starting` (yellow) and
+`queued` (orange) are already in `deployment-badge.ts`, and `status ===
+'running'` appears in exactly **one** place in the whole Angular application,
+the *Quick access* gate.
+
+**Verified live, against the exact scenario that produced the bug.** A second
+LLM deployment submitted while the first held the only free GPU:
+
+```
+  status   : queued
+  error_msg: Waiting for cluster capacity. This deployment will start on its own
+             when resources free up; deleting another deployment frees them
+             sooner. Nomad reports: 'cores' exhausted on 1 node(s); 'cpu'
+             exhausted on 2 node(s); 'devices: no devices match request'
+             exhausted on 1 node(s); 1 node(s) filtered by constraint
+             '${meta.type} = compute'.
+```
+
+Yesterday that was a red `error` and an empty string.
+
+**And no regression on anything already running** — the LLM deployment and all
+four federated-learning jobs still report `running` through the patched PAPI,
+which is the single-task no-op holding in production rather than only in a test.
+
+**The fixtures could not be committed as recorded.** Raw Nomad allocation and
+job JSON carries `VLLM_API_KEY`, `WEBUI_ADMIN_PASSWORD`, `jupyterPASSWORD`,
+`RCLONE_CONFIG_RSHARE_PASS` and Nomad token IDs in clear text — R-09, which we
+had written down as a risk about job specifications without noticing it applies
+to anything recorded *from* one. They are trimmed to the fields the code reads,
+and `test_fixtures_carry_no_credentials` keeps them that way.
+
+**The demo-script item moved.** It was written expecting an LLM beat to attach
+to; there is not one until Stage L6. The capacity limit and the loading window
+went into *Before you start* instead, which is where a warning about what not to
+do on camera actually gets read.
+
 ### Gate
 
-- [ ] The badge is `starting` and *Quick access* is disabled for the whole
-      loading window, verified by clicking, not by polling
-- [ ] A second LLM deployment reads `queued` with a message naming the missing
-      resource, and is not called an error
-- [ ] `tests/test_deployment_status.py` passes, including the single-task no-op
+- [x] A second LLM deployment reads `queued` with a message naming the missing
+      resource, and is not called an error — **verified live 2026-08-22**
+- [x] `tests/test_deployment_status.py` passes, including the single-task no-op
+      — 13 tests, 0.2 s, no cluster
+- [x] Nothing already running changed status — the LLM and all four federated
+      jobs still read `running` through the patched PAPI
+- [x] `docs/demo-script.md` warns that only one LLM fits while the federated
+      demo is up, and that the loading window is dead air
+- [ ] **The badge is `starting` and *Quick access* is disabled for the whole
+      loading window, verified by clicking.** Needs one deployment on a free
+      GPU, which means deleting the LLM currently running — the cluster fits
+      exactly one, which is R-24's finding biting the test of R-23's fix.
 - [ ] `scripts/check-llm-ui.sh` fails if `running` ever precedes a working
-      endpoint
+      endpoint — written and syntax-checked; exercised by the same run
 - [ ] The Consul check is kept only if it demonstrably improves the direct-URL
-      case; otherwise reverted, with the reason recorded here
-- [ ] `docs/demo-script.md` says out loud that only one LLM fits while the
-      federated demo is up
+      case; otherwise dropped, with the reason recorded here. **Deliberately not
+      written yet** — the gate says keep it only if it demonstrably helps, and
+      it cannot be demonstrated without that same deployment
 
 **Commit:** `papi: a deployment is not running until you can open it`
 

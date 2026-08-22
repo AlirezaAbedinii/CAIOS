@@ -30,15 +30,14 @@ is the plan and carries what each stage actually found.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L4b next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L4 done; L4b shipped, one check left** — `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L4b** — a deployment must not report `running` before a user can
-   open it, and a deployment Nomad has queued for capacity must not be called an
-   error. Both found by the L4 browser check on 2026-08-21. PAPI patch `0011`;
-   no dashboard change needed.
+1. **Finish Stage L4b** — patch `0011` is shipped and the `queued` half is
+   verified live. The `starting` half needs one deployment on a free GPU, which
+   means deleting the LLM currently running, since the cluster fits only one.
 2. **Stage L5** — the dashboard reads its LLM model cards from CAIOS rather
    than from AI4OS's GitHub (R-07).
 3. **Rehearse the demo end to end in a browser**, following
@@ -55,6 +54,46 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-22 — Stage L4b: the fix is smaller than the bug
+
+**Patch `0011` shipped and PAPI is running it.** Two conditions over data
+`get_deployment` had already fetched — no extra Nomad calls, no new dependency,
+and **no dashboard change**, which was checked rather than assumed: `starting`
+and `queued` are already badges in `deployment-badge.ts`, and `status ===
+'running'` appears in exactly one place in the whole Angular application, the
+*Quick access* gate. Fix PAPI and the button disables itself.
+
+**Verified live against the scenario that produced the bug.** A second LLM
+submitted while the first held the only free GPU:
+
+```
+status   : queued
+error_msg: Waiting for cluster capacity. This deployment will start on its own
+           when resources free up... 'cores' exhausted on 1 node(s); 'cpu'
+           exhausted on 2 node(s); 'devices: no devices match request'
+           exhausted on 1 node(s)...
+```
+
+Yesterday, the same request produced a red `error` and an empty string. And
+nothing already running changed: the LLM and all four federated jobs still read
+`running` through the patched PAPI, which is the single-task no-op holding in
+production rather than only in a test.
+
+**The fixtures could not be committed as recorded.** Raw Nomad allocation and
+job JSON carries `VLLM_API_KEY`, `WEBUI_ADMIN_PASSWORD`, `jupyterPASSWORD`,
+`RCLONE_CONFIG_RSHARE_PASS` and Nomad token IDs in clear text. That is R-09,
+which we had written down as a risk about job *specifications* without noticing
+it applies to anything recorded from one. Fixtures are trimmed to the fields the
+code reads, and a test keeps them that way.
+
+**What is left is one deployment on a free GPU** — watching the badge sit at
+`starting` with *Quick access* greyed out, exercising the new assertion in
+`check-llm-ui.sh`, and deciding whether the Consul health check earns its place.
+All three need the same run, and the cluster fits exactly one LLM: R-24's
+finding biting the test of R-23's fix.
 
 ---
 

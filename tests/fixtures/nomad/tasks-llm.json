@@ -1,0 +1,23 @@
+{
+  "_recorded": "TaskGroups[0].Tasks of the LLM job: `main` (vLLM) is a prestart sidecar, `check_vllm_startup` is a prestart one-shot, and `open-webui` is the only task a user opens.",
+  "Tasks": [
+    {
+      "Name": "main",
+      "Lifecycle": {
+        "Hook": "prestart",
+        "Sidecar": true
+      }
+    },
+    {
+      "Name": "check_vllm_startup",
+      "Lifecycle": {
+        "Hook": "prestart",
+        "Sidecar": false
+      }
+    },
+    {
+      "Name": "open-webui",
+      "Lifecycle": null
+    }
+  ]
+}

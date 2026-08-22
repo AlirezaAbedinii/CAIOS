@@ -1,0 +1,19 @@
+{
+  "_recorded": "Allocation 412b7030 of the LLM deployment that was deleted mid-load on 2026-08-21. `open-webui` has no StartedAt because Nomad had not started it yet \u2014 the field this fixture exists to carry. `main` reads `dead` rather than `running` only because the snapshot was taken after the deployment was deleted.",
+  "ID": "412b7030-becc-807f-5cdd-85fe6748e69c",
+  "ClientStatus": "complete",
+  "TaskStates": {
+    "open-webui": {
+      "State": "dead",
+      "StartedAt": null
+    },
+    "main": {
+      "State": "dead",
+      "StartedAt": "2026-08-21T22:42:47.800862831Z"
+    },
+    "check_vllm_startup": {
+      "State": "dead",
+      "StartedAt": "2026-08-21T22:42:45.938434801Z"
+    }
+  }
+}

@@ -167,6 +167,65 @@ Only `both` is redirected. A standalone `open-webui` keeps whatever endpoint the
 user supplied, which is the one case where leaving the cluster is the point.
 Unset in every other path, so the patch changes nothing for anyone else.
 
+### `ai4-papi/0011-deployment-readiness.patch` — pinned to `e80a2b7`
+
+`ai4papi/nomad_utils.py`, and the reason Stage L4b exists. Two changes, both
+pure functions over data `get_deployment` has already fetched — no extra Nomad
+calls, no new dependency, and **no dashboard change needed**, because `starting`
+and `queued` are already badges upstream and *Quick access* is already gated on
+`status === 'running'`.
+
+**1. `running` becomes `starting` until every user-facing task has started.**
+
+```python
+status = a["TaskStates"]["main"]["State"] if a.get("TaskStates") else "queued"
+```
+
+`main` is whichever task PAPI renamed at submission (`tools.py:678`). For the
+LLM tool that is **vLLM, a prestart sidecar** — so it reads `running` while the
+model is still loading and while Nomad has not started Open WebUI at all.
+Measured on 2026-08-21: green badge at T+1 s, chat interface answering at
+T+185 s, and Traefik serving `Bad Gateway` for the 184 seconds in between,
+because the Consul service carries no check but the node's own liveness.
+
+The patch adds `unstarted_user_tasks()`: tasks with a `lifecycle` block are
+plumbing, tasks without one are what a user opens, and Nomad has not started one
+until it has a `StartedAt`. R-23, D-38.
+
+**For every single-task deployment this is a no-op** — modules, the dev
+environment and the federated server have one task named `main` with no
+lifecycle block, so it is a user task and it has already started. That is
+asserted by `tests/test_deployment_status.py` against a recorded workspace
+allocation, because "safe for everything else" is the claim that matters.
+
+**2. A blocked evaluation becomes `queued`, with a message.**
+
+```python
+info["status"] = "error"
+info["error_msg"] = f"{evals[0].get('FailedTGAllocs', '')}"
+```
+
+Nomad distinguishes "I cannot place this" from "I will place this when there is
+room". Upstream flattens both into `error`. Worse, `/v1/job/:id/evaluations`
+returns evaluations **unordered**, and the one that comes back first is
+frequently the *blocked* evaluation — which carries no `FailedTGAllocs`. So the
+message is the empty string.
+
+That is not hypothetical: on 2026-08-21 a second LLM deployment was submitted
+while the first held the only free GPU, shown as a red error with no text, and
+deleted by the user three seconds after Nomad finally placed it. It had been
+47 seconds from working.
+
+`placement_status()` reports `queued` when any evaluation carries a non-empty
+`BlockedEval`, and builds the message from whichever evaluation actually has
+`FailedTGAllocs` — turning `DimensionExhausted` and `ConstraintFiltered` into a
+sentence rather than a Python dict. R-24, D-39.
+
+Worth reporting upstream. Neither fault is CAIOS-specific: the first affects any
+tool using lifecycle hooks, and the second affects any deployment on any cluster
+that is ever briefly full.
+
+
 Still present at upstream `master` as of 2026-08-20. Worth reporting: it affects
 any AI4OS deployment not using a publicly trusted certificate.
 

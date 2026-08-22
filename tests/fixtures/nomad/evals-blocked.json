@@ -1,0 +1,38 @@
+{
+  "_recorded": "The three evaluations of job 84ad203c, the second LLM deployment submitted on 2026-08-21 while the first was still running. e1ae7636 carries the placement failure AND a BlockedEval; the blocked evaluation itself carries no FailedTGAllocs, which is why upstream's evals[0] produced an empty error message.",
+  "Evaluations": [
+    {
+      "ID": "2fde368b-d8fe-f9a7-41c6-40d59fd0fa35",
+      "Status": "complete",
+      "TriggeredBy": "queued-allocs"
+    },
+    {
+      "ID": "77dc48cf-123f-eded-07e8-c7b7dabe4462",
+      "Status": "complete",
+      "TriggeredBy": "job-deregister"
+    },
+    {
+      "ID": "e1ae7636-621c-4d7c-5297-6007e17ccce9",
+      "Status": "complete",
+      "TriggeredBy": "job-register",
+      "BlockedEval": "2fde368b-d8fe-f9a7-41c6-40d59fd0fa35",
+      "FailedTGAllocs": {
+        "usergroup": {
+          "ClassExhausted": null,
+          "ConstraintFiltered": {
+            "${meta.type} = compute": 1
+          },
+          "DimensionExhausted": {
+            "devices: no devices match request": 1,
+            "cores": 1,
+            "cpu": 2
+          },
+          "NodesEvaluated": 5,
+          "NodesExhausted": 4,
+          "NodesFiltered": 1,
+          "QuotaExhausted": null
+        }
+      }
+    }
+  ]
+}

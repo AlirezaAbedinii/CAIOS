@@ -1,0 +1,19 @@
+{
+  "_recorded": "Allocation 0de29a3c, the LLM deployment that worked, snapshotted after it became healthy at 22:46:24 on 2026-08-21.",
+  "ID": "0de29a3c-a8e4-50ee-3f46-d64e4f599b94",
+  "ClientStatus": "running",
+  "TaskStates": {
+    "check_vllm_startup": {
+      "State": "dead",
+      "StartedAt": "2026-08-21T22:43:20.020605747Z"
+    },
+    "open-webui": {
+      "State": "running",
+      "StartedAt": "2026-08-21T22:46:14.685450843Z"
+    },
+    "main": {
+      "State": "running",
+      "StartedAt": "2026-08-21T22:43:20.518178932Z"
+    }
+  }
+}

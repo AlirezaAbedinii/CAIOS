@@ -1,0 +1,9 @@
+{
+  "_recorded": "TaskGroups[0].Tasks of a federated-learning workspace: one task named `main`, no lifecycle block.",
+  "Tasks": [
+    {
+      "Name": "main",
+      "Lifecycle": null
+    }
+  ]
+}

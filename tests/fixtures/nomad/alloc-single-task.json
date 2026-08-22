@@ -1,0 +1,11 @@
+{
+  "_recorded": "Allocation 650a5de3, a federated-learning workspace. One task, no lifecycle hooks \u2014 the shape of every module and tool except the LLM, and the case the readiness change must leave alone.",
+  "ID": "650a5de3-56d9-a7b3-3463-3bc4fd55ee7c",
+  "ClientStatus": "running",
+  "TaskStates": {
+    "main": {
+      "State": "running",
+      "StartedAt": "2026-08-15T21:50:41.475236437Z"
+    }
+  }
+}

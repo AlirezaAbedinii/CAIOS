@@ -150,17 +150,36 @@ echo "=== 2. wait for the chat interface ==="
 # already closed the very first time the UI answered is the whole of R-22, and a
 # leisurely poll cannot tell the difference between "closed at boot" and "closed
 # a few seconds later by something else".
-UI=""; READY_CODE=""
+#
+# The loop asks the UI FIRST and PAPI second, and breaks the moment the UI
+# answers. That ordering matters: the PAPI detail endpoint probes both
+# deployment endpoints itself with a 2 s timeout each, so asking it first would
+# add up to four seconds between the port opening and us noticing — which is
+# exactly the tightness R-22 depends on.
+UI=""; READY_CODE=""; EARLY_RUNNING=""; STATUS=""; STATUS_TRAIL=""
 for _ in $(seq 1 "$((DEPLOY_TIMEOUT / 3))"); do
-    if [[ -z "$UI" || "$UI" == *'${'* ]]; then
-        UI="$(api GET "/v1/deployments/tools/$JOB_ID?vo=$VO" \
-            | python3 -c 'import json,sys;print((json.load(sys.stdin).get("endpoints") or {}).get("ui",""))' 2>/dev/null)"
-    fi
     if [[ -n "$UI" && "$UI" != *'${'* ]]; then
         READY_CODE=$(curl -k -sS --max-time 10 -o "$TMP/config.json" -w '%{http_code}' \
             "$UI/api/config" 2>/dev/null)
         [[ "$READY_CODE" == "200" ]] && break
     fi
+
+    # One GET serves both purposes: the endpoint, and the status PAPI is telling
+    # the dashboard right now. Reached only while the UI is not answering.
+    DEP="$(api GET "/v1/deployments/tools/$JOB_ID?vo=$VO" 2>/dev/null)"
+    STATUS="$(python3 -c 'import json,sys;print(json.load(sys.stdin).get("status",""))' <<<"$DEP" 2>/dev/null)"
+    if [[ -z "$UI" || "$UI" == *'${'* ]]; then
+        UI="$(python3 -c 'import json,sys;print((json.load(sys.stdin).get("endpoints") or {}).get("ui",""))' <<<"$DEP" 2>/dev/null)"
+    fi
+    [[ -n "$STATUS" && "$STATUS_TRAIL" != *"$STATUS"* ]] &&
+        STATUS_TRAIL="${STATUS_TRAIL:+$STATUS_TRAIL -> }$STATUS"
+
+    # R-23, and the reason Stage L4b exists. Anything reached here has already
+    # failed to answer on this pass, so `running` here means PAPI is telling the
+    # dashboard to show a green badge and enable Quick access in front of a
+    # Bad Gateway. Measured at 184 seconds wide before patch 0011.
+    [[ "$STATUS" == "running" ]] && EARLY_RUNNING="${EARLY_RUNNING:-$(( $(date +%s) - T0 ))}"
+
     sleep 3
 done
 READY=$(( $(date +%s) - T0 ))
@@ -173,6 +192,17 @@ if [[ "$READY_CODE" != "200" ]]; then
 fi
 ok "UI answering after ${READY}s: $UI"
 info "which also means vLLM loaded the model — check_vllm_startup gates it"
+info "PAPI status trail: ${STATUS_TRAIL:-none observed}"
+
+# The assertion Stage L4b exists to make.
+if [[ -n "$EARLY_RUNNING" ]]; then
+    bad "PAPI said 'running' at T+${EARLY_RUNNING}s; the UI only answered at T+${READY}s (R-23)"
+    info "$(( READY - EARLY_RUNNING ))s of green badge and an enabled Quick access"
+    info "button in front of a Bad Gateway. Patch 0011 is the fix — check it is"
+    info "applied:  grep -c unstarted_user_tasks build/ai4-papi/ai4papi/nomad_utils.py"
+else
+    ok "PAPI never reported 'running' before the UI answered"
+fi
 
 echo
 echo "=== 3. it is Open WebUI, not the dashboard ==="

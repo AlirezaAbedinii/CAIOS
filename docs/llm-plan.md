@@ -12,13 +12,15 @@ Read alongside:
 | `docs/llm-infrastructure.md` | What the hardware is, what fits, what changes |
 | `docs/llm-risks.md` | What will go wrong, and what it costs |
 
-**Status: Stages L0 to L5 are done.** A researcher can deploy a private model
+**Status: Stage 6 is complete — L0 to L6.** A researcher can deploy a private model
 onto CAIOS hardware, open a chat interface at their own subdomain, and talk to
 it — and the marketplace page they pick the model on is now served entirely by
-this cluster. The browser check L4 was waiting for happened on 2026-08-21 and
-found two faults in how PAPI reports a deployment's state — **Stage L4b** below,
-closed on 2026-08-22. What is left is L6 (the demo beat), plus a look at the LLM
-catalogue page in a browser, which L5 has not had. Each stage carries a "What it found" section written after it ran,
+this cluster, and the demo has a beat for it. The browser check L4 was waiting
+for happened on 2026-08-21 and found two faults in how PAPI reports a
+deployment's state — **Stage L4b** below, closed on 2026-08-22.
+
+What is left is not engineering: a timed read-through of the new beat, and a
+look at the LLM catalogue page in a browser. Both need a person. Each stage carries a "What it found" section written after it ran,
 which is usually more useful than the plan above it.
 
 ---
@@ -1122,11 +1124,61 @@ conditions, and it is the only run that means anything.
 **Rehearsal** — the new beat timed. `docs/demo-script.md` is currently 22
 minutes; this should not push it past 26.
 
-### Gate
+### What it found — run on 2026-08-22
 
-- [ ] The beat rehearses inside its time budget, twice
-- [ ] LLM and federated learning demonstrated in the same session on the same
-      cluster, neither degrading the other
+**The four-line notebook in the plan did not work.** A dev-env workspace calling
+the deployment's endpoint gets `CERTIFICATE_VERIFY_FAILED`: the endpoint is
+served by Traefik under our own CA, which the workspace does not trust. R-05 for
+the fourth time, now on the path a *user* takes rather than one of ours.
+
+It turned out to need nothing new. `scripts/build-fl-bundles.sh` already ships
+`caios-ca.pem` in every hospital bundle, so pointing `SSL_CERT_FILE` at it
+verifies properly — no `verify=False`, which would have been a poor thing to
+show while arguing about privacy. `bootstrap.sh` also installs a pinned `openai`
+client now, because five seconds of `pip install` at bootstrap beats five
+seconds of it on camera. Checked against the federated path first: flwr,
+TensorFlow and numpy are unchanged by it.
+
+**And a fault that would have broken beat 5 on the day.**
+`build-fl-bundles.sh` did `rm -rf "$DIST"` then `mkdir`, which produces a new
+**inode**. Caddy has that directory bind-mounted at `/srv/fl`, and a bind mount
+follows the inode rather than the path — so Caddy went on serving the deleted
+one. `/srv/fl` empty inside the container, every `/fl/*` URL a 404, and freshly
+built bundles sitting on the host looking perfect. That is the bootstrap
+one-liner each hospital pastes, broken by the very script the runbook tells you
+to re-run after editing `client.py`. It empties in place now; verified by
+rebuilding without touching Caddy.
+
+The running federation never noticed, because those three sites bootstrapped in
+August and had their bundles already. Only a *new* bootstrap would have hit it —
+which is to say, only demo day.
+
+**The beat itself is cheaper than expected.** Both timed parts are effectively
+instant: the chat reply streams in under two seconds, the notebook cell returns
+in one. So its three minutes are talking, not waiting, which makes it the one
+beat where somebody in the room can choose the prompt.
+
+### Gate — passed 2026-08-22
+
+- [x] **LLM and federated learning demonstrated in the same session on the same
+      cluster, neither degrading the other.** Measured, not asserted: with the
+      LLM serving on `caios-wn-gpu-3`, all three hospitals bootstrapped through
+      the real one-liner and ran **10 rounds in 34.6 s to accuracy 0.845**,
+      while the LLM answered every 20 seconds throughout at **71–81 ms**.
+      Neither moved.
+- [x] The new beat is written, with its two failure modes and the two values to
+      paste in beforehand
+- [x] `docs/demo-script.md` is **25 minutes**, inside the 26 this stage allowed
+- [ ] **The beat rehearses inside its budget, twice.** Its mechanics are timed
+      and its prose is written; nobody has read it aloud with a stopwatch. Same
+      open item as the browser checks on L4 and L5 — a person, not a script.
+
+**Smoke tests.** `check-llm-config.sh` green on 2026-08-22 against the live
+cluster. `check-llm-deploy.sh` and `check-llm-ui.sh` were last green at L4b, and
+`check-llm-catalogue.sh` swept all nine models at L3. **The cold-start run this
+stage asks for has not been done**, deliberately: the cluster is holding a
+deployed LLM and a live federation, which is the state the gate above needed.
+Do it after the next teardown.
 
 **Commit:** `docs: the LLM beat, and what Stage 6 changed`
 
@@ -1143,7 +1195,7 @@ minutes; this should not push it past 26.
 | L4 | Open WebUI end to end | 0.5 | **done — browser check passed 2026-08-21** |
 | L4b | Deployment status tells the truth | 0.5 | **done 2026-08-22** |
 | L5 | Dashboard catalogue | 0.5 | **done — not yet seen in a browser** |
-| L6 | Demo, docs, rehearsal | 0.5 | After L4b + L5 |
+| L6 | Demo, docs, rehearsal | 0.5 | **done — needs one timed read-through** |
 | | | **4.5** | |
 
 L2 is the long pole and depends on nothing, so with two engineers one starts L0

@@ -161,6 +161,10 @@ for CPU or GPU.
 (it held only `lost+found`), and it carries `meta.role = llm` so the LLM job
 prefers it. `docs/llm-infrastructure.md` explains the reformat in full.
 
+**Confirmed in production on 2026-08-22:** with an LLM serving on this node,
+the three hospitals ran 10 federated rounds in 34.6 s while the LLM answered at
+71-81 ms throughout. The separation works — neither workload degraded the other.
+
 **One operational rule came out of it:** deploy the LLM *before* the federated
 learning workspaces. With four compute nodes, spread scheduling will otherwise
 put one "hospital" on this machine — measured, and a soft anti-affinity does not

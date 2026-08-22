@@ -14,7 +14,7 @@ estimated from memory. Effort is engineer-days for one person.
 |---|---|---|
 | **Catalog → Modules** | ✅ MVP | — |
 | **Catalog → Tools** | ⚠️ 2 of 6 in MVP | 0.5–1 day each |
-| **Catalog → LLMs** | 🚧 Stage 6, in progress | **4 days** (was estimated 1 — see below) |
+| **Catalog → LLMs** | ✅ **Done — Stage 6** | **4 days** (was estimated 1 — see below) |
 | **Deployments** | ✅ MVP | — |
 | **Deployments → Inference** | ❌ Out | **5–8 days** (needs Kubernetes) |
 | **Try me** | ❌ Out | 1 day + a dedicated node |
@@ -30,10 +30,20 @@ estimated from memory. Effort is engineer-days for one person.
 concentrated in two areas: serverless inference (which needs a second cluster)
 and the hosted LLM Chat service (which is somebody else's deployment, not ours).
 
-> **Changed on 2026-08-19.** *Catalog → LLMs* has moved from V1 stretch to Stage
-> 6 and is the current focus — the second headline feature after federated
-> learning. Its effort estimate quadrupled once the cluster was measured rather
-> than assumed; section 3 says why, and `docs/llm-plan.md` is the plan.
+> **Changed on 2026-08-19.** *Catalog → LLMs* moved from V1 stretch to Stage 6.
+> Its effort estimate quadrupled once the cluster was measured rather than
+> assumed; section 3 says why.
+>
+> **Delivered on 2026-08-22.** A researcher deploys a language model from the
+> marketplace onto the lab's own GPU, chats with it at their own subdomain, and
+> calls it from a notebook with the stock OpenAI client. The four-day estimate
+> held. `docs/llm-plan.md` records what each of the seven stages found — most of
+> which was not in the plan, and none of which was visible from the dashboard.
+>
+> The row above it — *Services → LLM Chat* — stays out, and the distinction is
+> worth keeping straight for reviewers: that is AI4EOSC's own hosted chat
+> service on their hardware. What we built is the tool that lets a user deploy
+> their own, which is the version a hospital can actually use.
 
 ---
 
@@ -60,7 +70,7 @@ Six tools exist upstream. These are deployable *services* rather than models.
 | **AI4Life loader** | Deploys any bioimage.io model by ID | 🔶 V1 | **0.5 day** | none |
 | **NVFLARE** | Second federated learning framework | 🔶 V1 | **0.5 day** | needs 2 firewall ports |
 | **CVAT** | Image annotation | 🔶 V1 | **0.5 day** | **needs ~71 GB RAM on one machine** |
-| **LLM (vLLM + chat UI)** | Deploy your own language model | ❌ | **1 day** | **needs ~32 GB RAM + a bigger GPU** |
+| **LLM (vLLM + chat UI)** | Deploy your own language model | ✅ **MVP+** | **4 days, spent** | fits after the job template was rewritten — see §3 |
 
 ### Why adding a tool is cheap
 

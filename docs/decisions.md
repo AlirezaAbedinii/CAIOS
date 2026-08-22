@@ -494,6 +494,40 @@ that reads the served bytes with `file`. Third time this pattern has cost
 something here — see D-28.
 
 
+## Settled on 2026-08-22 — Stage L6
+
+**D-43 — A workspace verifies CAIOS certificates; it does not skip them.**
+The demo's last beat calls a CAIOS-hosted model from a hospital workspace, and
+the workspace does not trust our CA — so the obvious fix is `verify=False`. It
+is also a bad thing to put on screen while arguing that this platform is the
+private option. A reviewer who sees TLS verification switched off has learned
+something about our care, not about our architecture.
+
+The bundle each workspace already downloads contains `caios-ca.pem`, so
+`SSL_CERT_FILE` pointing at it verifies properly and costs one line. **The
+`curl -k` in `bootstrap.sh` stays the single unverified request in the whole
+demo, and it is the request that fetches that CA** — which is a defensible
+answer to the question, rather than an awkward one.
+
+The general rule: when a private CA makes something inconvenient, distribute the
+CA. Turning verification off is a decision about what you are willing to show.
+
+**D-44 — Scripts empty the directories they own; they do not replace them.**
+`build-fl-bundles.sh` did `rm -rf` then `mkdir`, which changes the **inode**.
+Caddy has that directory bind-mounted, and a bind mount follows the inode, so
+Caddy served a deleted directory: `/fl/*` 404ing everywhere while the rebuilt
+bundles sat on the host looking perfect.
+
+Nothing about that is specific to Caddy or to this script. Any build step whose
+output directory is bind-mounted anywhere has it, and the symptom is always the
+same shape — the producer is correct, the consumer is stale, and no error is
+raised by either. `find "$DIST" -mindepth 1 -delete` keeps the inode.
+
+The cost of getting it wrong here would have been beat 5, the headline feature,
+failing at the first hospital's bootstrap — caused by the script the runbook
+tells you to re-run before the demo.
+
+
 ---
 
 ## Log
@@ -548,3 +582,12 @@ was rebuilt from two display fields (R-25) and six of nine cards rendered a
 broken image (R-26). Recorded D-40 through D-42. Dashboard patches `0002` and
 `0003`; `0002` also repairs the spec it invalidated, and `0003` the fixtures
 that had been agreeing with the bug.
+
+**2026-08-22, later** — Stage L6, and Stage 6 with it. The demo has a beat for
+the private language model: a chat window, and the stock OpenAI client pointed
+at the cluster from the same workspace that was a hospital site ten minutes
+earlier. Recorded D-43 and D-44, both found by trying to write the beat rather
+than by planning it — the notebook did not work against our own CA, and
+rebuilding the FL bundles turned out to break the URL every hospital pastes.
+The gate item was measured rather than asserted: 10 federated rounds in 34.6 s
+while the LLM answered at 71–81 ms throughout.

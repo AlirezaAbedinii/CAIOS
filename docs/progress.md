@@ -12,13 +12,11 @@ platform rather than somebody else's stack. `docs/demo-script.md` is written
 and timed at 22 minutes.
 
 **Stage 6 — LLM deployment — is the current focus.** As of 2026-08-20 a
-researcher can deploy a private language model onto the lab's GPU and talk to it
-in a browser at their own subdomain. L0 to L5 are done. The browser check L4 was
-waiting for happened on 2026-08-21 and found two faults in how PAPI reports
-deployment state — **Stage L4b**, closed on 2026-08-22. L5 closed the same day,
-and the marketplace page a researcher picks a model on is now served entirely by
-this cluster. Only L6 remains. `docs/llm-plan.md` is the plan and carries what
-each stage actually found.
+**Stage 6 is complete.** A researcher deploys a private language model onto the
+lab's GPU, talks to it in a browser at their own subdomain, and calls it from a
+notebook with the stock OpenAI client — and the demo has a beat for it.
+`docs/llm-plan.md` carries what each of the seven stages actually found, most of
+which was not in the plan.
 
 ---
 
@@ -32,15 +30,12 @@ each stage actually found.
 | 3 — Control plane | PAPI and the dashboard; deploy a model from the browser | **Done** — gate passed |
 | 4 — Federated learning | Training across three sites | **Done** — gate passed |
 | 5 — Content and branding | Curated catalogue, CAIOS look | **Done** — gate passed |
-| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **L0–L5 done; L6 next** — `docs/llm-plan.md` |
+| 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **Done** — gate passed, `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
 the same day (R-18). Next actions, in order:
 
-1. **Stage L6** — the demo beat: a new section in `docs/demo-script.md`, the
-   LLM deployed before the FL workspaces, and the notebook that calls the
-   endpoint in four lines.
-2. **Rehearse the demo end to end in a browser**, following
+1. **Rehearse the demo end to end in a browser**, following
    `docs/demo-script.md`. The LLM half has now been driven by a human clicking,
    and it found two faults; the federated half has not.
 3. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
@@ -53,6 +48,87 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-08-22 — STAGE 6 COMPLETE: the demo has a beat for the private model
+
+Stage L6, and with it the whole LLM feature. The walkthrough is **25 minutes**,
+with beat 7 giving the private language model three of them.
+
+### The gate item, measured rather than asserted
+
+"LLM and federated learning demonstrated in the same session on the same
+cluster, neither degrading the other" is easy to claim and worth checking. With
+the LLM serving on `caios-wn-gpu-3`, all three hospitals were bootstrapped
+through the **real one-liner** and joined:
+
+```
+10 rounds in 34.6 s          final accuracy 0.845
+LLM answered every 20 s throughout, at 71–81 ms
+```
+
+Neither moved. The federated numbers are a rehearsal run, not a re-measurement —
+the recorded headline stays 0.853 against 0.806 and 0.865.
+
+### What writing the beat found that planning it had not
+
+**The four-line notebook did not work.** A dev-env workspace calling the
+deployment's endpoint gets `CERTIFICATE_VERIFY_FAILED`: it is served by Traefik
+under our own CA, which the workspace has never heard of. That is R-05 for the
+fourth time — helper tasks, then Open WebUI, then Open WebUI's model list, and
+now the path a *user* takes.
+
+The fix needed nothing new. Every hospital bundle already ships `caios-ca.pem`,
+so `SSL_CERT_FILE` pointing at it verifies properly. That matters more than it
+sounds: the obvious alternative is `verify=False`, and putting TLS verification
+switched off on screen while arguing that this is the private option teaches a
+reviewer something about our care rather than about our architecture (D-43). The
+`curl -k` in `bootstrap.sh` remains the only unverified request in the demo, and
+it is the one that fetches the CA — a defensible answer rather than an awkward
+one.
+
+`bootstrap.sh` also installs a pinned `openai` client, so the beat has no
+`pip install` in it. Checked against the federated path before committing to it:
+flwr 1.16.0, TensorFlow 2.14.0 and numpy 1.26.0 unchanged, `pip check` clean.
+
+### And a fault that would have broken beat 5 on the day
+
+`build-fl-bundles.sh` did `rm -rf "$DIST"` then `mkdir`. That produces a new
+**inode**, and Caddy has that directory bind-mounted at `/srv/fl`. A bind mount
+follows the inode, not the path — so Caddy went on serving the deleted one.
+`/srv/fl` empty inside the container, every `/fl/*` URL a 404, and the freshly
+built bundles sitting on the host looking perfect.
+
+That is the bootstrap one-liner each hospital pastes in beat 5, broken by the
+very script `docs/runbook.md` tells you to re-run before the demo. The running
+federation never noticed — those three sites bootstrapped in August and had
+their bundles already. **Only a new bootstrap would have hit it, which is to say
+only demo day.** Emptying in place keeps the inode; verified by rebuilding
+without touching Caddy. D-44.
+
+### The beat is cheaper than expected
+
+Both timed parts are effectively instant — the chat reply streams in under two
+seconds, the notebook cell returns in one. So its three minutes are talking, not
+waiting, which makes it the only beat in the script where somebody in the room
+can pick the prompt. Worth using.
+
+The measured answer, from inside the site_a workspace:
+
+> The patient has a stable, 8mm left periventricular white matter
+> hyperintensity on T2 imaging, consistent with prior findings.
+
+### What is left, and it is not engineering
+
+Three things, all needing a person rather than a script:
+
+- **A timed read-through of beat 7, twice.** Its mechanics are measured; nobody
+  has read it aloud with a stopwatch.
+- **The LLM catalogue page in a browser** — L5's open item.
+- **The cold-start smoke run.** Deliberately skipped: the cluster is holding a
+  deployed LLM and a live federation, which is exactly the state the gate needed.
+  Do it after the next teardown.
 
 ---
 

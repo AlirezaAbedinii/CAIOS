@@ -209,6 +209,51 @@ if [[ -s "$TMP/main.js" ]]; then
 fi
 
 echo
+echo "=== 3d. the page renders with no network but ours ==="
+
+# R-28. The dashboard used to fetch four typefaces from Google on every page
+# load. Two of them are the Material Symbols icon sets, and Material icons are
+# a FONT: each icon is a ligature, so <mat-icon>menu</mat-icon> draws a
+# hamburger only if the typeface arrived. When it does not, the browser renders
+# the ligature source and every icon becomes the word it is named after.
+#
+# So this is not a privacy nicety. On an air-gapped demo machine or a
+# conference network that fails closed, an unpatched dashboard looks
+# catastrophically broken for a reason unrelated to the platform.
+#
+# Checked against the served index.html and the compiled bundle, because patch
+# 0004 touches the first and the stylesheet touches the second — a rebuild that
+# dropped either one would still pass a check that only looked at the other.
+curl -k -sS --max-time 20 -o "$TMP/index.html" "$DASH/" 2>/dev/null
+
+leaked=0
+for host in fonts.googleapis.com fonts.gstatic.com; do
+    if grep -q "$host" "$TMP/index.html" 2>/dev/null; then
+        bad "index.html still reaches $host — icons break with no internet"
+        leaked=1
+    fi
+done
+(( leaked )) || ok "index.html reaches no third-party font host"
+
+# The fonts must actually be there. nginx answers a missing path with
+# index.html and HTTP 200, so a 404 here is invisible: the browser gets a web
+# page where it asked for a font, fails to parse it, and quietly falls back —
+# which for the icon font means words instead of icons. Same shape as R-26.
+if [[ -s "$TMP/main.js" ]] || [[ -s "$TMP/index.html" ]]; then
+    font_file="$(grep -rhoP "/assets/fonts/[A-Za-z0-9._-]+\.woff2" "$TMP"/*.js "$TMP/index.html" 2>/dev/null | head -1)"
+    # The stylesheet is a separate bundle; ask for a name we know we shipped if
+    # nothing turned up in the JS.
+    [[ -n "$font_file" ]] || font_file="/assets/fonts/material-symbols-rounded-1.woff2"
+    curl -k -sS --max-time 20 -o "$TMP/font.bin" "$DASH$font_file" 2>/dev/null
+    kind="$(file -b "$TMP/font.bin" 2>/dev/null)"
+    case "$kind" in
+        *Web*Open*Font*|*WOFF*) ok "$(basename "$font_file") is a real font ($(du -h "$TMP/font.bin" | cut -f1))" ;;
+        HTML*)                  bad "$font_file served index.html — every icon will render as a word" ;;
+        *)                      bad "$font_file is not a font: $kind" ;;
+    esac
+fi
+
+echo
 echo "=== 4. the marketplace fits the audience ==="
 PW_VAR="CAIOS_PW_RESEARCHER"
 TOKEN="$(bash scripts/get-token.sh researcher "${!PW_VAR:-}" 2>/dev/null)"

@@ -1,6 +1,5 @@
 {
     "_comment": "The two blocks that scripts/build-dashboard.sh splices into angular.json. Upstream has no `caios` tenant, so `ng build --configuration caios-production` fails without these. Modelled on the kmd4eosc-production blocks, which are the most recent flavour added upstream and therefore the best template.",
-
     "build": {
         "caios-production": {
             "optimization": true,
@@ -22,6 +21,7 @@
             "styles": [
                 "src/theme/caios/variables.scss",
                 "src/styles.scss",
+                "src/theme/caios/overrides.scss",
                 "node_modules/ol/ol.css",
                 "node_modules/cookieconsent/build/cookieconsent.min.css",
                 "node_modules/intro.js/introjs.css"
@@ -43,10 +43,10 @@
                     "input": "src/assets/",
                     "output": "/assets/"
                 }
-            ]
+            ],
+            "_comment_styles_order": "overrides.scss sits immediately after upstream's src/styles.scss and must stay there. Later sheets win at equal specificity, so this is the only position from which CAIOS can override an upstream declaration without patching upstream. Moving it above src/styles.scss silently reverts the typography (R-27)."
         }
     },
-
     "serve": {
         "caios-production": {
             "buildTarget": "ai4-dashboard:build:caios-production"

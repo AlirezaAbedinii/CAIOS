@@ -112,3 +112,16 @@ configs/env/caios.env
 
 # Unit-test virtualenv (scripts/run-tests.sh)
 .venv-tests/
+
+# Saved container images, kept as an instant rollback for a deployment that
+# misbehaves. Regenerable from a git tag + scripts/build-dashboard.sh, so they
+# are convenience rather than the source of truth — and far too large to track.
+rollback/*.tar
+
+# Screenshots of the running dashboard. Kept locally as the F0 regression
+# baseline and as evidence of faults found by looking — see
+# docs/screenshots/README.md — but never pushed: this repository is public and
+# these are full-resolution captures of a live internal deployment, showing
+# hostnames, account names and endpoints. Once in git history they cannot be
+# taken back.
+docs/screenshots/*/

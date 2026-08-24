@@ -363,6 +363,51 @@ and include a family that differs from its organisation.
 
 Worth reporting upstream, with the two mismatching entries as the reproduction.
 
+### `ai4-dashboard/0004-self-hosted-fonts.patch`
+
+`index.html` loaded four typefaces from Google's font CDN. Removes all four
+`<link>` tags and both preconnects; the fonts are served from
+`/assets/fonts/` instead, declared in `src/theme/caios/_fonts.scss` and
+fetched by `scripts/fetch-fonts.sh`.
+
+Two reasons, and the second is the one that breaks a demo rather than merely
+offending.
+
+It is a third-party request the user's browser makes on every page load, from
+a page meant to be self-contained on a private subnet — the fifth such leak,
+after the three in gotcha 6 and the model catalogue in `0002`.
+
+And **Material icons are a font**. Each icon is a ligature: the markup says
+`<mat-icon>menu</mat-icon>` and the typeface draws a hamburger. If the font
+does not arrive the browser renders the ligature source, so every icon in the
+dashboard degrades to the word it is named after — the sidenav toggle becomes
+the literal text `menu`. On an air-gapped machine or a conference network that
+fails closed, the interface looks catastrophically broken for a reason that has
+nothing to do with CAIOS.
+
+Three of the four families are now self-hosted. The fourth, **Material Symbols
+Outlined, is simply gone**: nothing referenced it. `styles.scss:78` and
+`app.config.ts:131` both name the *Rounded* set, so that request was pure waste
+on every page load.
+
+Two related faults fixed outside this patch, in CAIOS-owned files:
+
+| fault | where |
+|---|---|
+| R-27 · Material's typography config asked for `'Raleway'`, which nothing ever fetched, so components rendered in **Arial** while body copy rendered in **Roboto** | `configs/dashboard/theme/caios/_material.scss` |
+| The theme loaded *before* `src/styles.scss` and so could never override it | `overrides.scss`, added *after* it in the `styles` array |
+
+The icon font is subset to the 65 icons the dashboard actually uses: the full
+variable face is **5,222 KB**, the subset is **91 KB**, with all four axes
+(`FILL`, `wght`, `GRAD`, `opsz`) intact because the dashboard varies all four.
+That list is derived from source, never hand-written, and
+`tests/test_icon_subset.py` fails if the source starts using an icon it does
+not carry — a glyph the font lacks renders as a word, and nothing else would
+report it.
+
+Pure deletion against upstream, which is the least drift-prone shape a patch
+has. R-27, R-28, D-45.
+
 ### `ai4-dashboard` — otherwise deliberately **not** patched for MVP
 
 The dashboard has hardcoded `cloud.ai4eosc.eu` endpoints, but on inspection

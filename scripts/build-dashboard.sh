@@ -86,8 +86,38 @@ models=$(grep -cE '^  [A-Za-z0-9_./-]+:$' "$DST/src/assets/config/vllm.yaml")
 echo "    staged the LLM catalogue ($models models)"
 
 # 2. theme
+#
+# Four files now, not two. overrides.scss is the one loaded AFTER upstream's
+# src/styles.scss — see the header of that file for why the position matters —
+# and _fonts.scss is the generated @font-face block it imports.
 mkdir -p "$DST/src/theme/caios"
-cp "$CFG/theme/caios/variables.scss" "$CFG/theme/caios/_material.scss" "$DST/src/theme/caios/"
+cp "$CFG/theme/caios/variables.scss" \
+   "$CFG/theme/caios/_material.scss" \
+   "$CFG/theme/caios/_fonts.scss" \
+   "$CFG/theme/caios/overrides.scss" \
+   "$DST/src/theme/caios/"
+
+# 2b. self-hosted fonts
+#
+# Hard failure, not a warning-and-fallback like the artwork below. There is no
+# fallback here worth having: patch 0004 removes the Google <link> tags, so if
+# these files are absent the @font-face rules point at paths nginx answers with
+# index.html and HTTP 200 — and every icon in the dashboard renders as the word
+# it is named after. That is gotcha 20's failure shape and the exact fault this
+# whole stage exists to remove, so it must stop the build rather than ship.
+#
+# The angular.json assets glob copies all of src/assets/ to /assets/, which is
+# where _fonts.scss points. No extra asset entry is needed.
+if ! compgen -G "$CFG/fonts/*.woff2" >/dev/null; then
+    echo "    ERROR: no fonts in $CFG/fonts/"
+    echo "           The dashboard no longer loads them from Google, so without"
+    echo "           these every icon renders as a word and nothing reports it."
+    echo "           Generate them with: bash scripts/fetch-fonts.sh"
+    exit 1
+fi
+mkdir -p "$DST/src/assets/fonts"
+cp "$CFG"/fonts/*.woff2 "$DST/src/assets/fonts/"
+echo "    self-hosted $(ls "$CFG"/fonts/*.woff2 | wc -l) font files ($(du -sh "$CFG/fonts" | cut -f1)), $(wc -l < "$CFG/fonts/icons.txt") icons in the subset"
 
 # 3. images
 mkdir -p "$DST/src/assets/images/caios"

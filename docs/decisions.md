@@ -530,6 +530,57 @@ tells you to re-run before the demo.
 
 ---
 
+**D-45 — The dashboard serves its own fonts.**
+`index.html` fetched four typefaces from Google on every page load. Patch
+`0004` removes them; `scripts/fetch-fonts.sh` downloads them into
+`configs/dashboard/fonts/` and generates the `@font-face` rules.
+
+The privacy argument is the familiar one — a fifth third-party request from a
+page meant to be self-contained, after the three in gotcha 6 and the model
+catalogue in `0002`. It is not the argument that mattered.
+
+**Material icons are a font.** Each icon is a ligature: the markup says
+`<mat-icon>menu</mat-icon>` and the typeface draws a hamburger. If the font
+does not arrive the browser renders the ligature source, so every icon in the
+dashboard becomes the word it is named after. An air-gapped demo machine or a
+conference network that fails closed would have shown an interface that looked
+catastrophically broken for a reason unrelated to CAIOS. Nobody would have
+found that before demo day, because the machine we develop on has internet.
+
+Two faults were already present and are fixed with it. Material's typography
+config asked for `'Raleway'`, which nothing ever fetched, so components
+rendered in **Arial** while body copy rendered in **Roboto** — two unrelated
+faces on every page, by accident (R-27). And the payload fell from
+**5,447 KB to 221 KB**: the icon font shipped all ~3,000 Material Symbols, and
+the dashboard uses 65 of them.
+
+**D-46 — Anything visual that can win from a stylesheet does not become a patch.**
+Our theme had always loaded *before* upstream's `src/styles.scss`, so it could
+never override anything upstream set. Adding `overrides.scss` *after* it, in
+the `styles` array we already own in `angular-configurations.json`, gives us a
+sheet that wins without touching an upstream file.
+
+The whole typography and token pass therefore carries **no patch and no drift**.
+Only two patches exist for the visual work: a pure deletion in `index.html`,
+and later the home page. Position is load-bearing — moving `overrides.scss`
+above `src/styles.scss` silently reverts the typography, which is why the
+config file says so where someone editing it will read it.
+
+**D-47 — The icon subset is derived from source, and a stale one fails a test.**
+Subsetting the icon font is not optional: 5,222 KB against 91 KB. But a glyph
+the subset lacks does not error — it renders as the ligature source text, so a
+delete button shows the word "delete" and nothing reports it. Same shape as
+R-26, where six of nine model cards rendered a broken image behind an HTTP 200.
+
+So the list is never hand-maintained. `fetch-fonts.sh` derives it from the
+Angular source, and `--check` re-derives it and diffs without touching the
+network; `tests/test_icon_subset.py` runs exactly that, so there is one copy of
+the extraction patterns rather than a second one in the test that could drift
+into agreeing with a bug.
+
+
+---
+
 ## Log
 
 *Append new decisions below with date and one line of reasoning.*
@@ -591,3 +642,16 @@ than by planning it — the notebook did not work against our own CA, and
 rebuilding the FL bundles turned out to break the URL every hospital pastes.
 The gate item was measured rather than asserted: 10 federated rounds in 34.6 s
 while the LLM answered at 71–81 ms throughout.
+
+**2026-08-23** — Stage F1: the dashboard serves its own fonts. Recorded D-45
+through D-47. The stage was scoped as a privacy fix and turned out to be a
+demo-day one: Material icons are a font, so with no route to Google every icon
+in the interface renders as the word it is named after, and the machine we
+develop on has internet so nobody would have seen it. Two faults were already
+there — Material asked for a typeface nothing loaded, and the icon font shipped
+all ~3,000 symbols for the 65 in use. 5,447 KB to 221 KB.
+
+The reusable part is D-46: our theme had been loading *before* upstream's
+stylesheet all along, which is why it had never been able to override anything.
+One line of ordering in a config we already own turns the rest of the visual
+work into zero patches.

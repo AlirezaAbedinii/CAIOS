@@ -90,7 +90,11 @@ $caios-app-theme: mat.m2-define-light-theme(
             warning: $caios-app-warn,
         ),
         typography: mat.m2-define-typography-config(
-                $font-family: "'Raleway', Arial, Helvetica, sans-serif",
+                // R-27: this said 'Raleway', which nothing in the dashboard
+                // ever fetched — so every Material component fell through to
+                // Arial while body copy rendered in Roboto. Self-hosted now;
+                // see scripts/fetch-fonts.sh.
+                $font-family: "'IBM Plex Sans', Arial, Helvetica, sans-serif",
             ),
         density: 0,
     )

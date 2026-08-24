@@ -1,0 +1,46 @@
+// CAIOS overrides — the one stylesheet that is loaded AFTER upstream's.
+//
+// Load order is the whole point of this file, so it is worth stating plainly.
+// configs/dashboard/angular-configurations.json owns the `styles` array that
+// scripts/build-dashboard.sh merges into angular.json, and it reads:
+//
+//     src/theme/caios/variables.scss     <- ours, first
+//     src/styles.scss                    <- upstream
+//     src/theme/caios/overrides.scss     <- ours, last (this file)
+//
+// Later sheets beat earlier ones at equal specificity. Our theme has always
+// loaded FIRST, which is why it could never override anything upstream set —
+// including `font-family: Roboto` on html/body in src/styles.scss:5. Anything
+// that has to win against upstream belongs here; anything that does not
+// belongs in variables.scss, where it stays overridable by the page.
+//
+// Nothing in here is a patch. This is a CAIOS-owned file listed in a
+// CAIOS-owned config, so it carries no upstream drift.
+
+// The self-hosted @font-face rules. GENERATED — see scripts/fetch-fonts.sh.
+@import 'fonts';
+
+// Upstream sets Roboto here and Material's typography config asked for
+// Raleway, which was never loaded at all — so Material components rendered in
+// Arial while body copy rendered in Roboto. Two unrelated faces on every page,
+// by accident rather than by choice (R-27). One family now, on both.
+//
+// The stack behind IBM Plex Sans is a real fallback rather than a formality:
+// if the woff2 fails, this is what a researcher actually reads.
+html,
+body {
+    font-family:
+        'IBM Plex Sans',
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        Arial,
+        sans-serif;
+}
+
+// IBM Plex Mono is loaded but not yet applied to anything — that is Stage F2,
+// where machine values (deployment ids, GPU figures, accuracies, model names)
+// move onto it. A @font-face rule costs nothing until something on the page
+// uses the family: browsers do not fetch a face no rule selects. So declaring
+// it now is free, and F2 becomes a change to the theme rather than a change
+// to this pipeline.

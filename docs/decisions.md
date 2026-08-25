@@ -655,3 +655,36 @@ The reusable part is D-46: our theme had been loading *before* upstream's
 stylesheet all along, which is why it had never been able to override anything.
 One line of ordering in a config we already own turns the rest of the visual
 work into zero patches.
+
+**D-48 — Machine values are set in a system monospace, not a downloaded one.**
+Container tags, timestamps, GPU counts and sizes are compared character by
+character, and proportional digits do not line up between rows. They get
+`ui-monospace, SFMono-Regular, Menlo, Consolas, …` — a stack every platform
+already ships.
+
+Not a downloaded face, and the reason is F1: a typeface that fails to arrive
+takes the interface with it. A system stack costs no bytes, cannot 404, and
+cannot be removed by a patch that turns out to be wrong. The instrument-panel
+treatment is worth having; it is not worth a second network dependency.
+
+Sized at 13 px against the cell's 14 px, because a monospace sets wider and
+`creationTime` is a fixed 200 px column. That number came from measuring the
+column in a browser, not from taste.
+
+**D-49 — Visual changes are verified by injecting them into the live page,
+not by deploying them.**
+F1 was designed without ever looking at the dashboard, and shipped a fault that
+no test could have caught. F2 was done with a browser attached: read the DOM
+for real selectors, measure the real columns, then inject the candidate CSS
+into the running page and photograph it.
+
+Real data, real widths, real fonts, and the deployed image never changes. It
+takes a minute and it is the only check in this whole plan that looks at what a
+user would actually see. A theme change that has not been through it is not
+ready, whatever the test suite says.
+
+**2026-08-24** — Stage F1 rolled back and shelved; Stage F2 built and verified.
+Recorded D-48 and D-49. F1's lesson is not "fonts are hard" but that a
+derivation checked against itself proves only self-consistency: the test ran
+the same extraction as the script and so agreed with its bug. F2's method
+answers that directly — the check is a browser, not another assertion.

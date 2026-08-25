@@ -5,7 +5,8 @@ MVP works, federated learning works, the private language model works. This
 makes the dashboard look like it was built by people who knew what they were
 doing, without changing what any of it does.
 
-**Status: F1 closed 2026-08-23. F0 outstanding — it needs a browser and a person.**
+**Status: F1 SHELVED after a bad deploy. F2 built and verified 2026-08-24, not
+deployed. F0 outstanding.**
 
 The governing constraint, stated once so every decision below can be checked
 against it: **the platform is the deliverable and this is not.** Nothing in this
@@ -336,6 +337,67 @@ appended to the `styles` array. No upstream file touched.
 
 Every page still renders correctly at 1440 and 768 px. Status colours verified
 unchanged in meaning. Nothing in the deployment table reads differently.
+
+### What it found — run on 2026-08-24
+
+**Built and verified in a browser against live data. Not deployed.** Image
+`caios/dashboard:f2-tokens`; the running dashboard is untouched.
+
+The method changed, and that is the main thing to record. F1 was designed
+blind and shipped a fault no test could see. F2 was done with a browser
+attached: read the real DOM for selectors, measure the real columns, then
+**inject the candidate CSS into the live page and photograph it** — real data,
+real widths, zero deployment risk. Every claim below was measured in that
+browser rather than reasoned about.
+
+What the browser showed that reading could not:
+
+**R-27 confirmed live.** Table cells computed to `font-family: Raleway` — a
+face nothing loads — while `body` computed to Roboto. The mismatch was not
+theoretical. Fixed by naming Roboto in `_material.scss`, which needs no new
+bytes because `index.html` already fetches it.
+
+**The column widths decided the type size.** `containerName` is a flexible
+column with room to spare; `creationTime` is **fixed at 200 px**. A monospace
+sets wider than a proportional face at the same size, so mono at 14 px risked
+`05:14:31 23-08-2026` overflowing. Set at 13 px it measures clear, confirmed
+with `scrollWidth > clientWidth` on the real cell. Guessing would have got this
+wrong in one direction or the other.
+
+**Real selectors, not invented ones.** Angular Material emits
+`mat-column-containerName`, `mat-column-creationTime`, `mat-column-gpus`. Those
+are what the monospace targets. A first guess at `td:nth-child(3)` would have
+been brittle and wrong — the tables use `MAT-CELL` elements, not `td`.
+
+**Upstream puts `mat-elevation-z8` on its tables** — a three-layer drop shadow
+intended for a floating dialog, on data that is not floating. Replacing it with
+a hairline is the single largest visual change in this stage.
+
+Verified after the change: **no horizontal overflow** on either page, no cell
+overflowing its column, status pills and action icons untouched.
+
+### Risks carried out of F2
+
+**R-35 · The theme is global; verification was not.** `overrides.scss` applies
+to every page. Deployments and Modules were checked in a browser. Statistics,
+LLMs, Inference, Try-me, Batch training and Profile were **not**. Nothing in
+the stage is structural, so the expected worst case is cosmetic — but "expected"
+is doing work in that sentence, and F1 is why it should not be trusted. Check
+the remaining pages before deploying.
+
+**R-36 · The monospace columns are bound to Material's class names.** If
+upstream renames a column, the rule stops matching and those cells quietly
+revert to proportional text. Cosmetic, silent, and worth knowing rather than
+rediscovering.
+
+**R-37 · Two `!important` declarations.** The header colour and the elevation
+override both need it to beat Material's own specificity. They are scoped to
+one class each, but every `!important` makes the next override harder.
+
+**R-29 stands, untouched.** The status palette was deliberately not changed —
+see the closing comment in `overrides.scss` for why that is the highest-
+consequence change available in a theme pass and the only one producing no
+error.
 
 ---
 

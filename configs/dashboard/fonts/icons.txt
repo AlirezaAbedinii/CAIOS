@@ -7,8 +7,10 @@ arrow_outward
 attach_file
 avg_pace
 bolt
+bookmark
 calendar_month
 cancel
+category
 close
 close_fullscreen
 content_copy
@@ -40,6 +42,7 @@ menu_book
 model_training
 mop
 network_intel_node
+notifications
 open_in_full
 open_in_new
 pending_actions
@@ -49,12 +52,15 @@ restart_alt
 rule_settings
 save
 search
+search_insights
+sell
 send
 smart_toy
 storage
 straighten
 sync
 task
+task_alt
 tune
 update
 user_attributes

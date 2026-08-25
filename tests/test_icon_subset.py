@@ -1,10 +1,16 @@
-"""The self-hosted fonts are complete, and the icon subset still covers the source.
+"""The shelved self-hosted fonts stay internally consistent.
 
-The failure this prevents is the one Stage F1 exists to remove, arriving by the
-back door. Patch `0004` removes the Google `<link>` tags, so the dashboard's
-icons come from one subset font carrying 65 of the ~3,000 Material Symbols.
+Stage F1 is SHELVED (see the top of scripts/fetch-fonts.sh): the dashboard
+still loads its typefaces from Google, and nothing in the build imports these
+files. They are kept, and kept correct, so finishing F1 is a matter of fixing
+the two faults that rolled it back rather than starting again.
 
-A glyph that font lacks does not error. Material icons are ligatures — the
+These tests guard the tooling, not the running dashboard. They would all have
+passed while F1 was broken — the derivation was checked against itself, which
+is exactly the flaw that let it ship. Read that as a limit on what a test can
+do here, not as reassurance.
+
+A glyph a subset font lacks does not error. Material icons are ligatures — the
 markup says `<mat-icon>delete</mat-icon>` and the typeface draws a bin — so a
 missing glyph renders the ligature source instead, and the button shows the
 word "delete". Add an icon to a template, forget to re-run
@@ -24,11 +30,6 @@ import pytest
 
 FONT_DIR = "configs/dashboard/fonts"
 SCSS = "configs/dashboard/theme/caios/_fonts.scss"
-PATCH = "patches/ai4-dashboard/0004-self-hosted-fonts.patch"
-
-# Anything the browser would have to leave this cluster to fetch.
-THIRD_PARTY_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com")
-
 
 def test_icon_subset_covers_the_source(root):
     """Every icon the dashboard uses is in the font the dashboard ships.
@@ -86,26 +87,6 @@ def test_variable_font_weight_ranges_survived_generation(root):
             f"implausible font-weight {value!r} in {SCSS} — a variable range "
             "collapsed into one number is the usual cause"
         )
-
-
-def test_no_third_party_font_host_survives_the_patch(root):
-    """index.html must not reach Google for a font. The dashboard is meant to
-    render with no network beyond this cluster (R-28)."""
-    if not (root / "vendor" / "ai4-dashboard").is_dir():
-        pytest.skip("vendor/ai4-dashboard not cloned")
-
-    patch = (root / PATCH).read_text()
-    for host in THIRD_PARTY_HOSTS:
-        # Present only on removed lines. If it appears on an added line the
-        # patch is putting a request back.
-        added = [
-            ln for ln in patch.splitlines()
-            if ln.startswith("+") and host in ln
-        ]
-        assert not added, f"{PATCH} adds a reference to {host}: {added}"
-
-    removed = [ln for ln in patch.splitlines() if ln.startswith("-") and "googleapis" in ln]
-    assert removed, f"{PATCH} removes no googleapis reference — is it still doing its job?"
 
 
 def test_the_scss_is_generated_not_hand_edited(root):

@@ -97,27 +97,25 @@ cp "$CFG/theme/caios/variables.scss" \
    "$CFG/theme/caios/overrides.scss" \
    "$DST/src/theme/caios/"
 
-# 2b. self-hosted fonts
+# 2b. fonts — staged but NOT yet used
 #
-# Hard failure, not a warning-and-fallback like the artwork below. There is no
-# fallback here worth having: patch 0004 removes the Google <link> tags, so if
-# these files are absent the @font-face rules point at paths nginx answers with
-# index.html and HTTP 200 — and every icon in the dashboard renders as the word
-# it is named after. That is gotcha 20's failure shape and the exact fault this
-# whole stage exists to remove, so it must stop the build rather than ship.
+# Stage F1 is shelved (see the top of scripts/fetch-fonts.sh). index.html still
+# loads its typefaces from Google and overrides.scss does not import
+# _fonts.scss, so these files are staged and served but nothing references
+# them. Staging them keeps the image and the repository in step, and makes
+# finishing F1 a one-line change rather than a rebuild of this pipeline.
 #
-# The angular.json assets glob copies all of src/assets/ to /assets/, which is
-# where _fonts.scss points. No extra asset entry is needed.
-if ! compgen -G "$CFG/fonts/*.woff2" >/dev/null; then
-    echo "    ERROR: no fonts in $CFG/fonts/"
-    echo "           The dashboard no longer loads them from Google, so without"
-    echo "           these every icon renders as a word and nothing reports it."
-    echo "           Generate them with: bash scripts/fetch-fonts.sh"
-    exit 1
+# A warning rather than a hard failure, precisely because nothing depends on
+# them right now. When F1 is finished this must become an error again: with the
+# Google <link> tags gone, missing files here mean every icon renders as the
+# word it is named after, behind nginx's HTTP 200.
+if compgen -G "$CFG/fonts/*.woff2" >/dev/null; then
+    mkdir -p "$DST/src/assets/fonts"
+    cp "$CFG"/fonts/*.woff2 "$DST/src/assets/fonts/"
+    echo "    staged $(ls "$CFG"/fonts/*.woff2 | wc -l) font files (unused — F1 shelved)"
+else
+    echo "    no fonts in $CFG/fonts/ — fine while F1 is shelved"
 fi
-mkdir -p "$DST/src/assets/fonts"
-cp "$CFG"/fonts/*.woff2 "$DST/src/assets/fonts/"
-echo "    self-hosted $(ls "$CFG"/fonts/*.woff2 | wc -l) font files ($(du -sh "$CFG/fonts" | cut -f1)), $(wc -l < "$CFG/fonts/icons.txt") icons in the subset"
 
 # 3. images
 mkdir -p "$DST/src/assets/images/caios"

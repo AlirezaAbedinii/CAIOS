@@ -1,7 +1,31 @@
 #!/usr/bin/env bash
-# Download the web fonts CAIOS serves itself, and generate the @font-face rules.
+# Download the web fonts CAIOS would serve itself, and generate the @font-face
+# rules.
 #
 #   bash scripts/fetch-fonts.sh
+#
+# ** SHELVED — 2026-08-24. Nothing in the build imports the output. **
+#
+# Stage F1 deployed and was rolled back the same day. The stage removed BOTH
+# Material Symbols sets from index.html on the claim that only Rounded was
+# used. That claim was wrong, and wrong in the way that matters: app.config.ts
+# calls setDefaultFontSetClass('material-symbols-outlined'), and ten
+# <span class="material-symbols-outlined"> elements sit in the top navbar, the
+# catalog filters and the statistics cards. Deleting Google's <link> removed
+# not just the font but the CLASS DEFINITION Google ships with it — the one
+# that sets font-size, line-height and the liga feature — so those spans
+# rendered their ligature name as ordinary oversized text.
+#
+# The derivation below missed them twice over: it looked only at the Rounded
+# class, and its span pattern was single-line while the markup puts the
+# ligature on its own line. Both are fixed here. The test agreed with the bug
+# because it re-ran this same extraction, which is the flaw in checking a
+# derivation against itself.
+#
+# To finish F1 properly: subset BOTH variants, ship our own
+# .material-symbols-rounded / .material-symbols-outlined class definitions
+# rather than relying on Google's, and verify in a browser on every page
+# before deploying — not with a test that re-runs this script.
 #
 # Re-runnable, and the only thing that should ever write these files by hand is
 # this script. Writes three things, all committed:
@@ -103,7 +127,10 @@ echo "==> deriving the icon subset from $SRC"
     grep -rhoP "\[(?:icon|fontIcon|iconName|prefixIcon|cardIcon|suffixIcon)\]=\"'\K[a-z0-9_]+(?=')"        "$SRC" --include="*.html" || true
     grep -rhoP "(?:icon|iconName|fontIcon|prefixIcon|cardIcon)\s*[:=]\s*'\K[a-z0-9_]+(?=')"                "$SRC" --include="*.ts" || true
     grep -rhoP '(?:icon|iconName|fontIcon|prefixIcon|cardIcon)\s*[:=]\s*"\K[a-z0-9_]+(?=")'                "$SRC" --include="*.ts" || true
-    grep -rhoP 'class="[^"]*material-symbols-rounded[^"]*"[^>]*>\s*\K[a-z0-9_]+'         "$SRC" --include="*.html" || true
+    # BOTH variants, and multi-line: the markup routinely puts the ligature on
+    # its own line, which a single-line pattern never sees. This is the miss
+    # that shipped F1 broken.
+    grep -rhoPz 'class="[^"]*material-symbols-(?:rounded|outlined)[^"]*"[^>]*>\s*\K[a-z0-9_]+' "$SRC" --include="*.html" | tr '\0' '\n' || true
 } | sort -u > "$DERIVED"
 
 icon_count=$(wc -l < "$DERIVED")

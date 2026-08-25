@@ -17,30 +17,21 @@
 // Nothing in here is a patch. This is a CAIOS-owned file listed in a
 // CAIOS-owned config, so it carries no upstream drift.
 
-// The self-hosted @font-face rules. GENERATED — see scripts/fetch-fonts.sh.
-@import 'fonts';
+// NOTE: the self-hosted @font-face rules (_fonts.scss) are deliberately NOT
+// imported. Stage F1 is shelved — see the top of scripts/fetch-fonts.sh. The
+// dashboard still loads its typefaces from Google, and the files and tooling
+// stay in the tree ready for F1 to be finished properly.
 
 // Upstream sets Roboto here and Material's typography config asked for
 // Raleway, which was never loaded at all — so Material components rendered in
 // Arial while body copy rendered in Roboto. Two unrelated faces on every page,
 // by accident rather than by choice (R-27). One family now, on both.
-//
-// The stack behind IBM Plex Sans is a real fallback rather than a formality:
-// if the woff2 fails, this is what a researcher actually reads.
 html,
 body {
-    font-family:
-        'IBM Plex Sans',
-        -apple-system,
-        BlinkMacSystemFont,
-        'Segoe UI',
-        Arial,
-        sans-serif;
+    font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-// IBM Plex Mono is loaded but not yet applied to anything — that is Stage F2,
-// where machine values (deployment ids, GPU figures, accuracies, model names)
-// move onto it. A @font-face rule costs nothing until something on the page
-// uses the family: browsers do not fetch a face no rule selects. So declaring
-// it now is free, and F2 becomes a change to the theme rather than a change
-// to this pipeline.
+// Machine values get a monospace in F2 — see the tokens below. It is a SYSTEM
+// stack rather than a downloaded face: every platform ships a good monospace,
+// so the instrument-panel treatment for ids, timestamps and figures costs no
+// bytes and cannot fail to load.

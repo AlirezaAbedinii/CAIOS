@@ -15,23 +15,235 @@
 // belongs in variables.scss, where it stays overridable by the page.
 //
 // Nothing in here is a patch. This is a CAIOS-owned file listed in a
-// CAIOS-owned config, so it carries no upstream drift.
+// CAIOS-owned config, so it carries no upstream drift and reverting the whole
+// stage is `git checkout` on one file.
 
 // NOTE: the self-hosted @font-face rules (_fonts.scss) are deliberately NOT
 // imported. Stage F1 is shelved — see the top of scripts/fetch-fonts.sh. The
 // dashboard still loads its typefaces from Google, and the files and tooling
 // stay in the tree ready for F1 to be finished properly.
 
-// Upstream sets Roboto here and Material's typography config asked for
-// Raleway, which was never loaded at all — so Material components rendered in
-// Arial while body copy rendered in Roboto. Two unrelated faces on every page,
-// by accident rather than by choice (R-27). One family now, on both.
+// ═══════════════════════════════════════════════════════════ Stage F2 tokens
+//
+// The direction is "instrument panel": restrained, dense, calm. Typography and
+// hairlines carry the hierarchy rather than boxes, colour and drop shadows.
+// The reference is an imaging workstation, not a SaaS marketing page.
+//
+// What this stage deliberately does NOT do, because each would change layout
+// rather than appearance, and layout is where the bugs are:
+//   - no change to the base font size (14px) or to any component's dimensions
+//   - no change to card or grid structure
+//   - no change to the status palette (see the closing note)
+
+:root {
+    // A monospace for machine values. A SYSTEM stack, not a downloaded face:
+    // every platform ships a good monospace, so ids, timestamps and figures get
+    // the instrument treatment for zero bytes and with no way to fail to load.
+    // That matters more here than it normally would — F1 was rolled back
+    // precisely because a font that did not arrive took the interface with it.
+    --font-mono:
+        ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+        'Liberation Mono', monospace;
+
+    // Spacing as multiples of one unit, rather than values picked per component.
+    --space-2xs: 2px;
+    --space-xs: 4px;
+    --space-s: 8px;
+    --space-m: 12px;
+    --space-l: 16px;
+    --space-xl: 24px;
+    --space-2xl: 32px;
+
+    // One radius. Mixed corner radii is the most common tell of an interface
+    // nobody made decisions about; upstream mixes 4, 8 and full pills.
+    --radius: 4px;
+
+    // Hairlines instead of shadows. An instrument panel divides space with
+    // rules; a marketing page floats cards above it.
+    --hairline: 1px solid rgba(14, 79, 92, 0.14);
+    --hairline-strong: 1px solid rgba(14, 79, 92, 0.24);
+
+    // Long enough to read as deliberate, short enough not to feel sluggish.
+    --motion: 160ms cubic-bezier(0.2, 0, 0.2, 1);
+
+    // Text. Upstream leans on rgba(0,0,0,.87) and .54 — a flat grey that reads
+    // as unconsidered. These carry a slight bias toward the brand teal, which
+    // is what makes a neutral look chosen rather than inherited.
+    --ink: #0e2226;
+    --ink-muted: #5b7378;
+    --ink-faint: #8ba1a5;
+}
+
+// ═════════════════════════════════════════════════════════════─ typography
+//
+// R-27: Material's typography config asked for 'Raleway', which nothing ever
+// fetched, so every Material component fell through to Arial while body copy
+// rendered in Roboto — two unrelated faces on every page. Confirmed in a
+// browser: table cells computed to Raleway. _material.scss now names Roboto,
+// the face index.html actually loads; this backstops anything Material styles
+// outside that config.
 html,
 body {
     font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-// Machine values get a monospace in F2 — see the tokens below. It is a SYSTEM
-// stack rather than a downloaded face: every platform ships a good monospace,
-// so the instrument-panel treatment for ids, timestamps and figures costs no
-// bytes and cannot fail to load.
+.mat-mdc-table,
+.mat-mdc-card,
+.mat-mdc-form-field,
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button {
+    font-family: Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+// Headings tighten as they grow. Sizes are left exactly as they are — this is
+// a weight-and-tracking change, not a scale change, so nothing reflows.
+h1,
+h2,
+h3,
+.mat-headline-5,
+.mat-headline-6 {
+    letter-spacing: -0.015em;
+    color: var(--ink);
+}
+
+// ═══════════════════════════════════════════════════════════════════ tables
+//
+// The densest surface in the product and the one that most rewards the
+// treatment. Three changes, all cosmetic.
+
+// 1. Column headers were --primary teal at 14px/700, which reads as a row of
+//    links sitting above the data. A header is a label: quiet, small, spaced.
+.mat-mdc-header-cell {
+    color: var(--ink-muted) !important;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+// The sort arrow inherits the teal otherwise, putting the accent straight back.
+.mat-sort-header-arrow {
+    color: var(--ink-faint);
+}
+
+// 2. Machine values get the monospace. These are the columns a reader compares
+//    character by character — a container tag, a timestamp, a GPU count — and
+//    proportional digits do not line up between rows.
+//
+//    Set at 13px rather than the cell's 14px on purpose. A monospace sets wider
+//    than a proportional face at the same size, and creationTime is a FIXED
+//    200px column (measured in the browser) where "05:14:31 23-08-2026" would
+//    risk overflowing. containerName is the flexible column and has room either
+//    way.
+.mat-mdc-cell.mat-column-containerName,
+.mat-mdc-cell.mat-column-creationTime,
+.mat-mdc-cell.mat-column-gpus,
+.mat-mdc-cell.mat-column-size {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+
+// Everything else with digits still benefits from tabular figures, which cost
+// nothing and stop columns shimmering as values update.
+.mat-mdc-cell {
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+
+// 3. Depth. Upstream applies mat-elevation-z8 — a three-layer drop shadow meant
+//    for a floating dialog — to a table that is not floating. A rule does the
+//    same job without pretending the data hovers above the page.
+.mat-mdc-table.mat-elevation-z8,
+table.mat-elevation-z8 {
+    box-shadow: none !important;
+    border: var(--hairline);
+    border-radius: var(--radius);
+}
+
+.mat-mdc-row {
+    transition: background var(--motion);
+}
+
+.mat-mdc-row:hover {
+    background: rgba(18, 181, 203, 0.04);
+}
+
+// ═════════════════════════════════════════════════════════════════ surfaces
+//
+// Cards lose the floating shadow for the same reason the tables do.
+.mat-mdc-card {
+    box-shadow: none !important;
+    border: var(--hairline);
+    border-radius: var(--radius);
+    transition:
+        border-color var(--motion),
+        background var(--motion);
+}
+
+.mat-mdc-card:hover {
+    border: var(--hairline-strong);
+}
+
+// ══════════════════════════════════════════════════════ interactive states
+//
+// One radius on the things a user clicks, and a transition on all of them.
+// Instant state changes read as cheap; anything past ~300ms reads as slow.
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-outlined-button,
+.mat-mdc-unelevated-button {
+    border-radius: var(--radius);
+    letter-spacing: 0.01em;
+    transition:
+        background var(--motion),
+        color var(--motion),
+        border-color var(--motion);
+}
+
+// Keyboard focus must be visible. Researchers do navigate by keyboard, and an
+// invisible focus ring is an accessibility defect rather than a preference.
+// :focus-visible rather than :focus — the latter would ring the element on
+// every mouse click too, which is why people end up removing focus styling.
+a:focus-visible,
+button:focus-visible,
+.mat-mdc-button:focus-visible,
+.mat-mdc-list-item:focus-visible,
+.mat-mdc-tab:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 2px solid var(--accent-dark, #0b7e8f);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+}
+
+// ══════════════════════════════════════════════════════════════════ sidenav
+//
+// Radius and motion only. The active item keeps its filled ground: it is the
+// one place in the interface where "you are here" outranks calm.
+.sidenav-link,
+.sidenav-item {
+    transition:
+        background var(--motion),
+        color var(--motion);
+}
+
+.sidenav-link.active {
+    border-radius: var(--radius);
+}
+
+// ═══════════════════════════════════════════════════════ what is NOT here
+//
+// The status palette. --good-value, --neutral-value, --bad-value,
+// --success-green, --warning-orange and --neon-red are not decoration: they
+// are how a user tells a running deployment from a failed one. Recolouring
+// them would leave every page rendering correctly, every check passing, and a
+// failed deployment no longer looking failed — the highest-consequence change
+// available in a theme pass, and the only one that produces no error at all.
+// R-29.
+//
+// If they ever need to change it should be for measured contrast, never for
+// hue, and with a deployment table carrying a real error open in a browser.

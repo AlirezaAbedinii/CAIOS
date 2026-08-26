@@ -260,6 +260,73 @@ that is ever briefly full.
 Still present at upstream `master` as of 2026-08-20. Worth reporting: it affects
 any AI4OS deployment not using a publicly trusted certificate.
 
+### `ai4-papi/0012-oscar-optional.patch` — pinned to `e80a2b7`
+
+**Stage O0.** Makes serverless inference (OSCAR) an optional feature instead of
+an assumed one.
+
+`ai4papi/routers/v1/inference/oscar.py` reads its cluster configuration by
+direct index, in four places:
+
+```python
+papiconf.MAIN_CONF["oscar"]["clusters"][vo]["cluster_id"]
+```
+
+That is correct for AI4EOSC, which runs an OSCAR cluster for every VO it
+serves. We run none — `oscar:` is absent from `configs/papi/main.yaml`
+entirely (D-09) — so every one of those lookups raises `KeyError`, and FastAPI
+turns it into a bare **HTTP 500**.
+
+**This is reachable today.** The inference router is mounted unconditionally in
+`routers/v1/__init__.py`, and the dashboard hardcodes a sidenav entry — not a
+tenant-configurable one — at `/tasks/inference`:
+
+```js
+{name:"SIDENAV.INFERENCE",url:"/tasks/inference",isRestricted:true,...}
+```
+
+Confirmed present in the bundle the cluster serves. Measured against the live
+API on 2026-08-25, before this patch:
+
+```
+/v1/inference/oscar/cluster    HTTP 500
+/v1/inference/oscar/services   HTTP 500
+```
+
+So a logged-in researcher can reach a page from the menu whose only backend
+call is a server error, for a feature we deliberately do not offer.
+
+**What the patch does.** Two helpers, `oscar_cluster_conf()` and
+`require_oscar()`, and every direct index routed through the latter:
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /services` | 500 | `[]` — the page renders its empty state |
+| `GET /cluster`, `GET /services/{name}` | 500 | 501 with a sentence |
+| `POST` / `PUT` / `DELETE /services` | 500 | 501 with a sentence |
+
+`GET /conf` never touched the cluster config and is unchanged.
+
+The listing degrades to an empty list rather than a status code because that is
+the call the Inference page makes when it opens; a 501 there would still paint
+an error bar over a feature that is simply absent. The write paths get 501,
+because silently accepting a create would be worse. D-39 — *"waiting" and
+"failed" are different words* — applied to a third case.
+
+**Why all four call sites and not just the client path.** `create_service`
+calls `make_service_definition(user_conf, vo)` **before** it builds a client,
+and that function reads the cluster id directly. Guarding only
+`get_client_from_auth` left `POST /services` raising `KeyError` exactly as
+before — with every unit test green. `tests/test_oscar_optional.py` found it,
+and now covers it.
+
+**Unset behaves as upstream.** Once `oscar.clusters.<vo>` exists in
+`main.yaml` (Stage O3), `require_oscar` returns it and every endpoint behaves
+exactly as upstream does. The patch adds a guard; it changes no behaviour on a
+configured cluster.
+
+Full plan: `docs/oscar-plan.md`.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

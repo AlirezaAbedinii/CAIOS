@@ -581,6 +581,124 @@ into agreeing with a bug.
 
 ---
 
+## Settled on 2026-08-25 — Stage O0
+
+> **Numbering note.** D-48 and D-49 were settled on the `f1-self-hosted-fonts`
+> branch (Stage F2) and are not on `master` yet. This entry takes D-50
+> deliberately, so the numbers do not collide when that branch merges.
+
+**D-50 — A feature we do not run must fail as unconfigured, not as broken.**
+PAPI's OSCAR router is mounted unconditionally and the dashboard hardcodes a
+sidenav link to `/tasks/inference`, so both are reachable on a cluster that
+runs no OSCAR. `main.yaml` has no `oscar` block (D-09), the code indexes it
+directly, and a logged-in researcher got HTTP 500 from a menu item.
+
+Patch `0012` splits the two cases the way D-39 requires. The listing returns
+`[]`, because that is the call the page makes when it opens and an empty table
+is the truthful rendering of "this cluster offers no serverless inference". The
+write paths return 501 with a sentence naming the feature and the VO, because
+silently accepting a create would be worse than refusing one.
+
+Third application of the same principle: `ACCOUNTING_PTH` unset (patch `0004`),
+a queued deployment reported as `error` (patch `0011`), and now this. The
+general form: **an absent optional feature is a state, not a failure, and the
+message has to say which.**
+
+The implementation lesson is separate and worth as much. The first version
+guarded `get_client_from_auth` — the obvious place, the only place the config
+is read on the client path — and passed every unit test while leaving
+`POST /services` raising `KeyError` exactly as before, because
+`create_service` builds the service definition *first*. What caught it was a
+test asserting the upstream indexing expression was **gone**, rather than one
+asserting the new guard was **present**. Asserting an absence catches the paths
+you did not think of; asserting a presence only confirms the one you did.
+
+---
+
+## Settled on 2026-08-26 — Stage O2
+
+**D-54 — Identity for a third-party component is granted by a group claim, not
+by reusing our role names.**
+OSCAR chooses which JWT claim to read from a substring of the issuer URL, and
+for any realm not called `egi` or `ai4eosc` it reads `group_membership`. So a
+`oscar-users` group and a Group Membership mapper were added, rather than
+bending PAPI's `access:<vo>:<level>` roles into a shape a second consumer also
+understands.
+
+The two systems now read different claims from the same token and neither
+constrains the other. That is the point: PAPI's role grammar is load-bearing
+for deployments and must not acquire a second meaning. The change is additive —
+existing claims are untouched — and a full realm export was taken first.
+
+Recorded also because it is surprising: **the realm's *name* is load-bearing.**
+Had ours been `ai4eosc`, OSCAR would have accepted our realm roles unmodified.
+
+**D-55 — On a single-node OSCAR, storage is ReadWriteOnce.**
+The chart asks for `ReadWriteMany` because OSCAR assumes several nodes. K3s'
+`local-path` provisioner supports only RWO, and on one node the two are
+equivalent. The PVC is created RWO deliberately.
+
+The constraint this creates is real and should be checked before anyone adds a
+second OSCAR node: RWX would then be required, and `local-path` cannot provide
+it. See R-38.
+
+---
+
+## Settled on 2026-08-26 — Knative
+
+**D-56 — OSCAR runs a serverless backend after all.** *Supersedes D-51.*
+D-51 said asynchronous-only "until synchronous is asked for". It was asked for,
+on the correct grounds: the bucket round-trip is a poor experience. Upload a
+file to one web app, wait, come back, download from a folder — for a single
+image that is absurd, and it is not an integration point anything can build on.
+
+With Knative Serving plus Kourier on the OSCAR node, the `/run/<service>`
+endpoint the dashboard **already advertises** starts working: POST an image,
+get the detections back in the same response, measured at 5.3-5.9 seconds. No
+dashboard change was needed — the *Synchronous calls* panel had been showing a
+correct endpoint and token for a feature that was not installed.
+
+The asynchronous path stays and is still the right tool for batches. What
+changed is which one a user meets first.
+
+Two things this cost, both worth recording:
+
+**Knative rejects OSCAR's pods until PVC support is switched on.** OSCAR mounts
+its FaaS-supervisor volume into every service pod, and Knative disables
+persistent volumes by default. The webhook refuses the Service with
+`Persistent volume claim support is disabled`. Two feature flags in
+`config-features` fix it — `kubernetes.podspec-persistent-volume-claim` and
+`...-persistent-volume-write`.
+
+**PAPI cannot report OSCAR's errors.** When OSCAR refused, PAPI answered a bare
+`Internal Server Error` because its own `raise_for_status` decorator does
+`json.dumps` on a `requests.HTTPError`, which is not serialisable. The real
+reason never reaches the user, and would not reach a dashboard either. Upstream
+bug; worth a patch and a report.
+
+**D-57 — Warm and cold are read from Knative, not inferred.**
+A serverless service that scales to zero has a state a user can feel — the
+first request after an idle period pays a start-up cost — and nothing in the
+dashboard says which state it is in.
+
+The authoritative signal is the Knative Revision's `status.actualReplicas`:
+present and non-zero means a container is up (**warm**), absent means scaled to
+zero (**cold**). Measured on this cluster: Knative holds the container about
+**30 seconds** after the last request.
+
+Deliberately not inferred from anything else. "Has it been called recently" and
+"is its image cached on the node" are both proxies that are right most of the
+time, and the failure mode of a proxy here is a badge that says warm while the
+user waits. The platform knows the answer; ask it.
+
+Carrying this to the dashboard needs a path that does not exist yet — OSCAR's
+service JSON has no live status field, so PAPI would have to read the Knative
+API directly, which means giving PAPI a read-only credential on the OSCAR
+cluster. That is the cost of the badge, and it is worth stating before anyone
+starts.
+
+---
+
 ## Log
 
 *Append new decisions below with date and one line of reasoning.*
@@ -655,3 +773,21 @@ The reusable part is D-46: our theme had been loading *before* upstream's
 stylesheet all along, which is why it had never been able to override anything.
 One line of ordering in a config we already own turns the rest of the visual
 work into zero patches.
+
+**2026-08-25** — Stage O0: serverless inference degrades instead of erroring.
+Patch `0012` and `tests/test_oscar_optional.py`. Recorded D-50. Found on the
+way: the Inference menu entry is hardcoded in the dashboard sidenav, so the
+500 was reachable from the menu by any logged-in user and had been since
+Stage 3. Full plan in `docs/oscar-plan.md`.
+
+**2026-08-26** — Stage O2 gate passed: OSCAR accepts a CAIOS Keycloak token.
+Recorded D-54 and D-55. The headline finding is that three of the four
+failures were one fault — a helm release left in `failed` state, whose missing
+PVC surfaced only on the OIDC path, never on basic auth.
+
+**2026-08-26, later** — Knative Serving and Kourier installed on the OSCAR
+node; `/run/<service>` works and returns detections in 5.3-5.9 s. Recorded
+D-56 (supersedes D-51) and D-57. Two findings worth more than the feature: the
+dashboard had been advertising a working-looking endpoint for an uninstalled
+backend, and PAPI cannot serialise an OSCAR error so every OSCAR failure
+reaches the user as a bare 500.

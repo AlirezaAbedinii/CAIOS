@@ -22,6 +22,14 @@ secrets/
 vault-init.json
 ansible-vault-pass*
 
+# Timestamped backups written by the ops scripts before they rewrite a file
+# in place (scripts/*.sh save `<file>.bak.<stage>-<date>`). Regenerable, and
+# `configs/env/caios.env` is one of the files they copy — so the backup of a
+# gitignored secrets file was NOT itself gitignored, and sat one `git add -A`
+# away from being published. The rule matches the suffix rather than the
+# directory, because the scripts write these next to whatever they edit.
+*.bak.*
+
 # Certificates produced by scripts/make-*-cert*.sh. Regenerable; the CA that
 # signs them lives outside the repo in ~/caios-ca.*
 certs/

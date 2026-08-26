@@ -242,8 +242,15 @@ services:
       # Python's requests uses certifi, not the system store, so point it at
       # the bundle the command above refreshes.
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      # Stage O3. Consumed by main.yaml's oscar block through the envsubst
+      # the image runs at start. Unset would leave the placeholder literal.
+      CAIOS_OSCAR_ENDPOINT: ${CAIOS_OSCAR_ENDPOINT}
+      # Read-only, for the warm/cold badge only. Unset disables it.
+      OSCAR_K8S_API: ${OSCAR_K8S_API:-}
+      OSCAR_K8S_TOKEN_PATH: ${OSCAR_K8S_TOKEN_PATH:-}
       CAIOS_CTRL_IP: ${CAIOS_CTRL_IP}
       CAIOS_EDGE_IP: ${CAIOS_EDGE_IP}
+      CAIOS_PUBLIC_IP: ${CAIOS_PUBLIC_IP}
     volumes:
       # Mounted over main_TMP.yaml, not main.yaml. The image copies main.yaml to
       # main_tmp.yaml at build time and regenerates main.yaml from it through
@@ -286,6 +293,7 @@ services:
       # fails with SSL: CERTIFICATE_VERIFY_FAILED — surfacing as
       # "Fail to fetch data from the url" on endpoints that have nothing
       # obviously to do with certificates.
+      - ./secrets/oscar-k8s.token:/run/secrets/oscar-k8s.token:ro
       - ./certs/caios-ca.pem:/usr/local/share/ca-certificates/caios-ca.crt:ro
       # Nomad's own certificates, written by Ansible on this node.
       - /etc/nomad.d/certs:/etc/nomad.d/certs:ro

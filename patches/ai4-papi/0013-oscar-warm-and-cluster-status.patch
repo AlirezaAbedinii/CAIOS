@@ -1,0 +1,148 @@
+diff -ruN a/ai4papi/routers/v1/inference/oscar.py b/ai4papi/routers/v1/inference/oscar.py
+--- a/ai4papi/routers/v1/inference/oscar.py	2026-08-26 13:24:31
++++ b/ai4papi/routers/v1/inference/oscar.py	2026-08-26 13:24:34
+@@ -6,12 +6,14 @@
+ from datetime import datetime
+ from functools import wraps
+ import json
++import os
+ import uuid
+ import yaml
+ 
+ from fastapi import APIRouter, Depends, HTTPException
+ from fastapi.security import HTTPBearer
+ from oscar_python.client import Client
++from cachetools import cached, TTLCache
+ import requests
+ 
+ from ai4papi import auth, utils
+@@ -104,6 +106,68 @@
+     return conf
+ 
+ 
++# [CAIOS] Warm/cold, read from Knative rather than guessed at (D-57).
++#
++# A serverless service that scales to zero has a state the user can feel: the
++# first request after an idle period pays a start-up cost. Nothing in the
++# dashboard said which state a service was in.
++#
++# The authoritative signal is a Knative Revision's status.actualReplicas --
++# present and non-zero means a container is up. Deliberately not inferred from
++# "was it called recently" or "is the image cached", because a proxy's failure
++# mode here is a badge reading WARM while the user waits.
++#
++# Unset OSCAR_K8S_TOKEN disables this entirely and every service reports
++# warm=None, which the dashboard renders as "unknown" rather than as cold. An
++# absent signal is not a cold service (D-39).
++OSCAR_K8S_API = os.getenv("OSCAR_K8S_API", "")
++OSCAR_K8S_TOKEN_PATH = os.getenv("OSCAR_K8S_TOKEN_PATH", "")
++
++
++@cached(cache=TTLCache(maxsize=16, ttl=10))
++def _knative_replicas():
++    """{revision name: actualReplicas} for every Knative revision, or None.
++
++    Cached for ten seconds: the Inference page asks once per service and the
++    answer is the same for all of them, so this is one call per page load
++    rather than one per row. Ten seconds is well under Knative's ~30s idle
++    window, so the badge cannot be more than one window stale.
++    """
++    if not (OSCAR_K8S_API and OSCAR_K8S_TOKEN_PATH):
++        return None
++    try:
++        with open(OSCAR_K8S_TOKEN_PATH) as f:
++            token = f.read().strip()
++        r = requests.get(
++            f"{OSCAR_K8S_API}/apis/serving.knative.dev/v1/revisions",
++            headers={"Authorization": f"Bearer {token}"},
++            verify=False,  # the OSCAR cluster's API server uses its own CA
++            timeout=5,
++        )
++        r.raise_for_status()
++        return {
++            i["metadata"]["name"]: (i.get("status", {}).get("actualReplicas") or 0)
++            for i in r.json().get("items", [])
++        }
++    except Exception:
++        # Never let a status badge break the listing it decorates.
++        return None
++
++
++def _warm_state(service_name, replicas):
++    """warm / cold / None for one service.
++
++    Knative names revisions `<service>-00001`, so a service is warm if any of
++    its revisions has a replica.
++    """
++    if replicas is None:
++        return None, None
++    owned = [n for r, n in replicas.items() if r.startswith(service_name)]
++    if not owned:
++        return None, None
++    return (max(owned) > 0), max(owned)
++
++
+ def get_client_from_auth(token, vo):
+     """
+     Retrieve authenticated user info and init OSCAR client.
+@@ -152,6 +216,36 @@
+     return json.loads(r.text)
+ 
+ 
++@router.get("/cluster/status")
++def get_cluster_status(
++    vo: str,
++    authorization=Depends(security),
++):
++    """
++    [CAIOS] Capacity and health of the OSCAR cluster.
++
++    Upstream offers /cluster, which returns version strings. The dashboard also
++    wants to show what the cluster IS -- nodes, cores, memory, GPUs -- and the
++    Statistics page cannot help: it reads Nomad, and the OSCAR node is
++    deliberately outside the Nomad cluster so the two orchestrators cannot
++    destabilise each other.
++
++    OSCAR reports all of it at /system/status, so this proxies that rather than
++    inventing a second source of truth.
++    """
++    auth_info = auth.get_user_info(authorization.credentials)
++    auth.check_authorization(auth_info, vo)
++    cluster = require_oscar(vo)
++
++    r = requests.get(
++        f"{cluster['endpoint']}/system/status",
++        headers={"Authorization": f"Bearer {authorization.credentials}"},
++        timeout=10,
++    )
++    r.raise_for_status()
++    return r.json()
++
++
+ @router.get("/conf")
+ def get_service_conf(
+     item_name: str,
+@@ -281,6 +375,11 @@
+ 
+         services.append(s)
+ 
++    # [CAIOS] Annotate with warm/cold. One Knative call for the whole page.
++    replicas = _knative_replicas()
++    for s in services:
++        s["warm"], s["replicas"] = _warm_state(s.get("name", ""), replicas)
++
+     # Sort services by creation time, recent to old
+     dates = [s["environment"]["variables"]["PAPI_CREATED"] for s in services]
+     idxs = sorted(range(len(dates)), key=dates.__getitem__)  # argsort
+@@ -315,6 +414,11 @@
+     # Retrieve cluster config for MinIO info
+     client_conf = client.get_cluster_config().json()
+     service["storage_providers"]["minio"]["default"] = client_conf["minio_provider"]
++
++    # [CAIOS] Same warm/cold annotation as the listing.
++    service["warm"], service["replicas"] = _warm_state(
++        service.get("name", ""), _knative_replicas()
++    )
+ 
+     return service
+ 

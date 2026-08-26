@@ -10,13 +10,13 @@
 
 self:  # info about the API endpoint
 
-  domain: https://api.${CAIOS_CTRL_IP}.sslip.io
+  domain: https://api.${CAIOS_PUBLIC_IP}.sslip.io
 
 auth:
 
   CORS_origins:  # allows requests to the API from these domains
 
-    - https://dashboard.${CAIOS_CTRL_IP}.sslip.io
+    - https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io
     - http://localhost:8080          # local dashboard development
     - ${DASHBOARD_URL}               # expanded by PAPI from the environment
 
@@ -41,10 +41,21 @@ lb:  # load balancer, Traefik
     # Jupyter IDE lands at ide-a1b2c3.pacs-deployments.<EDGE_IP>.sslip.io
     #
     # Note this is caios_edge's IP (Traefik), not caios_server's.
-    vo.caios.ca: deployments.${CAIOS_EDGE_IP}.sslip.io
+    vo.caios.ca: deployments.${CAIOS_PUBLIC_IP}.sslip.io
 
-# oscar: removed. We are not running OSCAR serverless inference (D-09).
-# PAPI tolerates its absence; the dashboard hides the corresponding features.
+oscar:
+  # Stage O3. Was absent until 2026-08-26 (D-09 cut OSCAR from MVP), which made
+  # PAPI's inference router raise KeyError -> HTTP 500 on endpoints the
+  # dashboard's hardcoded /tasks/inference link can reach. Patch 0012 makes the
+  # absence degrade instead of erroring; this block makes it present.
+  #
+  # cluster_id must match what OSCAR reports as `name` in /system/config.
+  # endpoint is reached from inside the PAPI container over the private subnet,
+  # verified against the CAIOS CA that compose already mounts.
+  clusters:
+    vo.caios.ca:
+      endpoint: ${CAIOS_OSCAR_ENDPOINT}
+      cluster_id: oscar
 
 mlflow:
   # Not deployed for MVP. Left pointing at nothing rather than at AI4EOSC's

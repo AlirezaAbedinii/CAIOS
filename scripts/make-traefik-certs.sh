@@ -45,7 +45,10 @@ set -a; source "$ENV_FILE"; set +a
 # configs/papi/main.yaml. A deployment resolves as:
 #   <service>-<uuid>.<meta.domain>-<lb.domain>
 # so the wildcard covers one label, not a nested subdomain.
-BASE="pacs-deployments.${CAIOS_EDGE_IP}.sslip.io"
+# Prefer the floating/public IP when set so deployment links and the
+# Traefik wildcard match what nginx exposes (docs/public-access.md Step 3/4).
+DEPLOY_IP="${CAIOS_PUBLIC_IP:-$CAIOS_EDGE_IP}"
+BASE="pacs-deployments.${DEPLOY_IP}.sslip.io"
 OUT="${TRAEFIK_CERT_OUT:-$HOME}"
 NAME="caios-deployments"
 CA_KEY="$OUT/caios-ca.key"

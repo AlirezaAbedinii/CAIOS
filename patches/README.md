@@ -327,6 +327,41 @@ configured cluster.
 
 Full plan: `docs/oscar-plan.md`.
 
+### `ai4-papi/0013-oscar-warm-and-cluster-status.patch` — pinned to `e80a2b7`
+
+**Stage O3.** Two additions on top of `0012`, both about a serverless service
+having a state the user can feel and no way to see.
+
+**Warm or cold.** A service that scales to zero pays a start-up cost on the
+first request after an idle window. The authoritative signal is a Knative
+Revision's `status.actualReplicas`: present and non-zero means a container is
+up. `_knative_replicas()` reads the Kubernetes API on the OSCAR node directly —
+OSCAR itself does not expose this — and annotates every row of
+`GET /services` and the detail response with `warm` and `replicas`.
+
+Deliberately *not* inferred from "was it called recently" or "is the image
+cached". The failure mode of a proxy signal here is a badge reading **WARM**
+while the user waits three minutes, which is worse than no badge at all.
+
+One call per page load, not one per row: `TTLCache(ttl=10)` over the whole
+revision list. Ten seconds is well inside Knative's ~30 s idle window, so the
+badge cannot be more than one window stale.
+
+**`OSCAR_K8S_API` and `OSCAR_K8S_TOKEN_PATH` unset disables it**, and every
+service then reports `warm: null` — which is *unknown*, not *cold*. D-39 again:
+an absent signal is not a negative one. The lookup is also wrapped so that no
+failure of a status badge can break the listing it decorates.
+
+**`GET /cluster/status`.** Upstream's `/cluster` returns version strings. The
+dashboard also wants to show what the cluster *is* — nodes, cores, memory —
+and the Statistics page cannot answer that, because it reads Nomad and the
+OSCAR node sits deliberately outside the Nomad cluster so the two schedulers
+cannot destabilise each other. OSCAR already reports all of it at
+`/system/status`, so this proxies that rather than inventing a second source
+of truth.
+
+D-57. Full plan: `docs/oscar-plan.md`.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

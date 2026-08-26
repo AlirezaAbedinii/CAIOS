@@ -8,7 +8,7 @@ How the Compute Canada nodes are used, and why. Read this with
 
 ## The short version
 
-Six nodes, all with GPUs, all on Arbutus, all on the private subnet
+Seven nodes on Arbutus, all on the private subnet
 `192.168.104.0/24`. Three of them do the actual AI work and become the three
 "hospital sites" in the federated learning demo. One runs the cluster brain plus
 every web service. One is the front door.
@@ -50,6 +50,7 @@ every web service. One is the front door.
           +-------------+  +-------------+  +-------------+
 
           192.168.104.188 — caios_llm, the LLM host (joined). See below.
+          192.168.104.69  — caios_oscar, serverless inference. Not in Nomad.
 ```
 
 ---
@@ -173,18 +174,68 @@ prevent it. See `scripts/deploy-fl-demo.sh`.
 It is **not** the CVAT host: CVAT needs ~72 GB of RAM in one place and this node
 has 34, so D-16 stands unchanged.
 
+
+### `192.168.104.69` — `caios_oscar`, serverless inference  *(added 2026-08-25)*
+
+Hostname `ai4eosc-7`. Provided to host OSCAR, and **deliberately outside the
+Nomad cluster**. Measured, not assumed:
+
+| | ai4eosc-7 | every other CAIOS node |
+|---|---|---|
+| vCPU | **16** | 3 |
+| RAM | **58 GB** | 34 GB |
+| `/mnt` | **560 GB** ext4, empty | 125 GB |
+| root | 20 GB | 20 GB |
+| GPU | **none** | 1× `NVIDIA H100L-1-12C` |
+
+By a wide margin the largest machine in the project. Every sizing constraint
+recorded in this repository — the 2-CPU cap on modules, the mail sidecar
+patched out to reclaim a core, CPU-only FL clients — comes from 3-vCPU nodes
+and does not apply here.
+
+**It runs K3s, not Nomad, and must never run both.** Both manage containerd
+and cgroups; a node running each half-works in ways that are miserable to
+diagnose. It is therefore absent from `ansible/inventory/hosts.ini` entirely,
+and `verify-cluster.sh` will never see it.
+
+**Its `/mnt` needs no reformat.** Unlike the three site nodes, nothing here
+wants XFS project quotas and `ai4-nomad_tests` never runs against it, so the
+volume stays ext4 exactly as provisioned. Nothing about adding this node
+touches the running platform.
+
+**The 20 GB root disk is the operational constraint.** K3s defaults every path
+to `/var/lib/rancher/k3s`; left alone it fills `/`. Everything goes to `/mnt`
+via `--data-dir`, verified by measurement — the same trap Stage 3 hit when
+Docker's `data-root` was set and containerd's image store went to the system
+disk anyway.
+
+**No GPU.** OSCAR services run DEEPaaS module images, which infer on CPU. Not
+a limitation for inference; it does mean GPU-backed serverless would need a
+different node.
+
+**Not the CVAT host either.** 58 GB against the ~71 GB CVAT wants on one
+machine. Closer than anything before it, but still short, so D-16 stands.
+
+Full plan: `docs/oscar-plan.md`.
+
 ---
 
 ## Addresses
 
-Every hostname derives from two IPs, both set in `configs/env/caios.env`.
+Every hostname derives from `configs/env/caios.env`.
+
+**Changed 2026-08-25.** A floating IP (`134.87.8.230`) was attached to
+`caios_server`, so the four control-plane hostnames now derive from
+`CAIOS_PUBLIC_IP` rather than from the private `CAIOS_CTRL_IP`. The private
+addresses are unchanged and still wire PAPI to Nomad over loopback.
+See `docs/public-access.md`.
 
 | Hostname | Resolves to | Serves |
 |---|---|---|
-| `dashboard.192.168.104.181.sslip.io` | caios_server | The web UI |
-| `api.192.168.104.181.sslip.io` | caios_server | PAPI |
-| `auth.192.168.104.181.sslip.io` | caios_server | Keycloak |
-| `vault.192.168.104.181.sslip.io` | caios_server | Vault (admin only) |
+| `dashboard.134.87.8.230.sslip.io` | caios_server | The web UI |
+| `api.134.87.8.230.sslip.io` | caios_server | PAPI |
+| `auth.134.87.8.230.sslip.io` | caios_server | Keycloak |
+| `vault.134.87.8.230.sslip.io` | caios_server | Vault (admin only) |
 | `*.pacs-deployments.192.168.104.105.sslip.io` | caios_edge | **Every deployment** |
 
 ### Why hostnames at all, when everything is private

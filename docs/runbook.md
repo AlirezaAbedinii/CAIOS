@@ -10,14 +10,17 @@ not been run against real hardware. Correct them the moment reality disagrees.
 
 ## Addresses
 
-Everything derives from the two IPs in `configs/env/caios.env`.
+Everything derives from `configs/env/caios.env`. Since 2026-08-25 the
+public hostnames derive from **`CAIOS_PUBLIC_IP`** (the floating IP), while
+`CAIOS_CTRL_IP` and `CAIOS_EDGE_IP` stay private and wire PAPI to Nomad.
+If these addresses look wrong, read that file rather than trusting this table.
 
 | What | Where |
 |---|---|
-| Dashboard | `https://dashboard.192.168.104.181.sslip.io` |
-| API (PAPI) | `https://api.192.168.104.181.sslip.io` — Swagger at `/docs` |
-| Login (Keycloak) | `https://auth.192.168.104.181.sslip.io` |
-| Vault | `https://vault.192.168.104.181.sslip.io` |
+| Dashboard | `https://dashboard.134.87.8.230.sslip.io` |
+| API (PAPI) | `https://api.134.87.8.230.sslip.io` — Swagger at `/docs` |
+| Login (Keycloak) | `https://auth.134.87.8.230.sslip.io` |
+| Vault | `https://vault.134.87.8.230.sslip.io` |
 | Deployments | `https://<service>-<uuid>.pacs-deployments.192.168.104.105.sslip.io` |
 | Nomad UI | `https://192.168.104.181:4646` (subnet only) |
 
@@ -71,7 +74,7 @@ perfect-looking UI in which nothing works.
 
 ```bash
 docker compose logs --tail=100 papi
-curl -sk https://api.192.168.104.181.sslip.io/v1/catalog/modules | head -c 300
+curl -sk https://api.134.87.8.230.sslip.io/v1/catalog/modules | head -c 300
 ```
 
 If PAPI is not running at all, check `IS_PROD` first. Its Dockerfile sets
@@ -365,7 +368,7 @@ In each site workspace's terminal, with that site's name and the server's
 hostname (the `fedserver-...` address from `--status`):
 
 ```bash
-curl -k -sSL https://dashboard.192.168.104.181.sslip.io/fl/bootstrap.sh | bash -s site_a fedserver-<uuid>.pacs-deployments.192.168.104.105.sslip.io
+curl -k -sSL https://dashboard.134.87.8.230.sslip.io/fl/bootstrap.sh | bash -s site_a <the fedserver-... host from --status>
 cd ~/caios-fl && ./run.sh
 ```
 
@@ -418,6 +421,28 @@ Caddy predates the `/fl/` route. Re-run the build, then
 over loopback and checks the result. One minute. It exercises everything except
 the network path, so it is the right place to test any change to `client.py` or
 `model.py` before rebuilding bundles.
+
+---
+
+### Deployment hostnames changed on 2026-08-25, but only for new deployments
+
+A Nomad job bakes its Traefik router rule at submit time, so **existing
+deployments keep the hostname they were created with** and newly created ones
+get the current `lb.domain`:
+
+| | hostname base |
+|---|---|
+| Deployments created before 2026-08-25 | `pacs-deployments.192.168.104.105.sslip.io` |
+| Deployments created after | `pacs-deployments.134.87.8.230.sslip.io` |
+
+Both are correct; nothing rewrites the old ones. **Always take an endpoint from
+`deploy-fl-demo.sh --status` or the dashboard rather than typing a base domain
+from memory** — that is the one habit that survives the change.
+
+Note also that the new public base does not route yet: it resolves to the
+floating IP on `caios_server`, and Caddy has no wildcard site block for it.
+Until that is added, a *newly created* deployment is reachable only from inside
+the subnet, at the edge node's address. See `docs/public-access.md`.
 
 ---
 

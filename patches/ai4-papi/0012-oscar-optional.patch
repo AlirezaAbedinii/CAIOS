@@ -1,0 +1,102 @@
+diff -ruN a/ai4papi/routers/v1/inference/oscar.py b/ai4papi/routers/v1/inference/oscar.py
+--- a/ai4papi/routers/v1/inference/oscar.py	2026-08-25 21:01:50
++++ b/ai4papi/routers/v1/inference/oscar.py	2026-08-25 21:01:50
+@@ -63,13 +63,55 @@
+     return wrapper
+ 
+ 
++def oscar_cluster_conf(vo):
++    """
++    [CAIOS] Return the OSCAR cluster configured for this VO, or None.
++
++    Upstream indexes `MAIN_CONF["oscar"]["clusters"][vo]` directly, because
++    AI4EOSC runs an OSCAR cluster for every VO it serves. We run none, so the
++    `oscar` block is absent from main.yaml entirely (D-09) and that lookup
++    raises KeyError, which FastAPI turns into a bare HTTP 500.
++    """
++    return papiconf.MAIN_CONF.get("oscar", {}).get("clusters", {}).get(vo)
++
++
++def require_oscar(vo):
++    """
++    [CAIOS] Fail with an explanation instead of a bare 500.
++
++    This router is mounted unconditionally in routers/v1/__init__.py, and the
++    dashboard hardcodes a sidenav link to /tasks/inference, so every endpoint
++    here is reachable on a cluster that has no OSCAR at all.
++
++    D-39: "waiting" and "failed" are different words. A feature this cluster
++    does not offer is 501 Not Implemented with a sentence saying so, not a 500
++    that reads like something broke.
++
++    Every read of the cluster config goes through here, rather than only the
++    ones on the client path. `create_service` calls `make_service_definition`
++    BEFORE it builds a client, so guarding only `get_client_from_auth` would
++    leave that endpoint raising KeyError exactly as before.
++    """
++    conf = oscar_cluster_conf(vo)
++    if not conf:
++        raise HTTPException(
++            status_code=501,
++            detail=(
++                "Serverless inference (OSCAR) is not configured on this cluster"
++                f" for VO '{vo}'. See docs/oscar-plan.md."
++            ),
++        )
++    return conf
++
++
+ def get_client_from_auth(token, vo):
+     """
+     Retrieve authenticated user info and init OSCAR client.
+     """
++    cluster = require_oscar(vo)
+     client_options = {
+-        "cluster_id": papiconf.MAIN_CONF["oscar"]["clusters"][vo]["cluster_id"],
+-        "endpoint": papiconf.MAIN_CONF["oscar"]["clusters"][vo]["endpoint"],
++        "cluster_id": cluster["cluster_id"],
++        "endpoint": cluster["endpoint"],
+         "oidc_token": token,
+         "ssl": "true",
+     }
+@@ -200,6 +242,13 @@
+     auth_info = auth.get_user_info(authorization.credentials)
+     auth.check_authorization(auth_info, vo)
+ 
++    # [CAIOS] No OSCAR cluster for this VO means "nothing deployed", not an
++    # error. The dashboard's Inference page calls exactly this endpoint when it
++    # opens, so raising here paints a red error bar over a feature the cluster
++    # simply does not offer. An empty list renders the normal empty state.
++    if not oscar_cluster_conf(vo):
++        return []
++
+     # Get services list
+     client = get_client_from_auth(authorization.credentials, vo)
+     r = client.list_services()
+@@ -223,7 +272,7 @@
+             continue
+ 
+         # Add service endpoint for sync calls
+-        cluster_endpoint = papiconf.MAIN_CONF["oscar"]["clusters"][vo]["endpoint"]
++        cluster_endpoint = require_oscar(vo)["endpoint"]
+         s["endpoint"] = f"{cluster_endpoint}/run/{s['name']}"
+ 
+         # Info for async calls
+@@ -260,7 +309,7 @@
+     service = json.loads(r.text)
+ 
+     # Add service endpoint
+-    cluster_endpoint = papiconf.MAIN_CONF["oscar"]["clusters"][vo]["endpoint"]
++    cluster_endpoint = require_oscar(vo)["endpoint"]
+     service["endpoint"] = f"{cluster_endpoint}/run/{service_name}"
+ 
+     # Retrieve cluster config for MinIO info
+@@ -280,7 +329,7 @@
+     service_template = deepcopy(papiconf.OSCAR["service"])  # init from template
+     service_str = service_template.safe_substitute(
+         {
+-            "CLUSTER_ID": papiconf.MAIN_CONF["oscar"]["clusters"][vo]["cluster_id"],
++            "CLUSTER_ID": require_oscar(vo)["cluster_id"],
+             "NAME": conf["name"],
+             "IMAGE": conf["general"]["docker_image"],
+             "CPU": conf["hardware"]["cpu_num"],

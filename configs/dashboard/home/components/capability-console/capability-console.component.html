@@ -1,0 +1,83 @@
+<!--
+  The console. A tablist, a panel and one schematic that every panel shares.
+
+  role="tablist"/"tab"/"tabpanel" rather than a bare set of buttons: this is a
+  tabbed disclosure and a screen reader should be told so. The panel is a live
+  region only in the sense that it changes on a timer, which is why the timer
+  stops the moment anyone touches it.
+-->
+<div
+    class="console"
+    [class.is-paused]="paused"
+    [class.is-manual]="manual"
+    (mouseenter)="engage(true)"
+    (mouseleave)="engage(false)"
+    (focusin)="engage(true)"
+    (focusout)="engage(false)"
+>
+    <div
+        class="console__tabs"
+        role="tablist"
+        [attr.aria-label]="'HOME.CAPABILITY.TABLIST' | translate"
+        (keydown)="onKeydown($event)"
+    >
+        @for (capability of capabilities; track capability.id; let i = $index) {
+            <button
+                type="button"
+                class="tab"
+                role="tab"
+                [class.is-active]="i === activeIndex()"
+                [attr.aria-selected]="i === activeIndex()"
+                [attr.aria-controls]="'capability-panel'"
+                [id]="'capability-tab-' + capability.id"
+                (click)="select(i)"
+            >
+                <span class="tab__ordinal">{{ capability.ordinal }}</span>
+                <span class="tab__name">{{ capability.tab | translate }}</span>
+                <span class="tab__rule" aria-hidden="true"></span>
+            </button>
+        }
+    </div>
+
+    <div
+        class="console__panel"
+        id="capability-panel"
+        role="tabpanel"
+        [attr.aria-labelledby]="'capability-tab-' + active.id"
+        tabindex="0"
+    >
+        <!--
+          Keyed on the capability id so Angular replaces the subtree rather
+          than patching it, which is what makes the entrance transition run on
+          every change instead of only the first.
+        -->
+        @for (capability of [active]; track capability.id) {
+            <div class="panel">
+                <div class="panel__text">
+                    <h3 class="panel__name">
+                        {{ capability.name | translate }}
+                    </h3>
+                    <p class="panel__lead">
+                        {{ capability.lead | translate }}
+                    </p>
+                    <p class="panel__why">{{ capability.why | translate }}</p>
+
+                    <dl class="facts">
+                        @for (fact of capability.facts; track fact.label) {
+                            <div class="fact">
+                                <dt class="fact__value">{{ fact.value }}</dt>
+                                <dd class="fact__label">
+                                    {{ fact.label | translate }}
+                                </dd>
+                            </div>
+                        }
+                    </dl>
+                </div>
+
+                <div class="panel__figure">
+                    <app-cluster-diagram [mode]="capability.id" />
+                </div>
+            </div>
+        }
+    </div>
+</div>

@@ -394,6 +394,36 @@ everything else visible in a walkthrough is tenant configuration.
 `vendor/` into `build/` and would otherwise overwrite whatever
 `apply-patches.sh` had put there.
 
+### `ai4-dashboard/0004-home-route.patch` — pinned to `c360f20`
+
+**Stage F3.** Nine lines in `src/app/app.routes.ts`, and the only upstream file
+the home page touches.
+
+Upstream sends `/` straight to `/catalog/modules`, so the first thing anyone
+sees is a grid of model cards with no statement of what the platform is, who it
+is for, or where it runs. This replaces that redirect with a lazy-loaded route
+onto the CAIOS home page.
+
+The page itself is **not** in this patch. It is CAIOS-owned Angular source in
+`configs/dashboard/home/`, staged into `src/app/modules/home/` by
+`scripts/build-dashboard.sh`, and its English strings are deep-merged into
+`src/assets/i18n/en.json` from `configs/dashboard/i18n/en.caios.json`. Neither
+is an upstream edit, so neither can drift (D-46).
+
+Why that split rather than one patch creating the whole module: a 1,500-line
+patch is not reviewable, and `en.json` is a 900-line upstream file that changes
+whenever any page gains a label — a patch against it would break for reasons
+that have nothing to do with the home page.
+
+`loadChildren`, not `component`: the bundle is downloaded only by someone who
+opens `/`, so a user who signs in and goes to their deployments pays nothing
+for it.
+
+**Removing this patch restores upstream exactly** — the old `redirectTo` line
+comes back and the staged module is simply never routed to.
+`tests/test_home_page.py` asserts that the patch touches one file and that the
+old redirect is the line being replaced.
+
 ### `ai4-dashboard/0002-vllm-catalogue-url.patch`
 
 `tools.service.ts` fetches the LLM model catalogue from **AI4OS's GitHub**:

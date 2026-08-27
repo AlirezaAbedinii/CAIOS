@@ -1,0 +1,662 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   [CAIOS] Home page — the visual system.
+
+   Direction: instrument panel. The reference is a specification sheet or an
+   imaging workstation, not a product landing page. Hierarchy is carried by
+   typography, hairlines and space; there are no floating cards, one radius
+   that is nearly square, and exactly one warm accent, used twice and both
+   times to mean the same thing.
+
+   Everything below is a CSS custom property so the page has one place where
+   its decisions live. Names are prefixed --h- so nothing here can collide
+   with the app-wide tokens in theme/caios/, which this page inherits and
+   does not modify.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────────────────────── typefaces
+   The same WOFF2 files theme/caios/_fonts.scss declares, deliberately
+   re-declared here rather than imported.
+
+   _fonts.scss also declares `Material Symbols Rounded` against our 65-glyph
+   subset. Redeclaring the icon face while index.html is still loading
+   Google's complete one is exactly the collision that took Stage F1 down —
+   every icon outside the subset would render as its own name. So this page
+   declares the two text families and nothing else, and the icon font is
+   untouched by anything in this directory.
+
+   Declared inside a lazy-loaded component stylesheet: @font-face is an
+   at-rule with no selector, so Angular's view encapsulation passes it
+   through unchanged, and the files are fetched only when someone opens `/`.
+
+   If one of them fails to arrive the fallback is the system sans on this one
+   page. That is the whole blast radius, by construction.  */
+
+@font-face {
+    font-family: 'IBM Plex Sans';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('/assets/fonts/ibm-plex-sans-2.woff2') format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'IBM Plex Sans';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('/assets/fonts/ibm-plex-sans-1.woff2') format('woff2');
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+        U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+        U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/assets/fonts/ibm-plex-mono-2.woff2') format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/assets/fonts/ibm-plex-mono-4.woff2') format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ─────────────────────────────────────────────────────────────────── tokens */
+
+:host {
+    /* Ground. Warm off-white rather than #fff: printed stock, not a screen.
+       The console values are the dark end of the same family, used for the
+       one band on the page that is meant to read as an instrument. */
+    --h-paper: #f7f5f2;
+    --h-paper-sunk: #efece7;
+    --h-console: #0a2129;
+    --h-console-raised: #0e2c36;
+
+    /* Ink. Biased toward the brand petrol rather than neutral grey — a
+       neutral that is slightly of the palette reads as chosen. */
+    --h-ink: #0b2027;
+    --h-ink-2: #3d545a;
+    --h-ink-3: #6e858a;
+    --h-ink-lit: #e4edef;
+    --h-ink-lit-2: #a3c0c6;
+    --h-ink-lit-3: #6f939c;
+
+    /* Line. An instrument divides space with rules; it does not float things
+       above it. There is no box-shadow anywhere on this page. */
+    --h-rule: rgba(11, 32, 39, 0.16);
+    --h-rule-soft: rgba(11, 32, 39, 0.08);
+    --h-rule-strong: rgba(11, 32, 39, 0.42);
+    --h-rule-lit: rgba(163, 214, 224, 0.18);
+    --h-rule-lit-strong: rgba(163, 214, 224, 0.34);
+
+    /* Signal. --h-accent is the brand cyan darkened until it passes AA on
+       paper; --h-accent-lit is the same hue at the brightness the console
+       needs. --h-boundary is the page's only warm colour: it marks the
+       national boundary, in the thesis rule and later in the diagram, and it
+       is used nowhere else. It is deliberately not the app's --neon-red,
+       which means "this deployment failed". */
+    --h-accent: #0b6c7c;
+    --h-accent-lit: #37cfe4;
+    --h-boundary: #a8452c;
+
+    /* Type. Two families, one for prose and one for anything a reader would
+       compare character by character. */
+    --h-sans:
+        'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --h-mono:
+        'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+        monospace;
+
+    --h-display: clamp(2.5rem, 1.35rem + 3.35vw, 4.5rem);
+    --h-heading: clamp(1.5rem, 1.15rem + 1vw, 2.125rem);
+    --h-sub: 1.0625rem;
+    --h-deck: clamp(1.0625rem, 1rem + 0.35vw, 1.3125rem);
+    --h-body: 1rem;
+    --h-small: 0.875rem;
+    --h-label: 0.6875rem;
+
+    /* Rhythm. One vertical unit for the space between sections, one maximum
+       measure, one radius — near-square, because rounded corners are what a
+       consumer product does to look friendly. */
+    --h-gap: clamp(56px, 6.5vw, 108px);
+    --h-max: 1240px;
+    --h-radius: 2px;
+    --h-motion: 180ms cubic-bezier(0.2, 0, 0.2, 1);
+
+    display: block;
+    background: var(--h-paper);
+    color: var(--h-ink);
+    font-family: var(--h-sans);
+    font-size: var(--h-body);
+    line-height: 1.55;
+
+    /* .page-content in the app shell pads the router outlet by --space-xl.
+       A landing page wants the full width of the content column, so this
+       cancels that padding and .home re-establishes its own. If the shell's
+       padding ever changes the page is a few pixels off-centre — cosmetic,
+       and visible, which is the right failure for a layout trick. */
+    margin-inline: calc(-1 * var(--space-xl));
+}
+
+.home {
+    max-width: var(--h-max);
+    margin-inline: auto;
+    padding-inline: clamp(20px, 4.5vw, 68px);
+    padding-block: clamp(40px, 5vw, 76px) clamp(48px, 6vw, 96px);
+}
+
+/* ─────────────────────────────────────────────────────────── shared pieces */
+
+.eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 clamp(20px, 2.5vw, 34px);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--h-ink-3);
+}
+
+/* A drawn mark rather than an icon: a filled square with an outlined one
+   offset behind it. Two rectangles, and it means nothing beyond "a mark" —
+   which is the honest amount of meaning for a mark. */
+.eyebrow__mark {
+    position: relative;
+    flex: none;
+    width: 9px;
+    height: 9px;
+    background: var(--h-accent);
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 4px -4px -4px 4px;
+        border: 1px solid var(--h-rule-strong);
+    }
+}
+
+.index {
+    margin: 0 0 var(--space-md);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--h-ink-3);
+}
+
+.heading {
+    margin: 0;
+    font-size: var(--h-heading);
+    font-weight: 400;
+    line-height: 1.14;
+    letter-spacing: -0.022em;
+    color: var(--h-ink);
+    text-wrap: balance;
+}
+
+.prose {
+    max-width: 64ch;
+
+    p {
+        margin: 0 0 1.15em;
+        color: var(--h-ink-2);
+        font-size: var(--h-sub);
+        line-height: 1.62;
+    }
+
+    p:last-child {
+        margin-bottom: 0;
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────── actions
+   Two weights only. The primary is a solid petrol rectangle; the quiet one is
+   a rule that thickens. No pills, no gradients, no shadow. */
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+.action {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 22px;
+    border-radius: var(--h-radius);
+    font-family: var(--h-mono);
+    font-size: var(--h-small);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background var(--h-motion),
+        color var(--h-motion),
+        border-color var(--h-motion),
+        transform var(--h-motion);
+
+    &::after {
+        content: '→';
+        font-size: 1em;
+        transition: transform var(--h-motion);
+    }
+
+    &:hover::after {
+        transform: translateX(3px);
+    }
+}
+
+.action--primary {
+    background: var(--h-ink);
+    color: var(--h-paper);
+    border: 1px solid var(--h-ink);
+
+    &:hover {
+        background: #123039;
+        border-color: #123039;
+    }
+}
+
+.action--quiet {
+    background: transparent;
+    color: var(--h-ink);
+    border: 1px solid var(--h-rule);
+
+    &:hover {
+        border-color: var(--h-rule-strong);
+        background: rgba(11, 32, 39, 0.03);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════ 01 · masthead */
+
+.masthead {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.6fr);
+    gap: clamp(32px, 5vw, 88px);
+    align-items: start;
+    padding-bottom: clamp(36px, 4.5vw, 64px);
+}
+
+.display {
+    margin: 0 0 clamp(20px, 2.4vw, 32px);
+    font-size: var(--h-display);
+    font-weight: 300;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    color: var(--h-ink);
+}
+
+.display__line {
+    display: block;
+    text-wrap: balance;
+}
+
+/* The weight change is the emphasis. No colour, no underline, no highlight —
+   at this size a jump from 300 to 600 is louder than any of them. */
+.display__line--em {
+    font-weight: 600;
+}
+
+.deck {
+    max-width: 46ch;
+    margin: 0 0 clamp(26px, 3vw, 40px);
+    font-size: var(--h-deck);
+    line-height: 1.5;
+    color: var(--h-ink-2);
+    text-wrap: pretty;
+}
+
+/* ───────────────────────────────────────────────────── the inventory plate
+   Counts, not claims. Each number is read from a file in the repository, and
+   the plate is set as a specimen list: a hairline above every row, the figure
+   in mono at the size of a heading, the label beside it. */
+
+/* The title sits above the rule rather than below it, so that it lands on the
+   same line as the eyebrow in the column beside it. Two mono labels at the
+   same size on the same baseline is the difference between a composition and
+   two elements that happen to be next to each other. */
+.plate__title {
+    margin: 0 0 clamp(20px, 2.5vw, 34px);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--h-ink-3);
+}
+
+.plate__rows {
+    margin: 0;
+    border-top: 2px solid var(--h-ink);
+}
+
+.plate__row {
+    display: grid;
+    grid-template-columns: 3.2ch minmax(0, 1fr);
+    gap: var(--space-lg);
+    align-items: baseline;
+    padding-block: 14px;
+    border-top: 1px solid var(--h-rule-soft);
+
+    &:first-child {
+        border-top: 0;
+        padding-top: var(--space-md);
+    }
+}
+
+.plate__count {
+    margin: 0;
+    font-family: var(--h-mono);
+    font-size: 1.5rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--h-ink);
+    text-align: right;
+}
+
+.plate__label {
+    margin: 0;
+    font-size: var(--h-small);
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--h-ink);
+}
+
+.plate__note {
+    display: block;
+    margin-top: 3px;
+    font-weight: 400;
+    color: var(--h-ink-3);
+}
+
+/* ──────────────────────────────────────────────────────────── the spec rail
+   What the machine is, before any claim about what it can do. Rules between
+   items rather than bullets or icons. */
+
+.specs {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-block: 1px solid var(--h-rule);
+}
+
+.specs__item {
+    padding: 14px clamp(14px, 1.8vw, 26px);
+    border-left: 1px solid var(--h-rule-soft);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 400;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--h-ink-2);
+    white-space: nowrap;
+
+    &:first-child {
+        padding-left: 0;
+        border-left: 0;
+    }
+}
+
+/* ══════════════════════════════════════════════════════ sections, generally
+   Two columns: an index rail carrying the number and the heading, and the
+   body. The rule sits on top of the section, so the page reads as a ruled
+   document rather than a stack of panels. */
+
+.section {
+    display: grid;
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 72px);
+    padding-block: var(--h-gap);
+    border-top: 1px solid var(--h-rule);
+
+    &:first-of-type {
+        border-top: 0;
+    }
+}
+
+.section__head {
+    position: sticky;
+    top: var(--space-xl);
+    align-self: start;
+}
+
+/* ═══════════════════════════════════════════════════════ 03 · capabilities
+   The one section that breaks the two-column rule, because the console is the
+   focal point of the page and a focal point does not sit in a side column.
+   The head runs across the top instead, and the console takes the full
+   measure below it. */
+
+.section--capabilities {
+    grid-template-columns: minmax(0, 1fr);
+    gap: clamp(26px, 3.2vw, 44px);
+}
+
+.section--capabilities .section__head {
+    position: static;
+    display: grid;
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 72px);
+    align-items: end;
+}
+
+.section__lead {
+    max-width: 56ch;
+    margin: 0;
+    font-size: var(--h-sub);
+    line-height: 1.6;
+    color: var(--h-ink-2);
+}
+
+/* ═══════════════════════════════════════════════════════════ 02 · position */
+
+/* The one warm rule on the page. It marks the sovereignty statement here and
+   the national boundary in the capability diagram; those are the only two
+   places --h-boundary appears, and they are the same argument. */
+.thesis {
+    margin: clamp(28px, 3vw, 40px) 0 0;
+    padding: 4px 0 4px clamp(20px, 2.4vw, 30px);
+    border-left: 2px solid var(--h-boundary);
+
+    p {
+        margin: 0;
+        font-size: clamp(1.1875rem, 1.05rem + 0.6vw, 1.5rem);
+        font-weight: 300;
+        line-height: 1.34;
+        letter-spacing: -0.017em;
+        color: var(--h-ink);
+    }
+
+    cite {
+        display: block;
+        margin-top: var(--space-md);
+        font-family: var(--h-mono);
+        font-size: var(--h-label);
+        font-style: normal;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: var(--h-ink-3);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════ 06 · colophon */
+
+.colophon {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: clamp(20px, 3vw, 44px);
+}
+
+.colophon__entry {
+    border-top: 1px solid var(--h-rule);
+    padding-top: var(--space-lg);
+
+    p {
+        margin: 0;
+        font-size: var(--h-small);
+        line-height: 1.6;
+        color: var(--h-ink-2);
+    }
+}
+
+.colophon__term {
+    margin: 0 0 var(--space-sm);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--h-ink);
+}
+
+/* ═══════════════════════════════════════════════════════════════ 07 · next
+   The page ends on the instrument ground it used for the capabilities, so the
+   last thing a reader sees is the same object the middle of the page was
+   about. */
+
+.closing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: clamp(24px, 4vw, 56px);
+    padding: clamp(32px, 4.5vw, 60px);
+    border-radius: var(--h-radius);
+    background: var(--h-console);
+    color: var(--h-ink-lit);
+
+    .action--primary {
+        background: var(--h-ink-lit);
+        border-color: var(--h-ink-lit);
+        color: var(--h-console);
+
+        &:hover {
+            background: #ffffff;
+            border-color: #ffffff;
+        }
+    }
+
+    .action--quiet {
+        color: var(--h-ink-lit);
+        border-color: var(--h-rule-lit);
+
+        &:hover {
+            border-color: var(--h-rule-lit-strong);
+            background: rgba(163, 214, 224, 0.07);
+        }
+    }
+}
+
+.closing__title {
+    max-width: 20ch;
+    margin: 0;
+    font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.25rem);
+    font-weight: 300;
+    line-height: 1.14;
+    letter-spacing: -0.025em;
+    color: var(--h-ink-lit);
+    text-wrap: balance;
+}
+
+.closing__note {
+    max-width: 46ch;
+    margin: var(--space-lg) 0 0;
+    font-family: var(--h-mono);
+    font-size: var(--h-small);
+    line-height: 1.55;
+    color: var(--h-ink-lit-2);
+}
+
+/* ══════════════════════════════════════════════════════════════ narrow view
+   One breakpoint, at the width where the two-column grids stop having room
+   for a measure worth reading. Below it everything is a single column and the
+   index rail stops sticking. */
+
+@media (max-width: 900px) {
+    .masthead,
+    .section {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .section__head,
+    .section--capabilities .section__head {
+        position: static;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .plate {
+        margin-top: var(--space-sm);
+    }
+
+    .specs__item {
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .closing {
+        align-items: start;
+    }
+}
+
+/* ═════════════════════════════════════════════════════ focus, and only focus
+   Keyboard focus has to be visible on a page whose interactive elements are
+   deliberately understated. :focus-visible rather than :focus, so a mouse
+   click does not ring the control it just activated. */
+
+.action:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--h-accent);
+    outline-offset: 3px;
+}
+
+.closing a:focus-visible {
+    outline-color: var(--h-accent-lit);
+}
+
+/* ═══════════════════════════════════════════════════════════ reduced motion
+   Written now rather than after the animations arrive (D-48). Retrofitting a
+   reduced-motion path reliably misses cases, and with a medical audience this
+   is an accessibility requirement rather than a courtesy: `reduce` is what
+   people with vestibular disorders and motion sensitivity set.
+
+   Scoped to this component's subtree, and deliberately blunt — every later
+   stage of this page inherits it without having to remember to. Final states
+   render immediately; nothing on the page depends on an animation to become
+   readable.  */
+
+@media (prefers-reduced-motion: reduce) {
+    :host,
+    :host * {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
+}

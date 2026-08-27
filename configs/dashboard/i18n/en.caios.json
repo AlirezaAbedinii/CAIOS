@@ -1,0 +1,128 @@
+{
+    "_comment": "CAIOS additions to the dashboard's English strings. Deep-merged over vendor/ai4-dashboard/src/assets/i18n/en.json by scripts/build-dashboard.sh, the same way caios.json is merged over _base.json. Keys here win. _comment keys are stripped on the way in, so notes in this file never reach the browser. Written as a merge rather than a patch because en.json is a 900-line upstream file and a patch against it would break on any string upstream touches.",
+
+    "_comment_home": "Every string on the home page. Numbers in this file are counts and measurements taken from this repository — the source for each is named in the note beside it, and none of them should be edited without editing the thing they count.",
+    "HOME": {
+        "EYEBROW": "CAIOS — Canadian Artificial Intelligence Operating System",
+
+        "HEADLINE": "Research AI infrastructure,",
+        "HEADLINE-EM": "operated in Canada.",
+        "DECK": "A GPU cluster, a curated catalogue of research models, and a control plane that turns one into the other. Medical and neuroscience groups experiment, deploy and serve models here — from a form in a browser to a terminal on the node.",
+
+        "ACTION": {
+            "CATALOGUE": "Browse the catalogue",
+            "LLMS": "Language models",
+            "TOOLS": "Deployable tools"
+        },
+
+        "_comment_inventory": "Counts, in order: catalog/keep.txt, catalog/ai4life-models.txt, configs/papi/vllm.yaml, and the three site nodes in ansible/inventory/hosts.ini.",
+        "INVENTORY": {
+            "TITLE": "On this cluster",
+            "MODULES": "research models",
+            "MODULES-NOTE": "Curated for medical and neuroscience work, from an upstream marketplace of 46.",
+            "BIOIMAGE": "bioimage.io models",
+            "BIOIMAGE-NOTE": "Loaded by identifier. The list opens on connectomics.",
+            "LLMS": "language models",
+            "LLMS-NOTE": "Open weights, each sized to fit this cluster's GPU memory.",
+            "SITES": "training sites",
+            "SITES-NOTE": "Separate machines holding separate data, for federated training."
+        },
+
+        "_comment_specs": "docs/infrastructure.md. Seven nodes; four of them carry an NVIDIA H100L-1-12C, which is a MIG partition of an H100 NVL.",
+        "SPECS": {
+            "NODES": "Seven-node cluster",
+            "GPU": "Four GPU nodes · H100 NVL",
+            "SCHEDULER": "Nomad-scheduled",
+            "SSO": "Single sign-on",
+            "TLS": "TLS on every deployment"
+        },
+
+        "_comment_capability": "The console. Every figure in FACT-* is measured and recorded: serverless in docs/oscar-gui-guide.md and docs/oscar-demo.md, federated in demo/fl/README.md, the language model in docs/presentation-2026-08-26.md. None of them is an estimate and none should be edited without a new measurement.",
+        "CAPABILITY": {
+            "INDEX": "03 / Capabilities",
+            "TITLE": "One cluster, three ways to put a model to work.",
+            "LEAD": "The same nodes, the same account, the same catalogue. What changes between these three is which part of the cluster the work lands on — and, for one of them, whether anything is running at all.",
+            "TABLIST": "Platform capabilities",
+
+            "SERVERLESS": {
+                "TAB": "Serverless inference",
+                "NAME": "Publish a model as an endpoint that costs nothing while nobody is asking.",
+                "LEAD": "Any model in the catalogue can be deployed as an inference service with an HTTP endpoint and a bearer token. Between requests there is no container, no reserved processor and no reserved memory — nothing is running at all.",
+                "WHY": "Everything else on the platform holds hardware for as long as it exists. This does not, so a group can keep many more models reachable than it could keep running. And because it is an ordinary web API, whatever is built on top of it is ordinary code.",
+                "FACT-LATENCY": "measured response, image already on the node",
+                "FACT-IDLE": "containers held between requests",
+                "FACT-COLD": "the first call only, while the image is pulled"
+            },
+
+            "FEDERATED": {
+                "TAB": "Federated learning",
+                "NAME": "Train one model across sites that cannot pool their data.",
+                "LEAD": "Each site trains on what it holds and sends back weights. The training data never leaves the machine that owns it, and no site ever sees another site's records.",
+                "WHY": "For a multi-site study on identifiable data, this is often the difference between a design that can run and one that cannot. The platform's own demonstration splits a public brain-tumour MRI set by patient across three separate machines, and lands within 1.2 points of pooling everything.",
+                "FACT-FEDERATED": "federated across three sites",
+                "FACT-SINGLE": "the best single site, training alone",
+                "FACT-POOLED": "all data pooled centrally — the ceiling",
+                "FACT-ROUNDS": "ten training rounds, end to end"
+            },
+
+            "LLM": {
+                "TAB": "Language models",
+                "NAME": "Run an open-weight language model on a GPU in this cluster.",
+                "LEAD": "Choose a model, fill in a short form, and a few minutes later there is a chat window at your own address — with an OpenAI-compatible API on the same deployment.",
+                "WHY": "Clinical text cannot be sent to a commercial API. Here it does not leave the cluster, and existing code moves across by changing one base URL: the same client library, pointed somewhere else.",
+                "FACT-MODELS": "models offered, each one deployed and tested",
+                "FACT-ENGINE": "serving engine, on the node's own GPU",
+                "FACT-TOKEN": "per token, measured during a federated run"
+            }
+        },
+
+        "_comment_diagram": "Labels for the cluster schematic. The nodes are the machines in docs/infrastructure.md; nothing here is illustrative.",
+        "DIAGRAM": {
+            "ALT": "Schematic of the CAIOS cluster: a researcher outside the boundary, the platform inside it, three site nodes holding data that does not move, a GPU node for language models, a serverless node, and an aggregator for federated training.",
+            "BOUNDARY": "CANADIAN RESEARCH INFRASTRUCTURE",
+            "CAPTION": "The cluster as deployed. Lit paths are the ones this capability uses; the rest stays on the diagram, because it is the same cluster either way. The marks inside the site nodes are their data — they are drawn in every state, and they never move.",
+            "CLIENT": "RESEARCHER",
+            "CLIENT-SUB": "browser or notebook",
+            "PLATFORM": "CAIOS PLATFORM",
+            "PLATFORM-SUB": "edge, API, identity",
+            "SITE-A": "SITE A",
+            "SITE-B": "SITE B",
+            "SITE-C": "SITE C",
+            "SITE-SUB": "local data",
+            "LLM": "GPU NODE",
+            "LLM-SUB": "chat window and API",
+            "SERVERLESS": "SERVERLESS NODE",
+            "SERVERLESS-SUB": "scales to nothing",
+            "AGGREGATOR": "AGGREGATOR",
+            "AGGREGATOR-SUB": "weights only",
+            "NOTE-FEDERATED": "data does not move",
+            "NOTE-LLM": "answers from this cluster",
+            "NOTE-SERVERLESS": "nothing runs between requests"
+        },
+
+        "POSITION": {
+            "INDEX": "02 / What it is for",
+            "TITLE": "Built for research groups that cannot move their data.",
+            "P1": "Serious AI usually asks a research group to choose between control and convenience — a managed service that is easy and holds your data, or a bare machine that holds nothing and is yours to operate. CAIOS is the layer in between: scheduling, identity, storage, certificates and a model catalogue, on hardware the group already has.",
+            "P2": "It is one platform at three depths. A clinician-scientist who never opens a terminal, a research assistant calling an endpoint from a script, and an engineer with a full training loop all work against the same cluster, the same catalogue and the same account.",
+            "THESIS": "Train on data that never leaves the hospital — or the country.",
+            "THESIS-SOURCE": "The constraint the platform is built around"
+        },
+
+        "COLOPHON": {
+            "INDEX": "06 / Provenance",
+            "TITLE": "Who builds it, and what it is built on.",
+            "LAB-TERM": "PACS Lab",
+            "LAB": "CAIOS is built and operated by PACS Lab as a medical and neuroscience AI platform. The lab runs the cluster, curates the catalogue and holds the accounts.",
+            "STACK-TERM": "Open-source foundation",
+            "STACK": "The platform is built on AI4OS, an open-source stack for research computing. CAIOS adds its own configuration, its own catalogue and this interface on top of it.",
+            "HOST-TERM": "Where it runs",
+            "HOST": "On Canadian academic research-cloud infrastructure. Nothing a researcher deploys leaves the cluster unless they send it somewhere themselves."
+        },
+
+        "CLOSING": {
+            "TITLE": "Start with the catalogue.",
+            "NOTE": "Deployments, inference services and training runs are created under your own account. Signing in is in the top bar."
+        }
+    }
+}

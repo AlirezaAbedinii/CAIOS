@@ -136,8 +136,8 @@ Asked for explicitly, and the existing build already provides most of it.
 |---|---|---|
 | Fonts, tokens, type scale | `configs/dashboard/theme/caios/` | `git checkout` that directory |
 | Style load order | `configs/dashboard/angular-configurations.json` | `git checkout` one file |
-| Home page | `patches/ai4-dashboard/0004-home-page.patch` | `rm` the patch |
-| Route change | same patch | same `rm` |
+| Home page | `configs/dashboard/home/` + `configs/dashboard/i18n/` | `git checkout` those directories |
+| Route change | `patches/ai4-dashboard/0004-home-route.patch` | `rm` the patch — `/` redirects to the catalogue again |
 
 `vendor/` and `build/` are gitignored and rebuilt from source every run, so
 there is no state to clean up. **The unit of reverting is one file**, and the
@@ -401,9 +401,32 @@ error.
 
 ---
 
-## Stage F3 — The home page · one day · one additive patch
+## Stage F3 — The home page · one day · one nine-line patch
 
 ### Work
+
+**Revised on 2026-08-27, before any of it was written.** The plan said "one
+additive patch" and meant a patch that creates the whole module. F2's finding
+made that unnecessary: `configs/dashboard/` is ours, `scripts/build-dashboard.sh`
+stages it, and a patch is only needed where an *upstream* line has to change.
+
+So the split is:
+
+| | Where it lives | Drift |
+|---|---|---|
+| The page — components, styles, copy | `configs/dashboard/home/`, staged verbatim | none |
+| The English strings | `configs/dashboard/i18n/en.caios.json`, deep-merged into upstream's `en.json` | none |
+| The route that reaches it | `patches/ai4-dashboard/0004-home-route.patch` | nine lines in one file |
+
+Two things this buys. A 1,500-line patch is not reviewable and would have to be
+re-rolled by hand every time anything near it moved; staged files are read as
+ordinary source. And `en.json` is a 900-line upstream file that changes whenever
+any page gains a label, so a patch against it would break for reasons that have
+nothing to do with the home page — the merge cannot.
+
+D-46 already says this; F3 is the first stage where it applies to application
+code rather than to a stylesheet.
+
 
 1. New lazy-loaded module at `src/app/modules/home/`. **Lazy-loaded** means its
    code is only downloaded when someone visits `/` — Angular splits it into a
@@ -421,8 +444,9 @@ error.
      language models. Each linking to the page that does it.
    - **Who it is for** — the researcher's path, in their vocabulary.
    - **Footer credits** — PACS Lab, Digital Research Alliance, AI4OS upstream.
-5. All strings through `@ngx-translate` into `src/assets/i18n/en.json`, matching
-   how every other page does it.
+5. All strings through `@ngx-translate`, matching how every other page does it
+   — but authored in `configs/dashboard/i18n/en.caios.json` and merged into
+   `src/assets/i18n/en.json` at stage time, rather than patched into it.
 
 ### The constraint that makes this safe
 
@@ -436,6 +460,21 @@ lying about backend state, a landing page with no backend is worth more than it
 sounds.
 
 ### Tests
+
+`tests/test_home_page.py` carries the mechanical half, and it exists because
+this page has more that can be checked than "looks right" suggests:
+
+| Assertion | What it catches |
+|---|---|
+| No `HttpClient`, `fetch`, `XMLHttpRequest` or PAPI service in the module | D-46 quietly abandoned by a later change that wants a live figure in the hero |
+| No absolute `http(s)://` in any `src`, `href` or `url()` | a sixth third-party leak, in the family of gotcha 6 |
+| No `@font-face` for `Material Symbols Rounded` | **F1's exact failure**, reintroduced from a page-level stylesheet |
+| Every `HOME.*` key used exists, and every key defined is used | ngx-translate renders a missing key as the key itself, in display type, with no error |
+| `AI4OS` appears once | credit drifting into co-branding |
+| The printed counts equal the files they count | the easiest thing on the platform to check, and the worst to be wrong |
+| The route patch touches exactly one upstream file | the architecture above, as an assertion |
+
+And, still needing a person:
 
 - `pytest tests/test_patches.py` — the new patch applies to pinned upstream.
 - Every other route still resolves; `/catalog/modules` unchanged.

@@ -1,0 +1,136 @@
+<!--
+  Inline SVG, no raster asset, nothing fetched. `data-mode` on the root drives
+  every state change from CSS, so switching capability is one attribute rather
+  than nine class bindings.
+-->
+<figure class="diagram">
+    <!--
+      The SVG scales to this box, so below a certain width its labels stop
+      being readable. Rather than shrink them into illegibility the scroller
+      holds a minimum width and the reader pans — which is what a schematic
+      wants on a phone anyway.
+    -->
+    <div class="diagram__scroll">
+        <svg
+            class="diagram__svg"
+            [attr.data-mode]="mode"
+            viewBox="0 0 760 400"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            [attr.aria-label]="'HOME.DIAGRAM.ALT' | translate"
+        >
+            <!-- The boundary. The only place the warm accent is used other than
+                 the sovereignty statement, and it means the same thing in both. -->
+            <text class="boundary-label" x="164" y="11">
+                {{ 'HOME.DIAGRAM.BOUNDARY' | translate }}
+            </text>
+            <rect
+                class="boundary"
+                x="162"
+                y="16"
+                width="598"
+                height="368"
+                rx="2"
+            />
+
+            <!-- Links first, so node bodies cover the ends of the paths. -->
+            <g class="links">
+                @for (link of links; track link.id) {
+                    <path
+                        class="link"
+                        [class.is-lit]="lit(link.modes)"
+                        [attr.d]="link.d"
+                    />
+                }
+            </g>
+
+            <!-- The travelling mark. A second copy of each lit path, dashed and
+                 offset over time: one moving segment rather than a dashed line.
+                 Under prefers-reduced-motion the animation is suppressed and this
+                 sits still at the head of the path, which is harmless. -->
+            <g class="flows" aria-hidden="true">
+                @for (link of links; track link.id) {
+                    @if (lit(link.modes)) {
+                        <path
+                            class="flow"
+                            [attr.d]="link.d"
+                            [style.stroke-dasharray]="'8 ' + link.len"
+                            [style.--flow-len]="link.len + 8"
+                        />
+                    }
+                }
+            </g>
+
+            <g class="nodes">
+                @for (node of nodes; track node.id) {
+                    <g class="node" [class.is-lit]="lit(node.modes)">
+                        <rect
+                            class="node__box"
+                            [attr.x]="node.x"
+                            [attr.y]="node.y"
+                            [attr.width]="node.w"
+                            [attr.height]="node.h"
+                            rx="2"
+                        />
+                        <text
+                            class="node__title"
+                            [attr.x]="node.x + 14"
+                            [attr.y]="node.y + 19"
+                        >
+                            {{ node.title | translate }}
+                        </text>
+                        <text
+                            class="node__sub"
+                            [attr.x]="node.x + 14"
+                            [attr.y]="node.y + 34"
+                        >
+                            {{ node.sub | translate }}
+                        </text>
+
+                        <!-- Three bars: the data this node holds. They are drawn
+                             on the site nodes and nowhere else, and they never
+                             move between modes. That restraint is the federated
+                             argument, drawn rather than stated. -->
+                        @if (node.data) {
+                            <g class="node__data">
+                                <rect
+                                    [attr.x]="node.x + node.w - 28"
+                                    [attr.y]="node.y + 13"
+                                    width="18"
+                                    height="3"
+                                />
+                                <rect
+                                    [attr.x]="node.x + node.w - 28"
+                                    [attr.y]="node.y + 21"
+                                    width="18"
+                                    height="3"
+                                />
+                                <rect
+                                    [attr.x]="node.x + node.w - 28"
+                                    [attr.y]="node.y + 29"
+                                    width="18"
+                                    height="3"
+                                />
+                            </g>
+                        }
+                    </g>
+                }
+            </g>
+
+            <!-- One annotation per mode, next to the thing it is about. -->
+            <text class="note note--federated" x="410" y="206">
+                {{ 'HOME.DIAGRAM.NOTE-FEDERATED' | translate }}
+            </text>
+            <text class="note note--llm" x="410" y="286">
+                {{ 'HOME.DIAGRAM.NOTE-LLM' | translate }}
+            </text>
+            <text class="note note--serverless" x="410" y="366">
+                {{ 'HOME.DIAGRAM.NOTE-SERVERLESS' | translate }}
+            </text>
+        </svg>
+    </div>
+
+    <figcaption class="diagram__caption">
+        {{ 'HOME.DIAGRAM.CAPTION' | translate }}
+    </figcaption>
+</figure>

@@ -1,0 +1,160 @@
+<!--
+  [CAIOS] The home page.
+
+  Section order is the argument: who this is and where it runs, what it is for,
+  and only then what it does. Nothing on this page issues an HTTP request —
+  see the README beside this file for why that is a rule rather than a habit.
+-->
+<div class="home">
+    <!-- ══════════════════════════════════════════════ 01 · masthead -->
+    <header class="masthead">
+        <div class="masthead__statement">
+            <p class="eyebrow">
+                <span class="eyebrow__mark" aria-hidden="true"></span>
+                {{ 'HOME.EYEBROW' | translate }}
+            </p>
+
+            <h1 class="display">
+                <span class="display__line">{{
+                    'HOME.HEADLINE' | translate
+                }}</span>
+                <span class="display__line display__line--em">{{
+                    'HOME.HEADLINE-EM' | translate
+                }}</span>
+            </h1>
+
+            <p class="deck">{{ 'HOME.DECK' | translate }}</p>
+
+            <div class="actions">
+                <a class="action action--primary" routerLink="/catalog/modules">
+                    {{ 'HOME.ACTION.CATALOGUE' | translate }}
+                </a>
+                <a class="action action--quiet" routerLink="/catalog/llms">
+                    {{ 'HOME.ACTION.LLMS' | translate }}
+                </a>
+            </div>
+        </div>
+
+        <!--
+          The inventory plate. Four counts, each one read from a file in this
+          repository rather than chosen — see home.component.ts.
+        -->
+        <aside class="plate" aria-labelledby="plate-title">
+            <h2 class="plate__title" id="plate-title">
+                {{ 'HOME.INVENTORY.TITLE' | translate }}
+            </h2>
+            <dl class="plate__rows">
+                @for (row of inventory; track row.label) {
+                    <div class="plate__row">
+                        <dt class="plate__count">{{ row.count }}</dt>
+                        <dd class="plate__label">
+                            {{ row.label | translate }}
+                            <span class="plate__note">{{
+                                row.note | translate
+                            }}</span>
+                        </dd>
+                    </div>
+                }
+            </dl>
+        </aside>
+    </header>
+
+    <!-- the machine, stated once, before any claim about what it can do -->
+    <ul class="specs">
+        @for (spec of specs; track spec) {
+            <li class="specs__item">{{ spec | translate }}</li>
+        }
+    </ul>
+
+    <!-- ══════════════════════════════════════════════ 02 · position -->
+    <section class="section section--position">
+        <div class="section__head">
+            <p class="index">{{ 'HOME.POSITION.INDEX' | translate }}</p>
+            <h2 class="heading">{{ 'HOME.POSITION.TITLE' | translate }}</h2>
+        </div>
+
+        <div class="section__body prose">
+            <p>{{ 'HOME.POSITION.P1' | translate }}</p>
+            <p>{{ 'HOME.POSITION.P2' | translate }}</p>
+
+            <!--
+              The sovereignty statement. Marked with the one warm rule on the
+              page, which is also the colour of the national boundary drawn in
+              the capability diagram — the same idea, twice, in two forms.
+            -->
+            <blockquote class="thesis">
+                <p>{{ 'HOME.POSITION.THESIS' | translate }}</p>
+                <cite>{{ 'HOME.POSITION.THESIS-SOURCE' | translate }}</cite>
+            </blockquote>
+        </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════ 03 · capabilities -->
+    <!--
+      The page's focal point, and the only dark surface on it. One schematic
+      of the cluster, lit three ways — see the console component for why that
+      is one component rather than three cards.
+    -->
+    <section class="section section--capabilities" id="capabilities">
+        <div class="section__head">
+            <div>
+                <p class="index">{{ 'HOME.CAPABILITY.INDEX' | translate }}</p>
+                <h2 class="heading">
+                    {{ 'HOME.CAPABILITY.TITLE' | translate }}
+                </h2>
+            </div>
+            <p class="section__lead">
+                {{ 'HOME.CAPABILITY.LEAD' | translate }}
+            </p>
+        </div>
+
+        <div class="section__body">
+            <app-capability-console />
+        </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════ 06 · colophon -->
+    <section class="section section--colophon">
+        <div class="section__head">
+            <p class="index">{{ 'HOME.COLOPHON.INDEX' | translate }}</p>
+            <h2 class="heading">{{ 'HOME.COLOPHON.TITLE' | translate }}</h2>
+        </div>
+
+        <div class="section__body colophon">
+            <div class="colophon__entry">
+                <h3 class="colophon__term">
+                    {{ 'HOME.COLOPHON.LAB-TERM' | translate }}
+                </h3>
+                <p>{{ 'HOME.COLOPHON.LAB' | translate }}</p>
+            </div>
+            <div class="colophon__entry">
+                <h3 class="colophon__term">
+                    {{ 'HOME.COLOPHON.STACK-TERM' | translate }}
+                </h3>
+                <p>{{ 'HOME.COLOPHON.STACK' | translate }}</p>
+            </div>
+            <div class="colophon__entry">
+                <h3 class="colophon__term">
+                    {{ 'HOME.COLOPHON.HOST-TERM' | translate }}
+                </h3>
+                <p>{{ 'HOME.COLOPHON.HOST' | translate }}</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════ 07 · next -->
+    <section class="closing">
+        <div class="closing__text">
+            <h2 class="closing__title">{{ 'HOME.CLOSING.TITLE' | translate }}</h2>
+            <p class="closing__note">{{ 'HOME.CLOSING.NOTE' | translate }}</p>
+        </div>
+        <div class="actions">
+            <a class="action action--primary" routerLink="/catalog/modules">
+                {{ 'HOME.ACTION.CATALOGUE' | translate }}
+            </a>
+            <a class="action action--quiet" routerLink="/catalog/tools">
+                {{ 'HOME.ACTION.TOOLS' | translate }}
+            </a>
+        </div>
+    </section>
+</div>

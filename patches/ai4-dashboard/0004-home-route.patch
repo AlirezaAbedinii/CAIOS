@@ -1,0 +1,29 @@
+diff --git a/src/app/app.routes.ts b/src/app/app.routes.ts
+--- a/src/app/app.routes.ts
++++ b/src/app/app.routes.ts
+@@ -8,9 +8,23 @@ export const routes: Routes = [
+         component: ContentLayoutComponent,
+         children: [
+             {
++                // [CAIOS] `/` is the CAIOS home page, not the modules catalogue.
++                //
++                // Lazy-loaded, so its bundle is downloaded only by someone who
++                // actually opens `/`; a user who signs in and goes straight to
++                // their deployments pays nothing for it. The module is staged
++                // into src/app/modules/home/ from configs/dashboard/home/ by
++                // scripts/build-dashboard.sh — this patch is the only upstream
++                // file the home page touches.
++                //
++                // The page makes no HTTP request of any kind (D-46), so the
++                // first thing a visitor sees renders correctly whatever the
++                // cluster is doing.
+                 path: '',
+-                redirectTo: '/catalog/modules',
+-                pathMatch: 'full',
++                loadChildren: () =>
++                    import('@app/modules/home/home.module').then(
++                        (m) => m.HomeModule
++                    ),
+             },
+             {
+                 path: 'marketplace',

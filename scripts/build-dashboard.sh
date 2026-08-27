@@ -97,24 +97,92 @@ cp "$CFG/theme/caios/variables.scss" \
    "$CFG/theme/caios/overrides.scss" \
    "$DST/src/theme/caios/"
 
-# 2b. fonts — staged but NOT yet used
+# 2a. the home page
 #
-# Stage F1 is shelved (see the top of scripts/fetch-fonts.sh). index.html still
-# loads its typefaces from Google and overrides.scss does not import
-# _fonts.scss, so these files are staged and served but nothing references
-# them. Staging them keeps the image and the repository in step, and makes
-# finishing F1 a one-line change rather than a rebuild of this pipeline.
+# CAIOS-owned Angular source, staged verbatim into the app. Not a patch: it
+# creates only new files, so there is nothing upstream can move underneath it,
+# and a 1,500-line patch is not reviewable (D-46). The only upstream edit the
+# home page needs is the route, which is patches/ai4-dashboard/0004.
 #
-# A warning rather than a hard failure, precisely because nothing depends on
-# them right now. When F1 is finished this must become an error again: with the
-# Google <link> tags gone, missing files here mean every icon renders as the
-# word it is named after, behind nginx's HTTP 200.
+# A hard failure, not a warning. patch 0004 makes app.routes.ts import
+# @app/modules/home, so a missing directory here is a TypeScript compile error
+# a hundred lines into an ng build — loud, but a long way from its cause.
+if [[ -d "$CFG/home" ]]; then
+    mkdir -p "$DST/src/app/modules/home"
+    cp -r "$CFG"/home/. "$DST/src/app/modules/home/"
+    rm -f "$DST/src/app/modules/home/README.md"
+    echo "    staged the home page ($(find "$CFG/home" -name '*.ts' | wc -l) components)"
+else
+    echo "    ERROR: $CFG/home is missing, and patch 0004 routes / to it."
+    exit 1
+fi
+
+# 2b. the CAIOS strings
+#
+# Deep-merged over upstream's en.json rather than patched into it. en.json is a
+# 900-line upstream file that changes whenever any page gains a label, so a
+# patch against it would break for reasons that have nothing to do with us.
+# Same reasoning, and the same _comment stripping, as the tenant config above.
+python3 - "$DST/src/assets/i18n/en.json" "$CFG/i18n/en.caios.json" <<'PYI18N'
+import json, sys
+
+base_path, add_path = sys.argv[1], sys.argv[2]
+
+
+def strip(o):
+    if isinstance(o, dict):
+        return {k: strip(v) for k, v in o.items() if not k.startswith("_comment")}
+    if isinstance(o, list):
+        return [strip(v) for v in o]
+    return o
+
+
+def merge(base, add):
+    """Recursive dict merge; `add` wins at the leaves.
+
+    Recursive rather than a top-level update because a CAIOS override of one
+    string inside an existing block -- say CATALOG.MODULES-TITLE -- must not
+    take the rest of that block with it.
+    """
+    for k, v in add.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+with open(base_path) as f:
+    base = json.load(f)
+with open(add_path) as f:
+    add = strip(json.load(f))
+
+json.dump(merge(base, add), open(base_path, "w"), indent=4, ensure_ascii=False)
+print(f"    merged {len(add)} CAIOS string block(s) into en.json")
+PYI18N
+
+# 2c. fonts
+#
+# Stage F1 is still shelved (see the top of scripts/fetch-fonts.sh): index.html
+# loads Roboto and the icon font from Google, and overrides.scss does not import
+# _fonts.scss.
+#
+# The two IBM Plex families here are no longer unused, though. The home page
+# declares its own @font-face rules against them (F3) and is the only thing in
+# the application that does, so a missing file costs that one page its
+# typography and costs the rest of the dashboard nothing. Still a warning
+# rather than an error for exactly that reason.
+#
+# The icon font in this directory remains unreferenced, and must stay that way
+# while Google's <link> is in index.html: two declarations of Material Symbols
+# Rounded, one of them a 65-glyph subset, is how F1 turned every icon into the
+# word it is named after.
 if compgen -G "$CFG/fonts/*.woff2" >/dev/null; then
     mkdir -p "$DST/src/assets/fonts"
     cp "$CFG"/fonts/*.woff2 "$DST/src/assets/fonts/"
-    echo "    staged $(ls "$CFG"/fonts/*.woff2 | wc -l) font files (unused — F1 shelved)"
+    echo "    staged $(ls "$CFG"/fonts/*.woff2 | wc -l) font files (home page only)"
 else
-    echo "    no fonts in $CFG/fonts/ — fine while F1 is shelved"
+    echo "    WARNING: no fonts in $CFG/fonts/ — the home page will fall back"
 fi
 
 # 3. images

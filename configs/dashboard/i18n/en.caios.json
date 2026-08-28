@@ -76,6 +76,41 @@
             }
         },
 
+        "_comment_depth": "The no-code / low-code / high-code progression. FORM.* are the field names in configs/papi/tools/ai4os-llm/user.yaml, which IS the deployment form — the dashboard renders whatever appears in that file. The two code excerpts are in home.component.ts, and both are real: the request from docs/oscar-gui-guide.md, the client from demo/fl/client.py.",
+        "DEPTH": {
+            "INDEX": "04 / Depth of control",
+            "TITLE": "The same cluster, at whatever depth you work.",
+            "LEAD": "Nothing here asks a researcher to start at the deepest level, and nothing stops them getting there. These are three distances from one platform, and a group usually works at all three of them in the same week.",
+
+            "NO-CODE": {
+                "LEVEL": "No code",
+                "TITLE": "Fill in a form.",
+                "BODY": "Deploying a private language model is a short form on the marketplace page: which model, what to call it, and the account you want in the chat window. A few minutes later the chat interface is at your own address, behind your own sign-in, on the lab's GPU.",
+                "CAPTION": "The deployment form, as it is"
+            },
+
+            "LOW-CODE": {
+                "LEVEL": "Low code",
+                "TITLE": "Call an endpoint.",
+                "BODY": "Deploy a catalogue model as a serverless inference service and it becomes an HTTP endpoint with a bearer token. From there it is one request from wherever the work already lives — a script, a notebook, another service — and the model's output comes back in the response.",
+                "CAPTION": "A synchronous inference call"
+            },
+
+            "HIGH-CODE": {
+                "LEVEL": "High code",
+                "TITLE": "Work inside the cluster.",
+                "BODY": "A JupyterLab or VS Code workspace runs on a GPU node with your storage mounted, and from there it is ordinary Python. The federated demonstration is exactly this: each site's client is a file a researcher can read, change and run.",
+                "CAPTION": "HospitalClient.fit, from the client each site runs"
+            },
+
+            "FORM": {
+                "TITLE": "Deployment title",
+                "TYPE": "Deployment type",
+                "MODEL": "LLM model",
+                "EMAIL": "Open WebUI email"
+            }
+        },
+
         "_comment_diagram": "Labels for the cluster schematic. The nodes are the machines in docs/infrastructure.md; nothing here is illustrative.",
         "DIAGRAM": {
             "ALT": "Schematic of the CAIOS cluster: a researcher outside the boundary, the platform inside it, three site nodes holding data that does not move, a GPU node for language models, a serverless node, and an aggregator for federated training.",

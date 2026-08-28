@@ -113,6 +113,71 @@
         </div>
     </section>
 
+    <!-- ═══════════════════════════════════════ 04 · depth of control -->
+    <!--
+      The no-code / low-code / high-code progression, told as three distances
+      from the same platform rather than three tiers of a product.
+
+      The argument is carried by the artefacts, not by labels: a form, then a
+      request, then a class definition. Nobody needs to be told which of those
+      is deeper.
+    -->
+    <section class="section section--depth">
+        <div class="section__head">
+            <div>
+                <p class="index">{{ 'HOME.DEPTH.INDEX' | translate }}</p>
+                <h2 class="heading">
+                    {{ 'HOME.DEPTH.TITLE' | translate }}
+                </h2>
+            </div>
+            <p class="section__lead">{{ 'HOME.DEPTH.LEAD' | translate }}</p>
+        </div>
+
+        <ol class="section__body path">
+            @for (stop of stops; track stop.level) {
+                <li class="stop" [style.--fill]="stop.fill">
+                    <p class="stop__level">{{ stop.level | translate }}</p>
+                    <h3 class="stop__title">{{ stop.title | translate }}</h3>
+                    <p class="stop__body">{{ stop.body | translate }}</p>
+
+                    <figure class="artefact">
+                        <figcaption class="artefact__caption">
+                            {{ stop.caption | translate }}
+                        </figcaption>
+
+                        @switch (stop.artefact) {
+                            <!-- The real fields of the LLM deployment form,
+                                 from configs/papi/tools/ai4os-llm/user.yaml.
+                                 That file IS the form: the dashboard renders
+                                 whatever appears in it. -->
+                            @case ('form') {
+                                <dl class="fields">
+                                    @for (field of formFields; track field.name) {
+                                        <div class="field">
+                                            <dt class="field__name">
+                                                {{ field.name | translate }}
+                                            </dt>
+                                            <dd class="field__value">
+                                                {{ field.value }}
+                                            </dd>
+                                        </div>
+                                    }
+                                </dl>
+                            }
+                            <!-- Both code blocks are excerpts of things that
+                                 run, not illustrations: the request is the one
+                                 in docs/oscar-gui-guide.md, the class is
+                                 demo/fl/client.py with its logging removed. -->
+                            @default {
+                                <pre class="code"><code>{{ stop.code }}</code></pre>
+                            }
+                        }
+                    </figure>
+                </li>
+            }
+        </ol>
+    </section>
+
     <!-- ══════════════════════════════════════════════ 06 · colophon -->
     <section class="section section--colophon">
         <div class="section__head">

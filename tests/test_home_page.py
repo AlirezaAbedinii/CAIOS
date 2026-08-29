@@ -125,6 +125,42 @@ def test_the_fonts_the_home_page_declares_are_actually_staged(root):
             )
 
 
+# --- the reveal cannot leave the page blank ---------------------------------
+
+
+def test_the_scroll_reveal_has_a_way_out(root):
+    """The hidden state is applied by script and must be removable by script
+    even when the browser never reports an intersection.
+
+    This is not hypothetical. Verified in a browser during F3: the observer was
+    constructed, given an element filling the viewport, and never called back —
+    not even with the initial report a working implementation always sends. Under
+    the obvious arrangement that leaves a whole section at opacity 0 for good,
+    which is a blank page caused by a decoration.
+    """
+    src = (root / HOME / "reveal.directive.ts").read_text(encoding="utf-8")
+    assert "setTimeout" in src, (
+        "the reveal has no fallback: if IntersectionObserver never reports, "
+        "every armed section stays invisible"
+    )
+    assert "prefers-reduced-motion" in src, (
+        "reduced motion must skip arming entirely, not merely shorten the "
+        "transition (D-48)"
+    )
+    assert "classList.add('reveal-armed')" in src, (
+        "the hidden state must be added by the directive, so an element whose "
+        "script did not run is simply visible"
+    )
+
+    css = (root / HOME / "components/home/home.component.scss").read_text(
+        encoding="utf-8"
+    )
+    assert ".reveal-armed {" in css and "opacity: 0" in css
+    assert "prefers-reduced-motion" in css, (
+        "the stylesheet needs its own reduced-motion branch as well"
+    )
+
+
 # --- strings ----------------------------------------------------------------
 
 

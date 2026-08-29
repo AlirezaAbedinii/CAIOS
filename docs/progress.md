@@ -51,6 +51,94 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-08-29 — Stage F3: `/` is a home page
+
+The dashboard's front door used to be `/catalog/modules`, so the first thing
+anyone saw was a grid of model cards — no statement of what CAIOS is, who it is
+for, or that it runs in Canada. It is now a page that says all three in the
+first screen.
+
+Seven sections, in the order the argument runs: identity and sovereignty, who
+it is for, the three capabilities, the depth of control, the platform in use,
+provenance, and the catalogue. Built and verified against the built image in a
+browser (D-49); `caios/dashboard:latest` is untouched, so nothing deployed has
+changed.
+
+### The decision that shaped the page
+
+The plan called for three pillars. Three cards for serverless inference,
+federated learning and private language models would have said — silently, and
+to everyone — that these are three products. They are three paths through one
+cluster.
+
+So there is **one schematic of the cluster**, drawn from
+`docs/infrastructure.md`, and choosing a capability re-lights the path through
+it. Nothing is removed between states, only dimmed, because it is the same
+cluster either way. The data marks inside the three site nodes are drawn in
+every state and never move, which is the federated argument made in a picture
+instead of a paragraph.
+
+### What it found
+
+- **The schematic was illegible and only a browser could say so.** Drawn at a
+  nominal size and left to scale into its column, every label rendered at about
+  six pixels. Re-laid out for the width it actually gets, then confirmed by
+  measuring each label's bounding box against its own rectangle in the live
+  page.
+- **The scroll reveal was one browser away from a blank page.**
+  `IntersectionObserver` was constructed, given an element filling the viewport,
+  and never called back. Every armed section stayed invisible and every test
+  passed. Now the hidden state is applied by the directive rather than the
+  stylesheet, `prefers-reduced-motion` skips arming entirely, and a 1.5 s
+  timeout abandons the effect if nothing reports anywhere. **D-59.**
+- **F1 had a second way back in.** The page wanted IBM Plex — the family F1
+  staged and never used — and importing the generated `_fonts.scss` to get it
+  would also have redeclared `Material Symbols Rounded` against our 65-glyph
+  subset. That is F1's failure, reintroduced application-wide from a
+  page-level stylesheet. The two text faces are declared directly instead and
+  the icon family is not named at all. **D-61.**
+
+### How it is built, and what it costs to keep
+
+| | Where | Drift |
+|---|---|---|
+| The page | `configs/dashboard/home/`, staged verbatim | none |
+| The strings | `configs/dashboard/i18n/en.caios.json`, merged into `en.json` | none |
+| The route | `patches/ai4-dashboard/0004-home-route.patch` | nine lines, one file |
+
+**D-58.** Removing the patch restores the old redirect exactly, and the staged
+module is simply never routed to.
+
+The page issues **no HTTP request of any kind** — no PAPI call, no font, no
+image, no analytics — so it cannot show an error, a spinner or an empty state
+whatever the cluster is doing. Given that gotchas 18, 19 and 20 were all the
+dashboard reporting backend state wrongly, that is worth more than it sounds.
+`tests/test_home_page.py` keeps it true, along with the counts it prints, the
+translation keys it uses, and the icon font it must not declare.
+
+### One thing it found that is not its own
+
+Checking that the home page issues no request of its own — it does not — showed
+what the shell around it fetches. Three of the calls on every page load go to
+`api.github.com/repos/**AI4EOSC**/status/issues`, which is another project's
+issue tracker, read from the visitor's browser, and which can render *their*
+maintenance notices as *our* popups and banners. A sixth third-party leak, and
+the only one that can put somebody else's words on the screen during the demo.
+
+Recorded as **R-38** in `docs/frontend-plan.md` and deliberately not fixed here:
+it is outside F3, it touches the notifications button and the deployments list,
+and it needs a decision — point it at a CAIOS status repository, or disable it
+so the feature reads as unconfigured rather than broken (D-50).
+
+### Still outstanding
+
+A screenshot pass into `docs/screenshots/after/`, the narrow layout seen at a
+real 768 px rather than simulated, and someone actually *watching* the motion —
+the browser that would not report intersections is not the place to judge
+whether an animation feels right.
+
+---
+
 ## 2026-08-22 — STAGE 6 COMPLETE: the demo has a beat for the private model
 
 Stage L6, and with it the whole LLM feature. The walkthrough is **25 minutes**,

@@ -67,7 +67,7 @@
     </ul>
 
     <!-- ══════════════════════════════════════════════ 02 · position -->
-    <section class="section section--position">
+    <section class="section section--position" appReveal>
         <div class="section__head">
             <p class="index">{{ 'HOME.POSITION.INDEX' | translate }}</p>
             <h2 class="heading">{{ 'HOME.POSITION.TITLE' | translate }}</h2>
@@ -95,7 +95,7 @@
       of the cluster, lit three ways — see the console component for why that
       is one component rather than three cards.
     -->
-    <section class="section section--capabilities" id="capabilities">
+    <section class="section section--capabilities" id="capabilities" appReveal>
         <div class="section__head">
             <div>
                 <p class="index">{{ 'HOME.CAPABILITY.INDEX' | translate }}</p>
@@ -122,7 +122,7 @@
       request, then a class definition. Nobody needs to be told which of those
       is deeper.
     -->
-    <section class="section section--depth">
+    <section class="section section--depth" appReveal>
         <div class="section__head">
             <div>
                 <p class="index">{{ 'HOME.DEPTH.INDEX' | translate }}</p>
@@ -134,8 +134,8 @@
         </div>
 
         <ol class="section__body path">
-            @for (stop of stops; track stop.level) {
-                <li class="stop" [style.--fill]="stop.fill">
+            @for (stop of stops; track stop.level; let i = $index) {
+                <li class="stop" [style.--fill]="stop.fill" [style.--i]="i">
                     <p class="stop__level">{{ stop.level | translate }}</p>
                     <h3 class="stop__title">{{ stop.title | translate }}</h3>
                     <p class="stop__body">{{ stop.body | translate }}</p>
@@ -178,8 +178,167 @@
         </ol>
     </section>
 
+    <!-- ════════════════════════════════════════════════ 05 · in use -->
+    <!--
+      One model, from the catalogue to an answer.
+
+      Every label in the three screens below is the dashboard's own string —
+      the two Deploy options are CATALOG.MODULE-DETAIL.DEPLOY.API-PLATFORM and
+      .API-SERVERLESS, the table headers are the columns
+      inferences-list.component.ts declares — and the detections are the
+      recorded run in docs/oscar-demo.md. They are redrawn here rather than
+      screenshotted, and the caption says so.
+    -->
+    <section class="section section--demo" appReveal>
+        <div class="section__head">
+            <div>
+                <p class="index">{{ 'HOME.DEMO.INDEX' | translate }}</p>
+                <h2 class="heading">{{ 'HOME.DEMO.TITLE' | translate }}</h2>
+            </div>
+            <p class="section__lead">{{ 'HOME.DEMO.LEAD' | translate }}</p>
+        </div>
+
+        <div class="section__body demo">
+            <!-- 1 · choose -->
+            <div class="beat">
+                <div class="beat__text">
+                    <p class="beat__ordinal">01</p>
+                    <h3 class="beat__title">
+                        {{ 'HOME.DEMO.STEP-1.TITLE' | translate }}
+                    </h3>
+                    <p class="beat__body">
+                        {{ 'HOME.DEMO.STEP-1.BODY' | translate }}
+                    </p>
+                </div>
+
+                <div class="screen">
+                    <p class="screen__bar">
+                        {{ 'HOME.DEMO.STEP-1.BAR' | translate }}
+                    </p>
+                    <div class="screen__body">
+                        <p class="menu__trigger">
+                            {{ 'HOME.DEMO.STEP-1.DEPLOY' | translate }}
+                        </p>
+                        <ul class="menu">
+                            <li class="menu__item">
+                                {{ 'HOME.DEMO.STEP-1.OPTION-DEDICATED'
+                                | translate }}
+                            </li>
+                            <li class="menu__item is-picked">
+                                {{ 'HOME.DEMO.STEP-1.OPTION-SERVERLESS'
+                                | translate }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2 · it is running -->
+            <div class="beat">
+                <div class="beat__text">
+                    <p class="beat__ordinal">02</p>
+                    <h3 class="beat__title">
+                        {{ 'HOME.DEMO.STEP-2.TITLE' | translate }}
+                    </h3>
+                    <p class="beat__body">
+                        {{ 'HOME.DEMO.STEP-2.BODY' | translate }}
+                    </p>
+                </div>
+
+                <div class="screen">
+                    <p class="screen__bar">
+                        {{ 'HOME.DEMO.STEP-2.BAR' | translate }}
+                    </p>
+                    <div class="screen__scroll">
+                        <table class="listing">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        {{ 'HOME.DEMO.STEP-2.COL-NAME'
+                                        | translate }}
+                                    </th>
+                                    <th>
+                                        {{ 'HOME.DEMO.STEP-2.COL-CONTAINER'
+                                        | translate }}
+                                    </th>
+                                    <th>
+                                        {{ 'HOME.DEMO.STEP-2.COL-CREATED'
+                                        | translate }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>yolo-detect</td>
+                                    <td>ai4oshub/ai4os-yolo-torch</td>
+                                    <td>13:41:07 26-08-2026</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3 · the answer -->
+            <div class="beat">
+                <div class="beat__text">
+                    <p class="beat__ordinal">03</p>
+                    <h3 class="beat__title">
+                        {{ 'HOME.DEMO.STEP-3.TITLE' | translate }}
+                    </h3>
+                    <p class="beat__body">
+                        {{ 'HOME.DEMO.STEP-3.BODY' | translate }}
+                    </p>
+                </div>
+
+                <div class="screen">
+                    <p class="screen__bar">
+                        {{ 'HOME.DEMO.STEP-3.BAR' | translate }}
+                    </p>
+                    <div class="screen__body">
+                        <dl class="fields fields--tight">
+                            <div class="field">
+                                <dt class="field__name">
+                                    {{ 'HOME.DEMO.STEP-3.ENDPOINT' | translate }}
+                                </dt>
+                                <dd class="field__value">
+                                    https://oscar.&lt;cluster&gt;/run/yolo-detect
+                                </dd>
+                            </div>
+                            <div class="field">
+                                <dt class="field__name">
+                                    {{ 'HOME.DEMO.STEP-3.TOKEN' | translate }}
+                                </dt>
+                                <dd class="field__value">••••••••••••••••</dd>
+                            </div>
+                        </dl>
+
+                        <ul class="detections">
+                            @for (d of detections; track d.label + d.score) {
+                                <li class="detection">
+                                    <span class="detection__label">{{
+                                        d.label
+                                    }}</span>
+                                    <span class="detection__score">{{
+                                        d.score
+                                    }}</span>
+                                </li>
+                            }
+                        </ul>
+
+                        <p class="screen__foot">
+                            {{ 'HOME.DEMO.STEP-3.FOOT' | translate }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p class="demo__caption">{{ 'HOME.DEMO.CAPTION' | translate }}</p>
+    </section>
+
     <!-- ══════════════════════════════════════════════ 06 · colophon -->
-    <section class="section section--colophon">
+    <section class="section section--colophon" appReveal>
         <div class="section__head">
             <p class="index">{{ 'HOME.COLOPHON.INDEX' | translate }}</p>
             <h2 class="heading">{{ 'HOME.COLOPHON.TITLE' | translate }}</h2>
@@ -208,7 +367,7 @@
     </section>
 
     <!-- ══════════════════════════════════════════════ 07 · next -->
-    <section class="closing">
+    <section class="closing" appReveal>
         <div class="closing__text">
             <h2 class="closing__title">{{ 'HOME.CLOSING.TITLE' | translate }}</h2>
             <p class="closing__note">{{ 'HOME.CLOSING.NOTE' | translate }}</p>

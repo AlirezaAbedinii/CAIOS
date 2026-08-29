@@ -87,6 +87,7 @@
        one band on the page that is meant to read as an instrument. */
     --h-paper: #f7f5f2;
     --h-paper-sunk: #efece7;
+    --h-screen: #ffffff;
     --h-console: #0a2129;
     --h-console-raised: #0e2c36;
 
@@ -455,13 +456,15 @@
    measure below it. */
 
 .section--capabilities,
-.section--depth {
+.section--depth,
+.section--demo {
     grid-template-columns: minmax(0, 1fr);
     gap: clamp(26px, 3.2vw, 44px);
 }
 
 .section--capabilities .section__head,
-.section--depth .section__head {
+.section--depth .section__head,
+.section--demo .section__head {
     position: static;
     display: grid;
     grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
@@ -643,6 +646,213 @@
     tab-size: 4;
 }
 
+/* ══════════════════════════════════════════════════════════ 05 · in use
+   Three beats and three screens. The screens are drawn white against the
+   page's paper, which is the only place on the page where a surface is
+   lighter than its ground — that contrast is what makes them read as an
+   application rather than as more page. */
+
+.demo {
+    display: grid;
+    gap: 0;
+}
+
+.beat {
+    display: grid;
+    grid-template-columns: minmax(0, 0.62fr) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 64px);
+    align-items: start;
+    padding-block: clamp(26px, 3vw, 40px);
+    border-top: 1px solid var(--h-rule-soft);
+
+    &:first-child {
+        border-top: 0;
+        padding-top: 0;
+    }
+}
+
+.beat__ordinal {
+    margin: 0 0 var(--space-sm);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    color: var(--h-accent);
+}
+
+.beat__title {
+    margin: 0 0 var(--space-md);
+    font-size: 1.1875rem;
+    font-weight: 500;
+    line-height: 1.24;
+    letter-spacing: -0.016em;
+    color: var(--h-ink);
+}
+
+.beat__body {
+    margin: 0;
+    font-size: var(--h-small);
+    line-height: 1.62;
+    color: var(--h-ink-2);
+}
+
+/* ──────────────────────────────────────────────────────────────── screens */
+
+.screen {
+    border: 1px solid var(--h-rule);
+    border-radius: var(--h-radius);
+    background: var(--h-screen);
+    overflow: hidden;
+}
+
+.screen__bar {
+    margin: 0;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--h-rule);
+    background: var(--h-paper-sunk);
+    font-family: var(--h-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--h-ink-3);
+}
+
+.screen__body {
+    padding: 14px;
+}
+
+.screen__scroll {
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.screen__foot {
+    margin: var(--space-md) 0 0;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--h-rule-soft);
+    font-family: var(--h-mono);
+    font-size: 11px;
+    color: var(--h-ink-3);
+}
+
+/* The Deploy menu, with the two option labels the dashboard actually uses.
+   The serverless one is marked because it is the path this beat takes — and
+   because it is the least discoverable thing in the whole platform. */
+
+.menu__trigger {
+    display: inline-block;
+    margin: 0 0 var(--space-s);
+    padding: 6px 12px;
+    border: 1px solid var(--h-rule-strong);
+    border-radius: var(--h-radius);
+    font-family: var(--h-mono);
+    font-size: 12px;
+    color: var(--h-ink);
+}
+
+.menu {
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--h-rule);
+    border-radius: var(--h-radius);
+    list-style: none;
+}
+
+.menu__item {
+    padding: 9px 12px;
+    border-top: 1px solid var(--h-rule-soft);
+    font-size: 12.5px;
+    color: var(--h-ink-2);
+
+    &:first-child {
+        border-top: 0;
+    }
+
+    &.is-picked {
+        background: rgba(11, 108, 124, 0.07);
+        box-shadow: inset 2px 0 0 var(--h-accent);
+        color: var(--h-ink);
+        font-weight: 500;
+    }
+}
+
+/* The inference listing, with the columns inferences-list.component.ts
+   declares and the F2 treatment: quiet tracked headers, machine values in the
+   monospace with figures that line up between rows. */
+
+.listing {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+
+    th {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--h-rule);
+        font-family: var(--h-mono);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        text-align: left;
+        white-space: nowrap;
+        color: var(--h-ink-3);
+    }
+
+    td {
+        padding: 12px 14px;
+        font-family: var(--h-mono);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--h-ink);
+    }
+}
+
+/* What came back. Two columns of a fixed width so the confidences line up as
+   a column of figures, which is how anyone actually reads them. */
+
+.detections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 142px));
+    justify-content: start;
+    gap: 0 clamp(20px, 3vw, 44px);
+    margin: var(--space-md) 0 0;
+    padding: var(--space-md) 0 0;
+    border-top: 1px solid var(--h-rule-soft);
+    list-style: none;
+}
+
+.detection {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding-block: 5px;
+    font-family: var(--h-mono);
+    font-size: 12px;
+}
+
+.detection__label {
+    color: var(--h-ink);
+}
+
+.detection__score {
+    font-variant-numeric: tabular-nums;
+    color: var(--h-accent);
+}
+
+.fields--tight {
+    padding: 0;
+}
+
+.demo__caption {
+    margin: 0;
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--h-rule);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    line-height: 1.6;
+    color: var(--h-ink-3);
+}
+
 /* ═══════════════════════════════════════════════════════════ 06 · colophon */
 
 .colophon {
@@ -731,6 +941,95 @@
     color: var(--h-ink-lit-2);
 }
 
+/* ═══════════════════════════════════════════════════════════════════ motion
+   Two things move on this page, and that is the whole of it: one entrance
+   when it loads, and one reveal as each section arrives.
+
+   The reduced-motion branch is at the foot of this file and covers both by
+   collapsing every duration, so the animations below resolve to their final
+   state on the first frame. That block is why none of these can leave content
+   invisible.  */
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* The load sequence. One orchestrated stagger down the masthead in the order
+   a reader takes it in — who this is, what it says, what it offers, what the
+   machine is — rather than several effects going off at once.
+
+   `both` fill so each element holds its start state until its turn, and the
+   whole thing is over in under a second. Anything longer stops being an
+   entrance and becomes a wait. */
+.masthead .eyebrow {
+    animation: rise 520ms cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+.display__line:nth-child(1) {
+    animation: rise 620ms cubic-bezier(0.2, 0, 0.2, 1) 70ms both;
+}
+
+.display__line:nth-child(2) {
+    animation: rise 620ms cubic-bezier(0.2, 0, 0.2, 1) 150ms both;
+}
+
+.deck {
+    animation: rise 620ms cubic-bezier(0.2, 0, 0.2, 1) 250ms both;
+}
+
+.masthead .actions {
+    animation: rise 560ms cubic-bezier(0.2, 0, 0.2, 1) 340ms both;
+}
+
+.plate {
+    animation: rise 620ms cubic-bezier(0.2, 0, 0.2, 1) 300ms both;
+}
+
+.specs {
+    animation: rise 560ms cubic-bezier(0.2, 0, 0.2, 1) 430ms both;
+}
+
+/* Scroll reveal.
+   `reveal-armed` is added by the directive, never by this stylesheet, so an
+   element whose script did not run is simply visible — see reveal.directive.ts
+   for why that ordering is the point rather than an implementation detail. */
+.reveal-armed {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+        opacity 620ms cubic-bezier(0.2, 0, 0.2, 1),
+        transform 620ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.reveal-armed.is-revealed {
+    opacity: 1;
+    transform: none;
+}
+
+/* One nested stagger, on the three depth stops, because they are a sequence
+   and arriving in order says so. --i is bound per stop in the template. */
+.section--depth.reveal-armed .stop {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.section--depth.reveal-armed.is-revealed .stop {
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity 520ms cubic-bezier(0.2, 0, 0.2, 1)
+            calc(var(--i, 0) * 110ms + 120ms),
+        transform 520ms cubic-bezier(0.2, 0, 0.2, 1)
+            calc(var(--i, 0) * 110ms + 120ms);
+}
+
 /* ══════════════════════════════════════════════════════════════ narrow view
    One breakpoint, at the width where the two-column grids stop having room
    for a measure worth reading. Below it everything is a single column and the
@@ -744,7 +1043,8 @@
 
     .section__head,
     .section--capabilities .section__head,
-    .section--depth .section__head {
+    .section--depth .section__head,
+    .section--demo .section__head {
         position: static;
         grid-template-columns: minmax(0, 1fr);
     }
@@ -758,7 +1058,8 @@
         border-left: 0;
     }
 
-    .path {
+    .path,
+    .beat {
         grid-template-columns: minmax(0, 1fr);
     }
 
@@ -803,6 +1104,16 @@ a:focus-visible {
         animation-duration: 0.001ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
+        transition-delay: 0ms !important;
         scroll-behavior: auto !important;
+    }
+
+    /* The directive does not arm anything under `reduce`, so this should never
+       match. It is here because "should never" is not "cannot", and the cost
+       of being wrong is a blank page. */
+    .reveal-armed,
+    .section--depth.reveal-armed .stop {
+        opacity: 1;
+        transform: none;
     }
 }

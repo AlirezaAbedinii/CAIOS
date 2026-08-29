@@ -6,7 +6,12 @@ makes the dashboard look like it was built by people who knew what they were
 doing, without changing what any of it does.
 
 **Status: F1 SHELVED after a bad deploy. F2 built and verified 2026-08-24, not
-deployed. F0 outstanding.**
+deployed. F3 built and verified 2026-08-29, not deployed. F0 outstanding.**
+
+F4's work landed inside F3 rather than after it: motion that has no
+reduced-motion path is not shippable (D-48), so the entrance sequence and the
+scroll reveal were written with theirs in the same commit. What remains of F4
+is animating the schematic further, and it is optional.
 
 The governing constraint, stated once so every decision below can be checked
 against it: **the platform is the deliverable and this is not.** Nothing in this
@@ -486,6 +491,77 @@ And, still needing a person:
 `/` is the home page. Nothing else changed. Removing the patch restores the old
 redirect exactly.
 
+### What it found — run on 2026-08-29
+
+**Built and verified in a browser against the built image (D-49). Not
+deployed.** Image `caios/dashboard:f3-home`; `caios/dashboard:latest` is
+untouched, so nothing running changed.
+
+The page came out as seven sections in the order the argument runs — identity,
+who it is for, the three capabilities, the depth of control, the platform in
+use, provenance, and the catalogue. Five things the plan had not anticipated.
+
+**The three pillars became one console, and that was the largest decision on
+the page.** Three cards for serverless inference, federated learning and
+private language models would have said, silently and to everyone, that these
+are three products. So there is one schematic of the cluster — the machines in
+`docs/infrastructure.md`, drawn to scale — and choosing a capability re-lights
+the path through it. Nothing is removed between states, only dimmed, because it
+is the same cluster either way. The data marks inside the site nodes are drawn
+in every state and never move; that restraint *is* the federated argument, and
+it needs no caption.
+
+**The schematic was illegible, and only a browser could have said so.** Drawn
+at a nominal 980x440 and left to scale into its column, every label in it
+rendered at about six pixels. The geometry is now laid out for the width the
+console actually gives it — roughly 640 CSS pixels — with the edge and the
+control plane merged into one box, because saying they are separate machines
+cost a third of the width for a distinction that matters to whoever operates
+the cluster and not at all to whoever is reading the page. Confirmed by
+measuring every label's bounding box against its own rectangle in the live
+page, not by eye.
+
+**The scroll reveal was one browser away from a blank page.** In the browser
+this was verified in, `IntersectionObserver` was constructed, given an element
+filling the viewport, and never called back — not even the initial report a
+working implementation always sends. Every armed section therefore stayed at
+opacity 0, and every test passed. Now: the hidden state is applied by the
+directive rather than the stylesheet, `reduce` skips arming entirely, and a
+1.5 s timeout abandons the effect if nothing has reported anywhere. **D-59**,
+and `tests/test_home_page.py` asserts all three.
+
+**F1's fault had a second way in.** The page needed IBM Plex, which is exactly
+the family F1 staged and never used. Importing `theme/caios/_fonts.scss` to get
+it would also have declared `Material Symbols Rounded` against our 65-glyph
+subset while `index.html` still loads Google's complete one — the F1 failure,
+reintroduced from a page-level stylesheet, affecting the whole application. The
+two text faces are declared here instead and the icon family is not named at
+all. **D-61**, with a test.
+
+**There is more that can be checked mechanically than a landing page suggests.**
+Eleven assertions, listed above. The two that will earn their keep are the
+translation-key check in both directions — ngx-translate renders a missing key
+as the key itself, in display type, with no error — and the inventory counts,
+which turn "we curated the catalogue and forgot the home page" into a failing
+test rather than a wrong number on the first page anybody sees.
+
+### What is still outstanding
+
+- A **screenshot pass** at 1440 and 768 px into `docs/screenshots/after/`, and
+  a diff against the F0 baseline to confirm no feature page moved. The theme is
+  untouched by this stage, so the expectation is zero difference.
+- The **narrow layout** was verified by injecting the breakpoint's rules into
+  the live page and shrinking the content column, because the browser available
+  here would not resize its viewport. The reflow is correct; it has not been
+  seen at a real 768 px.
+- The **entrance and reveal animations** were verified as CSS and by their
+  final state. They have not been *watched* — the same browser that would not
+  report intersections is not the place to judge whether motion feels right.
+- R-28 is still live and was seen again here: on a cold load the icon font
+  arrives from Google as a **3.96 MB** download, and every icon renders as its
+  own name until it does. That is F1's business, not F3's, but it is the first
+  thing a visitor sees and it is worth restating.
+
 ---
 
 ## Stage F4 — Motion · half a day
@@ -592,6 +668,41 @@ Every patch breaks when upstream moves the lines it targets.
 deletion in `index.html`, and one additive patch that creates new files and
 changes a single route line. `tests/test_patches.py` turns drift into a failing
 test rather than a failed build on demo day.
+
+### R-38 · A sixth third-party leak, and this one can put another project's words on our screen
+
+**Found on 2026-08-29 while checking that the home page issues no request of its
+own.** It does not. The application shell around it makes three, and one of them
+is new to this list:
+
+```
+GET https://api.github.com/repos/AI4EOSC/status/issues?state=open&…
+```
+
+`src/app/shared/services/platform-status/platform-status.service.ts` fetches
+**AI4EOSC's** GitHub issue tracker from the visitor's browser on every page
+load, three times over — once for a popup, once for the notifications bell, once
+for a Nomad-maintenance banner on the deployments list.
+
+Two problems, and the second is worse than the leak.
+
+1. It is the same objection as the analytics beacon, the model catalogue and the
+   Google fonts: our demo traffic announced to somebody else's server, from a
+   page that is meant to be self-contained.
+2. **It renders another project's operational notices as ours.** An issue
+   labelled `dashboard-popup` in the AI4EOSC status repository becomes a popup
+   in CAIOS, and one labelled `nomad-maintenance` becomes a red banner over our
+   deployments table. Nobody has to do anything wrong for this to happen; it
+   only requires AI4EOSC to have a maintenance window during our demo.
+
+**Not fixed here.** It is outside F3 — the home page does not use it, and the
+fix touches the notifications button and the deployments list. It also needs a
+decision rather than a patch: either point it at a CAIOS status repository, or
+disable it and let the feature read as unconfigured rather than broken, which is
+the rule D-50 already set for exactly this shape of problem.
+
+`scripts/check-branding.sh` should grow an assertion for it in the same change,
+alongside the ones for the analytics beacon and the model list.
 
 ### R-34 · Scope creep
 

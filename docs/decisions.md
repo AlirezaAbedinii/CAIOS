@@ -699,9 +699,87 @@ starts.
 
 ---
 
+## Settled on 2026-08-29 — Stage F3
+
+> **Numbering note.** D-51, D-52 and D-53 were taken on the OSCAR branch and
+> either superseded (D-51, by D-56) or folded into their neighbours before that
+> branch merged. There is no gap to explain; F3 continues at D-58.
+
+**D-58 — Application code CAIOS owns is staged, not patched.**
+D-46 said this for stylesheets. F3 is the first stage where it applies to
+Angular source, and the reasoning is the same one step further: a patch that
+creates a whole module is a patch nobody can review, and every line of it has
+to be re-read whenever anything near it moves.
+
+So `configs/dashboard/home/` is staged verbatim into `src/app/modules/home/`
+and `configs/dashboard/i18n/en.caios.json` is deep-merged into upstream's
+`en.json`, exactly as `caios.json` is merged over `_base.json`. The only
+upstream edit is nine lines of `app.routes.ts`.
+
+The merge rather than a patch matters most for `en.json`: it is 900 lines that
+change whenever any page upstream gains a label, so a patch against it would
+break for reasons that have nothing to do with us.
+
+**D-59 — An animation must not be able to hide content.**
+The scroll reveal hides an element and then shows it again. Both halves have to
+be done by the same script, in that order, or the failure modes are blank
+sections:
+
+- the hidden state is added by the directive, never by the stylesheet, so an
+  element whose script did not run is simply visible;
+- `prefers-reduced-motion` skips arming entirely rather than shortening a
+  transition;
+- and if `IntersectionObserver` reports nothing anywhere on the page within a
+  second and a half, the effect is abandoned and everything is shown.
+
+The third is not defensive programming for its own sake. It was found by
+looking: in one browser context the observer was constructed, given an element
+filling the viewport, and never called back — not even with the initial report
+a working implementation always sends. Without the timeout that browser gets a
+page with five empty sections, and every test still passes.
+
+**D-60 — Every number the home page prints can be pointed at a file.**
+Four counts, three accuracies, three timings, and each one is either read from
+a file in this repository or recorded in `docs/`. `tests/test_home_page.py`
+asserts the counts against `catalog/keep.txt`, `catalog/ai4life-models.txt` and
+`configs/papi/vllm.yaml`, so curating the marketplace and forgetting the home
+page is a failing test rather than a wrong number on the first page anybody
+sees.
+
+There are no users, customers, testimonials or adoption figures on the page,
+for the simple reason that there are none to report. A first page that inflates
+is the cheapest thing in the world for a reviewer to check.
+
+**D-61 — The home page declares its own text faces and never the icon font.**
+It sets IBM Plex Sans and Mono from the WOFF2 files staged since F1, in its own
+lazy-loaded stylesheet, and deliberately does not import
+`theme/caios/_fonts.scss` — which also declares `Material Symbols Rounded`.
+
+A second declaration of the icon family, pointing at our 65-glyph subset while
+`index.html` is still loading Google's complete one, is exactly how F1 turned
+every icon in the dashboard into the word it is named after. The blast radius
+of a missing Plex file is one page falling back to the system sans; the blast
+radius of a redeclared icon font is the whole application. A test asserts the
+icon family is not named anywhere in this directory.
+
+---
+
 ## Log
 
 *Append new decisions below with date and one line of reasoning.*
+
+**2026-08-29** — Stage F3: `/` is a home page. Recorded D-58 to D-61. The page
+states what CAIOS is, who it is for and where it runs, shows the three
+capabilities over one schematic of the actual cluster, walks the no-code /
+low-code / high-code path with a form, a request and a method, and ends on the
+catalogue. It makes no HTTP request of any kind, and a test keeps it that way.
+
+Two things it found that no plan had. The schematic was drawn at a nominal size
+and every label in it was illegible once the SVG scaled into its column — the
+geometry is now laid out for the width the console actually gives it, measured
+in a browser. And the scroll reveal was one browser away from a blank page:
+`IntersectionObserver` never reported, so the armed sections never unarmed.
+D-59 is that, generalised.
 
 **2026-08-12** — Verified all six upstream repositories at HEAD. Recorded D-10 through
 D-18, revised D-02, D-04 and D-06, and closed Q-01. Corrections to `CLAUDE.md` and

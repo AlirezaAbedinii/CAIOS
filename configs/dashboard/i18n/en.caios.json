@@ -111,6 +111,41 @@
             }
         },
 
+        "_comment_demo": "The platform in use. Every label here is a string the dashboard already uses: the two Deploy options are CATALOG.MODULE-DETAIL.DEPLOY.API-PLATFORM and .API-SERVERLESS, and the three column headers are the columns declared in inferences-list.component.ts. The detections are the recorded run in docs/oscar-demo.md, and the timing is the measurement in docs/oscar-gui-guide.md. Nothing here is invented, and the caption tells the reader these are redrawn rather than photographed.",
+        "DEMO": {
+            "INDEX": "05 / In use",
+            "TITLE": "What working with it actually looks like.",
+            "LEAD": "One model, from the catalogue to an answer, in the three screens a researcher passes through. This is the serverless path — the same three steps deploy a workspace or a chat window.",
+            "CAPTION": "The screens above are the dashboard's own labels and columns, redrawn here rather than photographed. The detections and the timing are from a run recorded on this cluster on 26 August 2026.",
+
+            "STEP-1": {
+                "TITLE": "Choose a model, and how to serve it.",
+                "BODY": "The catalogue is curated for medical and neuroscience work. A model's page offers two ways to serve it: a dedicated API that holds a node, or a serverless endpoint that holds nothing between requests.",
+                "BAR": "Marketplace / ai4os-yolo-torch",
+                "DEPLOY": "Deploy",
+                "OPTION-DEDICATED": "Inference API + UI (dedicated)",
+                "OPTION-SERVERLESS": "Inference API (serverless)"
+            },
+
+            "STEP-2": {
+                "TITLE": "It appears under your account.",
+                "BODY": "Inference services are listed with the image they run and when they were created. Everything on this page belongs to the account that is signed in; nobody sees anybody else's work.",
+                "BAR": "Deployments / Inference",
+                "COL-NAME": "Name",
+                "COL-CONTAINER": "Container name",
+                "COL-CREATED": "Creation time (UTC)"
+            },
+
+            "STEP-3": {
+                "TITLE": "Send it something, and get an answer.",
+                "BODY": "The service's page carries an endpoint and a token. Post an input to it and the model's output comes back in the response — and once the reply is sent, nothing is left running.",
+                "BAR": "Inference / yolo-detect",
+                "ENDPOINT": "Endpoint",
+                "TOKEN": "Token",
+                "FOOT": "6 objects · 5.3–5.9 s · 0 containers before or after"
+            }
+        },
+
         "_comment_diagram": "Labels for the cluster schematic. The nodes are the machines in docs/infrastructure.md; nothing here is illustrative.",
         "DIAGRAM": {
             "ALT": "Schematic of the CAIOS cluster: a researcher outside the boundary, the platform inside it, three site nodes holding data that does not move, a GPU node for language models, a serverless node, and an aggregator for federated training.",

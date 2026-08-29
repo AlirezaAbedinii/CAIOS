@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 
 import { CapabilityConsoleComponent } from '../capability-console/capability-console.component';
+import { RevealDirective } from '../../reveal.directive';
 
 /**
  * One row of the masthead inventory plate.
@@ -39,12 +40,23 @@ export interface FormField {
     value: string;
 }
 
+/** One object found by the model, in the recorded run. */
+export interface Detection {
+    label: string;
+    score: string;
+}
+
 @Component({
     selector: 'app-home',
     templateUrl: './home.component.html',
     styleUrls: ['./home.component.scss'],
     changeDetection: ChangeDetectionStrategy.Eager,
-    imports: [RouterLink, TranslatePipe, CapabilityConsoleComponent],
+    imports: [
+        RouterLink,
+        TranslatePipe,
+        CapabilityConsoleComponent,
+        RevealDirective,
+    ],
 })
 export class HomeComponent {
     /**
@@ -76,6 +88,24 @@ export class HomeComponent {
             label: 'HOME.INVENTORY.SITES',
             note: 'HOME.INVENTORY.SITES-NOTE',
         },
+    ];
+
+    /**
+     * The recorded run in docs/oscar-demo.md: `ai4oshub/ai4os-yolo-torch`
+     * against the canonical YOLO demonstration photograph, on 2026-08-26.
+     * Six objects, in the order the model returned them.
+     *
+     * These are an output, not a benchmark. They are here to answer "what does
+     * using it actually look like", which is a different question from "how
+     * good is it", and the page does not claim to answer the second.
+     */
+    protected readonly detections: Detection[] = [
+        { label: 'person', score: '0.862' },
+        { label: 'person', score: '0.849' },
+        { label: 'bus', score: '0.847' },
+        { label: 'person', score: '0.843' },
+        { label: 'person', score: '0.369' },
+        { label: 'stop sign', score: '0.251' },
     ];
 
     /**

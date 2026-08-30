@@ -11,6 +11,9 @@
     "_comment_sidenav": "Overrides _base.json, which points all four of these at cloud.ai4eosc.eu. Storage and MLflow are V1; until they exist, listing them would give the demo two dead links. Add them back when they are real.",
     "sidenavMenu": [],
 
+    "_comment_platform_status": "R-38. Upstream hardcodes AI4EOSC's GitHub issue tracker as the source of platform status notices, in three places, and reads it from the visitor's browser on every page load. Two of those become OUR popup and OUR red maintenance banner if AI4EOSC posts a notice marked for all VOs; and GitHub allows 60 unauthenticated requests an hour per IP address, after which the dashboard shows a red error toast instead. Patch 0005 makes the source configurable and OFF when unset. Blank deliberately - do not remove the key, its presence is what scripts/check-branding.sh asserts. Set it to a CAIOS status repository's issues URL if the feature is ever wanted.",
+    "platformStatusUrl": "",
+
     "_comment_analytics": "_base.json loads https://stats.cloud.ai4eosc.eu/js/script.js, a third-party tracker that would report our demo traffic to somebody else's analytics. Blanked deliberately - do not remove these keys, the merge needs them present to override.",
     "analytics": {
         "src": "",

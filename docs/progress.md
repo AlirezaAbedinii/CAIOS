@@ -51,6 +51,51 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-08-30 — R-38 closed: the dashboard stops reading somebody else's status feed
+
+Found while checking that the new home page issues no request of its own. It
+does not; the shell around it made three, and two of them went to
+`api.github.com/repos/**AI4EOSC**/status/issues` on every full page load.
+
+That feed drives the startup popup, the notifications bell and the red
+maintenance banner on the deployments list. Three consequences, and the
+likeliest is the dullest:
+
+- **The rate limit.** GitHub allows 60 unauthenticated requests an hour per IP
+  address — measured against that endpoint. Two per page load is about thirty
+  loads an hour from one address, and an audience in one building shares one.
+  Past that, every visitor gets a red *"Error retrieving the platform
+  notifications"*. Upstream evidently meets this: their error interceptor has a
+  special case so a 403 **from that exact URL** does not throw the user onto the
+  Forbidden page. Symptom handled, cause not.
+- **Their notice on our screen.** All three paths pass a notice whose VO is
+  `null`, which is what a platform-wide announcement looks like. An AI4EOSC
+  maintenance window, announced correctly by them, would render as our popup and
+  as a red banner over our deployments table.
+- **The leak itself.** The sixth, after the analytics beacon, the model
+  catalogue, the fonts and the icon set.
+
+**Turned off** — patch `0005`, D-62. The source is `platformStatusUrl` in the
+tenant config now, read like every other setting, and empty means no request is
+made at all rather than a request to a default. The bell renders its existing
+"No notifications" and the deployments list renders no banner: unconfigured, not
+broken (D-50). Pointing it at a CAIOS status repository stays available as a
+one-line config change if the feature is ever wanted.
+
+Verified in a browser on the built image: zero requests to any GitHub host, no
+error toast, and the bell's empty state intact. The bundle carries no
+`api.github.com` reference at all.
+
+`scripts/check-branding.sh` gained section 3d, which asserts both halves — the
+served config carries the key blank, **and** the bundle no longer names the
+repository, because either alone can be true while the feature still fires.
+
+> **That check now fails against the running dashboard**, which is still
+> `caios/dashboard:latest`. That is the correct answer to the question it asks:
+> what is deployed still leaks. It goes green when the new image is deployed.
+
+---
+
 ## 2026-08-29 — Stage F3: `/` is a home page
 
 The dashboard's front door used to be `/catalog/modules`, so the first thing

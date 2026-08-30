@@ -394,6 +394,63 @@ everything else visible in a walkthrough is tenant configuration.
 `vendor/` into `build/` and would otherwise overwrite whatever
 `apply-patches.sh` had put there.
 
+### `ai4-dashboard/0005-platform-status-source.patch` — pinned to `c360f20`
+
+**R-38.** Makes the platform-status feed configuration instead of a hardcoded
+reference to another project, and off when unset.
+
+`shared/services/platform-status/platform-status.service.ts` hardcodes
+AI4EOSC's own GitHub issue tracker in three methods:
+
+```ts
+'https://api.github.com/repos/AI4EOSC/status/issues?state=open&…'
+```
+
+Those three feed the startup popup, the notifications bell, and the red
+maintenance banner on the deployments list. Every one of them is fetched **from
+the visitor's browser**, twice on a normal page load and three times on the
+deployments page.
+
+**Two failure modes, and the boring one is likelier.**
+
+*The rate limit.* GitHub allows **60 unauthenticated requests an hour per IP
+address** — measured, not assumed. At two per full page load that is about
+thirty loads an hour from one address, and a demo audience in one building
+shares one. Past that, GitHub answers 403 and the component pops a red
+*"Error retrieving the platform notifications"*. Upstream evidently meets this:
+`core/interceptors/http-error.interceptor.ts` carries a special case so a 403
+**from that exact URL** does not throw the user onto the Forbidden page. That
+is the symptom handled, not the cause.
+
+*Somebody else's words on our screen.* All three paths filter by VO, and the
+filter passes a notice whose `vo` is `null` — which is what a platform-wide
+notice looks like. So an AI4EOSC maintenance window, announced correctly by
+them, renders as our popup and as a red banner over our deployments table. No
+mistake is required by anyone.
+
+**What the patch does.** The URL comes from `platformStatusUrl` in the tenant
+config, read through `AppConfigService` like every other setting, and **an
+empty or absent value means no request is made at all** — each method returns
+an empty list. The bell then renders its existing "No notifications" state and
+the deployments list renders no banner: a feature we do not run looks
+unconfigured, not broken (D-50). `configs/dashboard/caios.json` sets it blank
+deliberately, and `scripts/check-branding.sh` asserts both that the served
+config carries the key blank and that the bundle no longer names the
+repository.
+
+The interceptor guard is kept but generalised to match `/status/issues` rather
+than one project's URL — a status feed answering 403 still must not throw the
+user to the Forbidden page, whatever feed it is.
+
+**This changes the default for an unconfigured tenant**, from "read AI4EOSC" to
+"off". That is the point: a flavour that forgets to set the key should end up
+quiet rather than showing another project's notices.
+
+Upstream's three service tests still exercise the fetch path — the patch adds
+`platformStatusUrl` to `app-config.mock.ts` so they do — and one test is added
+for the CAIOS behaviour, which `httpMock.verify()` makes meaningful: a method
+that quietly made a request after all fails on the unmatched call.
+
 ### `ai4-dashboard/0004-home-route.patch` — pinned to `c360f20`
 
 **Stage F3.** Nine lines in `src/app/app.routes.ts`, and the only upstream file

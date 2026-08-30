@@ -2,6 +2,7 @@
 # Check that the running dashboard reads as CAIOS, not as somebody else's stack.
 #
 #   bash scripts/check-branding.sh
+#   CHECK_DASHBOARD_URL=http://127.0.0.1:18080 bash scripts/check-branding.sh
 #
 # Read-only. Fetches the dashboard and PAPI over HTTPS and inspects what they
 # actually serve, not what the configuration files say they should.
@@ -28,7 +29,19 @@ ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 
-DASH="https://${CAIOS_DASHBOARD_HOST}"
+# Defaults to the deployed dashboard. Override to check a candidate image
+# before deploying it, which is the order the last three visual stages have
+# wanted and could not have:
+#
+#   CHECK_DASHBOARD_URL=http://127.0.0.1:18080 bash scripts/check-branding.sh
+#
+# Sections needing PAPI or a token still run against the live API, so a
+# candidate build is checked against real data rather than against nothing.
+# NOT named DASHBOARD_URL: configs/env/caios.env already exports that, and it is
+# sourced with `set -a` a few lines above — so an override by that name is
+# silently overwritten and the check quietly tests the deployed dashboard while
+# reporting success for a candidate. Found by trying it.
+DASH="${CHECK_DASHBOARD_URL:-https://${CAIOS_DASHBOARD_HOST}}"
 API="https://${CAIOS_API_HOST}"
 VO="${CAIOS_VO:-vo.caios.ca}"
 TMP="$(mktemp -d)"
@@ -205,6 +218,40 @@ if [[ -s "$TMP/main.js" ]]; then
         bad "the bundle still fetches the model list from raw.githubusercontent.com"
     else
         ok "no third-party fetch for the model list"
+    fi
+fi
+
+# ── 3d. the platform-status feed is ours, or it is off ──────────────────────
+#
+# R-38. Upstream reads AI4EOSC's GitHub issue tracker for the popup, the
+# notifications bell and the red maintenance banner on the deployments list —
+# from the visitor's browser, on every page load. Two failure modes, and the
+# less exotic one is the rate limit: GitHub allows 60 unauthenticated requests
+# an hour per IP address, and the dashboard spends two of them per full page
+# load, after which the user gets a red error toast instead. The other is that
+# a notice AI4EOSC marks for all VOs is displayed as ours.
+#
+# Patch 0005 makes the source configuration and OFF when unset. Checked two
+# ways, because either alone can be true while the feature still fires:
+# the served config must carry the key blank, AND the bundle must no longer
+# name the repository.
+echo
+echo "=== 3d. the platform-status feed ==="
+status_url="$(python3 -c "
+import json, sys
+print(json.load(open('$TMP/config.json')).get('platformStatusUrl', '<<absent>>'))
+" 2>/dev/null)"
+case "$status_url" in
+    "")           ok "platformStatusUrl is blank — the feature is off" ;;
+    "<<absent>>") bad "platformStatusUrl is missing from the served config; upstream's default is another project's tracker" ;;
+    *)            ok "platformStatusUrl is set to $status_url" ;;
+esac
+
+if [[ -s "$TMP/main.js" ]]; then
+    if grep -q 'api.github.com/repos/AI4EOSC/status' "$TMP/main.js"; then
+        bad "the bundle still names AI4EOSC's status tracker — patch 0005 did not apply"
+    else
+        ok "the bundle does not name anybody else's status tracker"
     fi
 fi
 

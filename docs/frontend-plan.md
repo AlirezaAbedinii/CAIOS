@@ -669,7 +669,7 @@ deletion in `index.html`, and one additive patch that creates new files and
 changes a single route line. `tests/test_patches.py` turns drift into a failing
 test rather than a failed build on demo day.
 
-### R-38 · A sixth third-party leak, and this one can put another project's words on our screen
+### R-38 · A sixth third-party leak, and this one can put another project's words on our screen — CLOSED 2026-08-30
 
 **Found on 2026-08-29 while checking that the home page issues no request of its
 own.** It does not. The application shell around it makes three, and one of them
@@ -695,14 +695,36 @@ Two problems, and the second is worse than the leak.
    deployments table. Nobody has to do anything wrong for this to happen; it
    only requires AI4EOSC to have a maintenance window during our demo.
 
-**Not fixed here.** It is outside F3 — the home page does not use it, and the
-fix touches the notifications button and the deployments list. It also needs a
-decision rather than a patch: either point it at a CAIOS status repository, or
-disable it and let the feature read as unconfigured rather than broken, which is
-the rule D-50 already set for exactly this shape of problem.
+There is a third consequence, and on the numbers it is the likeliest of the
+three. GitHub allows **60 unauthenticated requests an hour per IP address** —
+measured against that endpoint, not assumed. Two per full page load means about
+thirty loads an hour from one address, and an audience in one building shares
+one. Past that, GitHub answers 403 and the component pops a red *"Error
+retrieving the platform notifications"*. Upstream evidently meets this:
+`http-error.interceptor.ts` carries a special case so a 403 **from that exact
+URL** does not throw the user onto the Forbidden page. The symptom is handled;
+the cause is not.
 
-`scripts/check-branding.sh` should grow an assertion for it in the same change,
-alongside the ones for the analytics beacon and the model list.
+**Closed on 2026-08-30 by turning the feature off** — patch `0005`, D-62. The
+source is now `platformStatusUrl` in the tenant config, read like every other
+setting, and an empty value means no request is made at all rather than a
+request to a default. `configs/dashboard/caios.json` sets it blank deliberately.
+The bell renders its existing "No notifications" state and the deployments list
+renders no banner: unconfigured, not broken (D-50).
+
+The alternative — pointing it at a CAIOS status repository — is still open and
+is a one-line config change whenever the feature is actually wanted. It was not
+taken now because it needs a repository that does not exist and a habit of
+maintaining it, and neither is worth acquiring before a demo.
+
+`scripts/check-branding.sh` grew section 3d in the same change, asserting both
+halves: the served config carries the key blank, **and** the bundle no longer
+names the repository. Either alone can be true while the feature still fires.
+
+> **That check will FAIL against the currently deployed dashboard**, which is
+> still `caios/dashboard:latest` and still fetches. That is correct: the script
+> tests what is running, and what is running still leaks. It goes green when
+> the new image is deployed.
 
 ### R-34 · Scope creep
 

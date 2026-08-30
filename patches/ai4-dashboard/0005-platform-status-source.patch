@@ -1,0 +1,166 @@
+diff --git a/src/app/core/interceptors/http-error.interceptor.ts b/src/app/core/interceptors/http-error.interceptor.ts
+--- a/src/app/core/interceptors/http-error.interceptor.ts
++++ b/src/app/core/interceptors/http-error.interceptor.ts
+@@ -70,9 +70,14 @@ export class HttpErrorInterceptor implements HttpInterceptor {
+                     }
+                     if (
+                         (error.status === 401 || error.status === 403) &&
+-                        !error.url?.includes(
+-                            'https://api.github.com/repos/AI4EOSC/status/issues'
+-                        )
++                        // [CAIOS] Was the AI4EOSC issue tracker's full URL.
++                        // The guard is still wanted — a status feed answering
++                        // 403 must not throw the user onto the Forbidden page,
++                        // and 403 is exactly what an unauthenticated GitHub
++                        // does after 60 requests an hour from one address — but
++                        // the feed is configuration now, so this matches the
++                        // path rather than one project's repository.
++                        !error.url?.includes('/status/issues')
+                     ) {
+                         this.router.navigate([
+                             'forbidden',
+diff --git a/src/app/core/services/app-config/app-config.mock.ts b/src/app/core/services/app-config/app-config.mock.ts
+--- a/src/app/core/services/app-config/app-config.mock.ts
++++ b/src/app/core/services/app-config/app-config.mock.ts
+@@ -8,6 +8,10 @@ export const mockedConfigService: any = {
+         },
+     ],
+     acknowledgments: 'The test AI4EOSC dashboard is a service provided by CSIC',
++    // [CAIOS] Added so the three PlatformStatusService tests below still
++    // exercise the FETCH path. Without a URL the service makes no request at
++    // all, which is the CAIOS default and is covered by its own test.
++    platformStatusUrl: 'https://api.github.com/repos/AI4EOSC/status/issues',
+     analytics: {
+         domain: 'localhost',
+         src: 'http://locahost/js/script.js',
+diff --git a/src/app/core/services/app-config/app-config.service.ts b/src/app/core/services/app-config/app-config.service.ts
+--- a/src/app/core/services/app-config/app-config.service.ts
++++ b/src/app/core/services/app-config/app-config.service.ts
+@@ -95,6 +95,19 @@ export class AppConfigService {
+         return this.appConfig.dummyClientSecret;
+     }
+ 
++    /**
++     * [CAIOS] Base URL of the issue tracker the platform-status feature reads,
++     * or '' to switch that feature off entirely.
++     *
++     * Deliberately has no default. Upstream's default was another project's
++     * tracker, and a flavour that forgets to set this should end up with the
++     * feature quiet rather than with somebody else's maintenance notices.
++     */
++    get platformStatusUrl() {
++        this.checkConfigFileLoaded();
++        return this.appConfig.platformStatusUrl ?? '';
++    }
++
+     get deployedInNomad() {
+         this.checkConfigFileLoaded();
+         return this.appConfig.deployedInNomad;
+diff --git a/src/app/shared/services/platform-status/platform-status.service.spec.ts b/src/app/shared/services/platform-status/platform-status.service.spec.ts
+--- a/src/app/shared/services/platform-status/platform-status.service.spec.ts
++++ b/src/app/shared/services/platform-status/platform-status.service.spec.ts
+@@ -88,6 +88,28 @@ describe('PlatformStatusService', () => {
+         req.flush(mockIssues);
+     });
+ 
++    // [CAIOS] The whole of the change, stated as an assertion. httpMock.verify()
++    // in afterEach is half of it: if any of these three quietly made a request
++    // after all, this test fails on the unmatched call rather than passing.
++    it('makes no request at all when no status URL is configured', (done) => {
++        const service = TestBed.inject(PlatformStatusService);
++        (service as any).appConfigService = { platformStatusUrl: '' };
++
++        service.getPlatformPopup().subscribe((popup) => {
++            expect(popup).toEqual([]);
++            service.getPlatformNotifications().subscribe((notifications) => {
++                expect(notifications).toEqual([]);
++                service
++                    .getNomadClusterNotifications()
++                    .subscribe((nomad) => {
++                        expect(nomad).toEqual([]);
++                        httpMock.expectNone(() => true);
++                        done();
++                    });
++            });
++        });
++    });
++
+     it('should filter by date and vo', () => {
+         const now = new Date();
+         const validNotification: StatusNotification = {
+diff --git a/src/app/shared/services/platform-status/platform-status.service.ts b/src/app/shared/services/platform-status/platform-status.service.ts
+--- a/src/app/shared/services/platform-status/platform-status.service.ts
++++ b/src/app/shared/services/platform-status/platform-status.service.ts
+@@ -6,7 +6,7 @@ import {
+     StatusNotification,
+ } from '@app/shared/interfaces/platform-status.interface';
+ import { TranslateService } from '@ngx-translate/core';
+-import { map, Observable } from 'rxjs';
++import { map, Observable, of } from 'rxjs';
+ 
+ @Injectable({
+     providedIn: 'root',
+@@ -16,9 +16,33 @@ export class PlatformStatusService {
+     translateService = inject(TranslateService);
+     http = inject(HttpClient);
+ 
++    /**
++     * [CAIOS] Where platform-status notices come from, or nothing at all.
++     *
++     * Upstream hardcodes AI4EOSC's own GitHub issue tracker in three places.
++     * That is correct for AI4EOSC and wrong for every other flavour: our
++     * dashboard was asking GitHub, from each visitor's browser, what was wrong
++     * with somebody else's platform — and rendering the answer as our popups,
++     * our bell and a red maintenance banner over our deployments table.
++     *
++     * Unset (our case) means the feature is OFF: no request is made and every
++     * caller gets an empty list, which the bell already renders as "No
++     * notifications" and the deployments list as no banner. D-50 — a feature
++     * we do not run must look unconfigured, not broken.
++     */
++    private get statusIssuesUrl(): string {
++        return this.appConfigService.platformStatusUrl ?? '';
++    }
++
++    private get statusIssuesQuery(): string {
++        return '?state=open&filter=all&sort=created&direction=desc';
++    }
++
+     getPlatformPopup(): Observable<PlatformStatus[]> {
+-        const url =
+-            'https://api.github.com/repos/AI4EOSC/status/issues?state=open&filter=all&sort=created&direction=desc';
++        if (!this.statusIssuesUrl) {
++            return of([]);
++        }
++        const url = this.statusIssuesUrl + this.statusIssuesQuery;
+ 
+         return this.http
+             .get<PlatformStatus[]>(url)
+@@ -36,8 +60,10 @@ export class PlatformStatusService {
+     }
+ 
+     getPlatformNotifications(): Observable<PlatformStatus[]> {
+-        const url =
+-            'https://api.github.com/repos/AI4EOSC/status/issues?state=open&filter=all&sort=created&direction=desc';
++        if (!this.statusIssuesUrl) {
++            return of([]);
++        }
++        const url = this.statusIssuesUrl + this.statusIssuesQuery;
+ 
+         return this.http
+             .get<PlatformStatus[]>(url)
+@@ -55,8 +81,13 @@ export class PlatformStatusService {
+     }
+ 
+     getNomadClusterNotifications(): Observable<PlatformStatus[]> {
++        if (!this.statusIssuesUrl) {
++            return of([]);
++        }
+         const url =
+-            'https://api.github.com/repos/AI4EOSC/status/issues?state=open&filter=all&sort=created&direction=desc&labels=nomad-maintenance';
++            this.statusIssuesUrl +
++            this.statusIssuesQuery +
++            '&labels=nomad-maintenance';
+         return this.http.get<PlatformStatus[]>(url);
+     }
+ 

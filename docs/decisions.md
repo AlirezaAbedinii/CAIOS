@@ -764,9 +764,40 @@ icon family is not named anywhere in this directory.
 
 ---
 
+## Settled on 2026-08-30
+
+**D-62 — The platform-status feed is off, not pointed somewhere.**
+Upstream reads AI4EOSC's GitHub issue tracker for the startup popup, the
+notifications bell and the maintenance banner on the deployments list, from the
+visitor's browser, on every page load. Patch `0005` makes the source
+configuration; `configs/dashboard/caios.json` leaves it blank.
+
+Two options were real. **Point it at a CAIOS status repository** — more useful,
+and a one-line change whenever it is wanted, but it needs a repository that does
+not exist and the habit of maintaining it, neither of which is worth acquiring
+before a demo. **Turn it off** — the feature then reads as unconfigured rather
+than broken, which is the rule D-50 already set.
+
+Off, and the key is present-and-empty rather than absent, so the served config
+states the decision instead of leaving it to a default. The same reasoning as
+the analytics keys, which are blanked rather than deleted.
+
+The number that settled it: GitHub allows **60 unauthenticated requests an hour
+per IP address**, the dashboard spends two per full page load, and an audience
+in one building shares one address. Past thirty loads, every visitor gets a red
+error toast — which is a likelier failure than the one that prompted the look,
+and a worse one to meet on a projector.
+
+---
+
 ## Log
 
 *Append new decisions below with date and one line of reasoning.*
+
+**2026-08-30** — R-38 closed: the dashboard no longer reads another project's
+status feed. Patch `0005`, D-62, `tests/test_platform_status.py`, and section 3d
+of `scripts/check-branding.sh` — which fails until the new image is deployed,
+because it tests what is running rather than what is committed.
 
 **2026-08-29** — Stage F3: `/` is a home page. Recorded D-58 to D-61. The page
 states what CAIOS is, who it is for and where it runs, shows the three

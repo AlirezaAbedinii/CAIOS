@@ -177,7 +177,7 @@ Check `config.json` first — it is served at
 `/assets/config/config.json` and shows exactly what the running page believes:
 
 ```bash
-curl -s https://dashboard.<CTRL_IP>.sslip.io/assets/config/config.json | python3 -m json.tool
+curl -s https://dashboard.134.87.8.230.sslip.io/assets/config/config.json | python3 -m json.tool
 ```
 
 `apiURL` and `issuer` are the two that matter. A wrong `issuer` produces a login
@@ -224,7 +224,7 @@ and is safe to email, paste or commit anywhere. The private half is
 Open this in the browser that has the problem and save the file:
 
 ```
-https://dashboard.<CTRL_IP>.sslip.io/caios-ca.pem
+https://dashboard.134.87.8.230.sslip.io/caios-ca.pem
 ```
 
 You will have to click past the certificate warning once to reach it, which is
@@ -237,8 +237,8 @@ Visit each hostname once and click through its warning, so the browser holds a
 separate exception for each:
 
 ```
-https://api.<CTRL_IP>.sslip.io/docs
-https://auth.<CTRL_IP>.sslip.io/realms/caios
+https://api.134.87.8.230.sslip.io/docs
+https://auth.134.87.8.230.sslip.io/realms/caios
 ```
 
 Then reload the dashboard. This works, but the exceptions are per-browser and

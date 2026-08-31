@@ -44,14 +44,44 @@ URL, in any file in this directory.
 
 ---
 
+## Who it is written for
+
+**Medical and neuroscience academics, not engineers.** They have not heard of
+the scheduler, they do not know what a control plane is, and a count of machines
+tells them only how small the platform is this month.
+
+So the page carries no infrastructure vocabulary and no size of the
+installation, and `tests/test_home_page.py` enforces both against a word list
+rather than against anyone's memory. Those words are easy to reintroduce by
+accident, in a sentence that reads perfectly well to whoever wrote it. D-63.
+
+There is also a word budget on the visible copy, and no em dashes.
+
 ## Layout
 
 ```
 home.module.ts                    NgModule wrapper, matching every other module
 home-routing.module.ts            one route, path ''
+reveal.directive.ts               scroll reveal, and its way out
 components/
-  home/                           the page: sections, tokens, @font-face
+  home/                           the page: three blocks, tokens, @font-face
+  stage/                          six slides in two groups, and the timer
+  slide-figure/                   the six drawings, one user space
 ```
+
+Three blocks and nothing else: what this is, the stage, and a way in. The stage
+is what used to be five stacked sections. D-64.
+
+## One trap, twice
+
+**A CSS property beats an SVG presentation attribute.** Do not set `transform`,
+`text-anchor`, `fill`, `stroke` or `opacity` in a template when the stylesheet
+styles them.
+
+It cost an afternoon twice. `transform` on the hero tiles moved all twelve to
+the origin and stacked them, and `text-anchor` on the chart caption centred it
+on the left edge of the plot and ran it off the drawing. Both look exactly like
+a rendering failure; neither logs anything. D-65, and there is a test.
 
 Components are standalone and declared in the module's `imports`, which is how
 upstream does it (see `src/app/modules/not-found/`).

@@ -51,6 +51,64 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-08-31 — The home page, rewritten for the people who will read it
+
+The first version was written for the wrong person. It described the platform
+the way its builders describe it to each other: cluster size, GPU model,
+scheduler, control plane, container, bearer token. All true, none of it any use
+to a clinician-scientist, which is who opens this page.
+
+**Now three blocks**: what this is, one stage carrying six slides, and a way in.
+It was seven sections and about five thousand pixels.
+
+The six slides are the three capabilities and the three depths of control, in
+two labelled groups, because they answer two different questions. In Use is
+gone: it and Depth of Control were the same argument told twice.
+
+**The architecture diagram is gone too.** It was accurate and useless. Each
+slide now carries a drawing of what the capability means, and the federated
+slide carries the real accuracy curve from `demo/fl/results/`, projected from
+the recorded numbers rather than drawn by hand, with the best single site and
+the pooled ceiling as reference levels. It is the most credible thing the
+project has, and a research audience reads a figure more fluently than a
+paragraph.
+
+### Three faults it found, none of which any existing test could see
+
+**A CSS property beats an SVG presentation attribute.** The hero motif
+positions twelve tiles with `transform` attributes; reusing the entrance
+keyframe, which ends on `transform: none`, moved all twelve to the origin and
+stacked them. Twelve elements in the DOM, twelve correct attributes, one tile on
+screen. The chart caption did the same with `text-anchor` and ran off the
+drawing. Found by measuring bounding boxes in a browser. **D-65**, with a test.
+
+**Unhashed assets are cacheable, and one of them is every string in the
+interface.** After the rewrite a browser that had opened the previous build kept
+rendering the previous build's words and showed raw translation keys for
+anything new. Nothing was wrong with the deployment. Patch `0006`, **D-66**.
+Upstream had tried to prevent this and written `location = /config.json`, which
+matches nothing, because the application fetches `/assets/config/config.json`.
+
+**The same hole covers the runtime configuration**, which is worse than stale
+copy: change the API address and a returning visitor keeps talking to the old
+one.
+
+### Tests
+
+`tests/test_home_page.py` is twenty assertions now, and the new ones encode what
+the feedback asked for rather than what the code happens to do: no
+infrastructure vocabulary, no count of machines, no em dashes, a word budget on
+the visible copy, six slides in two groups, the chart equal to the recorded
+curve, and no presentation attribute that the stylesheet also sets.
+
+`scripts/check-home-page.sh` is the other half, and it has to exist for the same
+reason the branding check does: the unit tests read the repository and cannot
+see a build. It checks a running dashboard, and it takes
+`CHECK_DASHBOARD_URL` so a candidate image can be checked before it is
+deployed.
+
+---
+
 ## 2026-08-30 — R-38 closed: the dashboard stops reading somebody else's status feed
 
 Found while checking that the new home page issues no request of its own. It

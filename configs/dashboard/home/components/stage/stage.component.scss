@@ -1,0 +1,235 @@
+/* [CAIOS] The stage.
+ *
+ * The one dark surface on the page and its centre of gravity. It reads as an
+ * instrument: a bezel, a tab strip cut into the top edge, hairlines rather
+ * than shadows, and a drawing doing the explaining.
+ *
+ * Tokens are inherited from the home component's :host. Nothing here defines
+ * a colour of its own.
+ */
+
+/* Must match DWELL in the component. There is no way to share one value
+   between TypeScript and a stylesheet without inlining a style attribute, so
+   it is stated in both places and said so here. */
+:host {
+    --dwell: 8500ms;
+
+    display: block;
+}
+
+.stage {
+    background: var(--h-console);
+    border-radius: var(--h-radius);
+    color: var(--h-ink-lit);
+    overflow: hidden;
+}
+
+/* ─────────────────────────────────────────────────────────────────── tabs */
+
+.stage__nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-bottom: 1px solid var(--h-rule-lit);
+}
+
+.group {
+    border-left: 1px solid var(--h-rule-lit);
+    padding: clamp(14px, 1.6vw, 20px) 0 0;
+
+    &:first-child {
+        border-left: 0;
+    }
+}
+
+.group__label {
+    margin: 0 0 var(--space-s);
+    padding-inline: clamp(16px, 1.8vw, 24px);
+    font-family: var(--h-mono);
+    font-size: var(--h-label);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--h-ink-lit-3);
+}
+
+.group__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tab {
+    position: relative;
+    padding: 10px clamp(10px, 1.2vw, 16px) 16px;
+    background: none;
+    border: 0;
+    color: var(--h-ink-lit-3);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        color var(--h-motion),
+        background var(--h-motion);
+
+    &:hover {
+        color: var(--h-ink-lit-2);
+        background: rgba(163, 214, 224, 0.04);
+    }
+
+    &.is-active {
+        color: var(--h-ink-lit);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--h-accent-lit);
+        outline-offset: -3px;
+    }
+}
+
+.tab__name {
+    display: block;
+    font-size: var(--h-small);
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+}
+
+/* The dwell indicator. The base rule shows which slide is showing; the overlay
+   crosses it over the same interval the timer uses, so a reader can see that
+   the stage is about to move and how soon. */
+.tab__rule {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: transparent;
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: var(--h-accent-lit);
+        transform: scaleX(0);
+        transform-origin: left center;
+    }
+}
+
+.tab.is-active .tab__rule {
+    background: rgba(55, 207, 228, 0.28);
+
+    &::after {
+        animation: tab-dwell var(--dwell) linear forwards;
+    }
+}
+
+/* Hovering pauses the timer, so it pauses the indicator too. The two
+   disagreeing would be worse than having no indicator at all. */
+.stage.is-paused .tab.is-active .tab__rule::after {
+    animation-play-state: paused;
+}
+
+/* Once the reader has chosen, or has asked for reduced motion, nothing is
+   counting down and the indicator is simply the active marker. */
+.stage.is-manual .tab.is-active .tab__rule::after {
+    animation: none;
+    transform: scaleX(1);
+}
+
+@keyframes tab-dwell {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+
+/* ────────────────────────────────────────────────────────────────── panel */
+
+.stage__panel {
+    padding: clamp(26px, 3.2vw, 46px);
+
+    &:focus-visible {
+        outline: 2px solid var(--h-accent-lit);
+        outline-offset: -4px;
+    }
+}
+
+.slide {
+    display: grid;
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+    gap: clamp(28px, 3.6vw, 56px);
+    align-items: center;
+    /* A floor, so the panel does not resize under the reader as the slides
+       change. Measured against the tallest of the six. */
+    min-height: 340px;
+    animation: slide-enter 360ms cubic-bezier(0.2, 0, 0.2, 1) both;
+}
+
+@keyframes slide-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.slide__title {
+    margin: 0 0 var(--space-lg);
+    font-size: clamp(1.375rem, 1.05rem + 1vw, 1.875rem);
+    font-weight: 400;
+    line-height: 1.16;
+    letter-spacing: -0.024em;
+    color: var(--h-ink-lit);
+    text-wrap: balance;
+}
+
+.slide__body {
+    max-width: 46ch;
+    margin: 0;
+    font-size: var(--h-sub);
+    line-height: 1.62;
+    color: var(--h-ink-lit-2);
+}
+
+/* ────────────────────────────────────────────────────────── narrow view */
+
+@media (max-width: 900px) {
+    .stage__nav {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .group {
+        border-left: 0;
+        border-top: 1px solid var(--h-rule-lit);
+
+        &:first-child {
+            border-top: 0;
+        }
+    }
+
+    .slide {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+    }
+
+    /* The drawing first: on a small screen it is what tells the six slides
+       apart at a glance. */
+    .slide__figure {
+        order: -1;
+    }
+}
+
+/* ──────────────────────────────────────────────────────── reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+    .slide {
+        animation: none;
+    }
+
+    .tab.is-active .tab__rule::after {
+        animation: none;
+        transform: scaleX(1);
+    }
+}

@@ -1,0 +1,91 @@
+<!--
+  Two groups of tabs and one panel. The groups are labelled because the six
+  slides answer two different questions, and saying which is which costs one
+  line and saves the reader working it out.
+-->
+<div
+    class="stage"
+    [class.is-paused]="paused"
+    [class.is-manual]="manual"
+    (mouseenter)="engage(true)"
+    (mouseleave)="engage(false)"
+    (focusin)="engage(true)"
+    (focusout)="engage(false)"
+>
+    <div
+        class="stage__nav"
+        role="tablist"
+        [attr.aria-label]="'HOME.STAGE.TABLIST' | translate"
+        (keydown)="onKeydown($event)"
+    >
+        <div class="group">
+            <p class="group__label">
+                {{ 'HOME.STAGE.GROUP-WHAT' | translate }}
+            </p>
+            <div class="group__tabs">
+                @for (slide of whatSlides; track slide.id) {
+                    <button
+                        type="button"
+                        class="tab"
+                        role="tab"
+                        [class.is-active]="indexOf(slide) === activeIndex()"
+                        [attr.aria-selected]="indexOf(slide) === activeIndex()"
+                        aria-controls="stage-panel"
+                        [id]="'stage-tab-' + slide.id"
+                        (click)="select(indexOf(slide))"
+                    >
+                        <span class="tab__name">{{ slide.tab | translate }}</span>
+                        <span class="tab__rule" aria-hidden="true"></span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="group">
+            <p class="group__label">{{ 'HOME.STAGE.GROUP-HOW' | translate }}</p>
+            <div class="group__tabs">
+                @for (slide of howSlides; track slide.id) {
+                    <button
+                        type="button"
+                        class="tab"
+                        role="tab"
+                        [class.is-active]="indexOf(slide) === activeIndex()"
+                        [attr.aria-selected]="indexOf(slide) === activeIndex()"
+                        aria-controls="stage-panel"
+                        [id]="'stage-tab-' + slide.id"
+                        (click)="select(indexOf(slide))"
+                    >
+                        <span class="tab__name">{{ slide.tab | translate }}</span>
+                        <span class="tab__rule" aria-hidden="true"></span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div
+        class="stage__panel"
+        id="stage-panel"
+        role="tabpanel"
+        [attr.aria-labelledby]="'stage-tab-' + active.id"
+        tabindex="0"
+    >
+        <!--
+          Keyed on the slide id so Angular replaces the subtree rather than
+          patching it, which is what makes the entrance run on every change
+          instead of only the first.
+        -->
+        @for (slide of [active]; track slide.id) {
+            <div class="slide">
+                <div class="slide__text">
+                    <h3 class="slide__title">{{ slide.title | translate }}</h3>
+                    <p class="slide__body">{{ slide.body | translate }}</p>
+                </div>
+
+                <div class="slide__figure">
+                    <app-slide-figure [figure]="slide.id" />
+                </div>
+            </div>
+        }
+    </div>
+</div>

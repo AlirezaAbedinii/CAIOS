@@ -1,0 +1,251 @@
+/* [CAIOS] The slide figures.
+ *
+ * One visual language across all six: hairlines, almost nothing filled, and
+ * the warm accent reserved for the two marks that mean "this does not leave".
+ * Colours are the page's own tokens, inherited through the DOM.
+ *
+ * Sizes are set for the width the stage gives the figure, which is around
+ * 480 CSS pixels on a desktop. That is why the user space is 480 wide: at
+ * roughly 1:1 a 12px label is a 12px label, and nothing has to be guessed.
+ */
+
+:host {
+    display: block;
+}
+
+.figure {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+/* ─────────────────────────────────────────────────────────── shared marks */
+
+.rule,
+.axis {
+    stroke: var(--h-rule-lit);
+    stroke-width: 1;
+}
+
+.label {
+    font-family: var(--h-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    fill: var(--h-ink-lit-3);
+    text-anchor: middle;
+}
+
+.label--above {
+    fill: var(--h-ink-lit-2);
+}
+
+.label--start {
+    text-anchor: start;
+}
+
+.label--tight {
+    font-size: 10.5px;
+}
+
+.arrow {
+    stroke: var(--h-ink-lit-2);
+    stroke-width: 1.2;
+}
+
+.arrow-head {
+    fill: var(--h-ink-lit-2);
+}
+
+.sheet-line {
+    stroke: var(--h-rule-lit-strong);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+}
+
+/* ────────────────────────────────────────────────── on demand: the timeline
+   The flat stretches are drawn as a dotted absence and the request as the one
+   solid shape in the figure. The contrast is the whole point being made. */
+
+.flat {
+    stroke: var(--h-ink-lit-3);
+    stroke-width: 1.5;
+    stroke-dasharray: 1 5;
+    stroke-linecap: round;
+}
+
+.burst {
+    fill: rgba(55, 207, 228, 0.14);
+    stroke: var(--h-accent-lit);
+    stroke-width: 1.5;
+}
+
+/* ──────────────────────────────────────────────────── federated: the chart */
+
+.curve {
+    fill: none;
+    stroke: var(--h-accent-lit);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.curve-end {
+    fill: var(--h-accent-lit);
+}
+
+.reference {
+    stroke: var(--h-ink-lit-3);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+
+.reading {
+    font-family: var(--h-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    fill: var(--h-ink-lit-2);
+}
+
+.reading--lit {
+    fill: var(--h-accent-lit);
+}
+
+.reading-note {
+    font-family: var(--h-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    fill: var(--h-ink-lit-3);
+}
+
+.reading-note--lit {
+    fill: var(--h-ink-lit-2);
+}
+
+/* ─────────────────────────────────────────────── private models: enclosure
+   The boundary and the cross are the only warm marks in the whole set, and
+   they mean the same thing the rule beside the hero statement means. */
+
+.boundary {
+    fill: rgba(168, 69, 44, 0.04);
+    stroke: var(--h-boundary);
+    stroke-width: 1;
+    stroke-dasharray: 3 5;
+}
+
+.boundary-label {
+    font-family: var(--h-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    fill: var(--h-boundary);
+}
+
+.sheet,
+.bubble {
+    fill: rgba(163, 214, 224, 0.05);
+    stroke: var(--h-rule-lit-strong);
+    stroke-width: 1;
+}
+
+.blocked {
+    stroke: var(--h-ink-lit-3);
+    stroke-width: 1.2;
+    stroke-dasharray: 3 4;
+}
+
+.cross line {
+    stroke: var(--h-boundary);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.outside {
+    fill: none;
+    stroke: var(--h-rule-lit);
+    stroke-width: 1;
+    stroke-dasharray: 2 4;
+}
+
+/* ─────────────────────────────────────────── the three ways of working in */
+
+.panel {
+    fill: rgba(163, 214, 224, 0.04);
+    stroke: var(--h-rule-lit-strong);
+    stroke-width: 1;
+}
+
+.panel--small {
+    fill: none;
+}
+
+.panel-bar {
+    stroke: var(--h-rule-lit);
+    stroke-width: 1;
+}
+
+.field-label {
+    font-family: var(--h-sans);
+    font-size: 11px;
+    fill: var(--h-ink-lit-3);
+}
+
+.field {
+    fill: none;
+    stroke: var(--h-rule-lit-strong);
+    stroke-width: 1;
+}
+
+.field--filled {
+    fill: rgba(163, 214, 224, 0.08);
+}
+
+.dots circle {
+    fill: var(--h-ink-lit-3);
+}
+
+.submit {
+    fill: var(--h-accent-lit);
+}
+
+.submit-label {
+    font-family: var(--h-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    fill: var(--h-console);
+    text-anchor: middle;
+}
+
+.cell {
+    fill: none;
+    stroke: var(--h-rule-lit);
+    stroke-width: 1;
+}
+
+.cell-mark {
+    font-family: var(--h-mono);
+    font-size: 10px;
+    fill: var(--h-ink-lit-3);
+}
+
+.cell-bar {
+    stroke: var(--h-rule-lit-strong);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+/* One cell is running. Marked rather than animated: a loop on a landing page
+   asks to be watched, and this one has nothing to show. */
+.is-running {
+    .cell {
+        stroke: var(--h-accent-lit);
+    }
+
+    .cell-mark {
+        fill: var(--h-accent-lit);
+    }
+
+    .cell-bar {
+        stroke: rgba(55, 207, 228, 0.55);
+    }
+}

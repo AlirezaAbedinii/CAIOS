@@ -394,6 +394,41 @@ everything else visible in a walkthrough is tenant configuration.
 `vendor/` into `build/` and would otherwise overwrite whatever
 `apply-patches.sh` had put there.
 
+### `ai4-dashboard/0006-no-cache-runtime-assets.patch` — pinned to `c360f20`
+
+Everything the Angular build emits carries a content hash, so a new build is a
+new filename and a browser cannot serve a stale one. Three files are not built
+and do not change name:
+
+```
+/assets/config/config.json   the API address, the issuer, the client id
+/assets/config/vllm.yaml     the model catalogue the cards are drawn from
+/assets/i18n/en.json         every string in the interface
+```
+
+`docker/nginx.conf` sends no cache header for any of them, so nginx answers
+with `ETag` and `Last-Modified` only and a browser is then free to reuse its
+copy for as long as its own heuristic allows.
+
+**Found by deploying.** After rewriting every string on the home page, a
+browser that had opened the previous build kept rendering the previous build's
+words against the new bundle, and the page showed raw translation keys for the
+strings that were new. Nothing was wrong with the deployment.
+
+The same hole covers the runtime configuration, which is worse: change
+`API_SERVER` and a returning visitor talks to the old address.
+
+**Upstream tried to prevent exactly this and missed.** `nginx.conf` already
+carries a no-cache block for `config.json` — as `location = /config.json`,
+which matches nothing, because the application fetches
+`/assets/config/config.json`. The patch leaves that block alone, notes that it
+is dead, and adds a regular-expression location covering both directories. A
+regex location takes precedence over the prefix match above it, so it wins for
+these two directories and nothing else.
+
+Fonts and images are deliberately **not** covered. They are large, they change
+rarely, and caching them is worth having.
+
 ### `ai4-dashboard/0005-platform-status-source.patch` — pinned to `c360f20`
 
 **R-38.** Makes the platform-status feed configuration instead of a hardcoded

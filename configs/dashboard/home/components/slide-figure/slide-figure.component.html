@@ -1,0 +1,244 @@
+<!--
+  One user space for all six, so the drawings sit at the same weight and the
+  slide does not jump as it changes.
+-->
+<svg
+    class="figure"
+    [attr.data-figure]="figure"
+    viewBox="0 0 480 300"
+    preserveAspectRatio="xMidYMid meet"
+    role="img"
+    [attr.aria-label]="'HOME.STAGE.' + figureKey + '.FIGURE-ALT' | translate"
+>
+    @switch (figure) {
+        <!-- ─────────────────────────────────── on demand: nothing, then something, then nothing -->
+        @case ('serverless') {
+            <g class="timeline">
+                <line class="rule" x1="40" y1="212" x2="440" y2="212" />
+
+                <!-- the two flat stretches, drawn as an absence -->
+                <line class="flat" x1="40" y1="212" x2="186" y2="212" />
+                <line class="flat" x1="294" y1="212" x2="440" y2="212" />
+
+                <!-- the request, and the only thing on the page that is solid -->
+                <path class="burst" d="M186,212 L186,120 L294,120 L294,212 Z" />
+                <line class="arrow" x1="240" y1="66" x2="240" y2="110" />
+                <path class="arrow-head" d="M240,118 l-5,-9 h10 Z" />
+
+                <text class="label label--above" x="240" y="56">
+                    {{ 'HOME.STAGE.SERVERLESS.FIGURE-ACTIVE' | translate }}
+                </text>
+                <text class="label" x="113" y="240">
+                    {{ 'HOME.STAGE.SERVERLESS.FIGURE-IDLE' | translate }}
+                </text>
+                <text class="label" x="367" y="240">
+                    {{ 'HOME.STAGE.SERVERLESS.FIGURE-IDLE-2' | translate }}
+                </text>
+            </g>
+        }
+
+        <!-- ─────────────────────────────────── federated: the measurement, drawn -->
+        @case ('federated') {
+            <g class="chart">
+                <line
+                    class="axis"
+                    [attr.x1]="plotBox.x0"
+                    [attr.y1]="plotBox.y0 - 8"
+                    [attr.x2]="plotBox.x0"
+                    [attr.y2]="plotBox.y1"
+                />
+                <line
+                    class="axis"
+                    [attr.x1]="plotBox.x0"
+                    [attr.y1]="plotBox.y1"
+                    [attr.x2]="plotBox.x1 + 6"
+                    [attr.y2]="plotBox.y1"
+                />
+
+                <!-- what pooling everything would have reached -->
+                <line
+                    class="reference"
+                    [attr.x1]="plotBox.x0"
+                    [attr.y1]="pooledY"
+                    [attr.x2]="plotBox.x1"
+                    [attr.y2]="pooledY"
+                />
+                <text class="reading" [attr.x]="plotBox.x1 + 12" [attr.y]="pooledY - 6">
+                    {{ labels.pooled }}
+                </text>
+                <text class="reading-note" [attr.x]="plotBox.x1 + 12" [attr.y]="pooledY + 8">
+                    {{ 'HOME.STAGE.FEDERATED.FIGURE-POOLED' | translate }}
+                </text>
+
+                <!-- what the strongest single site reached on its own -->
+                <line
+                    class="reference"
+                    [attr.x1]="plotBox.x0"
+                    [attr.y1]="bestSingleY"
+                    [attr.x2]="plotBox.x1"
+                    [attr.y2]="bestSingleY"
+                />
+                <text class="reading" [attr.x]="plotBox.x1 + 12" [attr.y]="bestSingleY - 6">
+                    {{ labels.single }}
+                </text>
+                <text class="reading-note" [attr.x]="plotBox.x1 + 12" [attr.y]="bestSingleY + 8">
+                    {{ 'HOME.STAGE.FEDERATED.FIGURE-SINGLE' | translate }}
+                </text>
+
+                <polyline class="curve" [attr.points]="curvePoints" />
+                <circle
+                    class="curve-end"
+                    [attr.cx]="finalPoint.x"
+                    [attr.cy]="finalPoint.y"
+                    r="3.5"
+                />
+                <text class="reading reading--lit" [attr.x]="plotBox.x0" [attr.y]="plotBox.y0 - 16">
+                    {{ labels.best }}
+                </text>
+                <text
+                    class="reading-note reading-note--lit"
+                    [attr.x]="plotBox.x0 + 48"
+                    [attr.y]="plotBox.y0 - 16"
+                >
+                    {{ 'HOME.STAGE.FEDERATED.FIGURE-FEDERATED' | translate }}
+                </text>
+
+                <!-- text-anchor as a class, not an attribute: `.label` sets
+                     it in CSS, and a CSS property beats a presentation
+                     attribute every time. Set as an attribute here the caption
+                     centred itself on x=62 and ran off the left of the
+                     drawing. -->
+                <text class="label label--start" x="62" y="252">
+                    {{ 'HOME.STAGE.FEDERATED.FIGURE-CAPTION' | translate }}
+                </text>
+            </g>
+        }
+
+        <!-- ─────────────────────────────────── private models: it does not leave -->
+        @case ('llm') {
+            <g class="enclosure">
+                <rect class="boundary" x="26" y="44" width="286" height="196" rx="3" />
+                <text class="boundary-label" x="26" y="34">
+                    {{ 'HOME.STAGE.LLM.FIGURE-BOUNDARY' | translate }}
+                </text>
+
+                <!-- a page of notes -->
+                <rect class="sheet" x="56" y="76" width="104" height="128" rx="2" />
+                <line class="sheet-line" x1="70" y1="102" x2="146" y2="102" />
+                <line class="sheet-line" x1="70" y1="118" x2="146" y2="118" />
+                <line class="sheet-line" x1="70" y1="134" x2="128" y2="134" />
+                <line class="sheet-line" x1="70" y1="150" x2="146" y2="150" />
+                <line class="sheet-line" x1="70" y1="166" x2="112" y2="166" />
+                <text class="label label--tight" x="108" y="222">
+                    {{ 'HOME.STAGE.LLM.FIGURE-INSIDE' | translate }}
+                </text>
+
+                <!-- and the answer, staying beside it -->
+                <path
+                    class="bubble"
+                    d="M196,96 h84 a3,3 0 0 1 3,3 v52 a3,3 0 0 1 -3,3 h-64 l-12,12 v-12 h-8 a3,3 0 0 1 -3,-3 v-52 a3,3 0 0 1 3,-3 Z"
+                />
+                <line class="sheet-line" x1="208" y1="118" x2="270" y2="118" />
+                <line class="sheet-line" x1="208" y1="134" x2="252" y2="134" />
+
+                <!-- the outside, and the crossing that does not happen -->
+                <line class="blocked" x1="312" y1="142" x2="368" y2="142" />
+                <g class="cross">
+                    <line x1="333" y1="133" x2="347" y2="151" />
+                    <line x1="347" y1="133" x2="333" y2="151" />
+                </g>
+                <rect class="outside" x="370" y="112" width="86" height="60" rx="3" />
+                <text class="label label--tight" x="413" y="190">
+                    {{ 'HOME.STAGE.LLM.FIGURE-OUTSIDE' | translate }}
+                </text>
+            </g>
+        }
+
+        <!-- ─────────────────────────────────── no code: a short form -->
+        @case ('no-code') {
+            <g class="panel-figure">
+                <rect class="panel" x="76" y="42" width="328" height="216" rx="3" />
+                <line class="panel-bar" x1="76" y1="74" x2="404" y2="74" />
+
+                <text class="field-label" x="104" y="106">
+                    {{ 'HOME.STAGE.NO-CODE.FIGURE-FIELD-1' | translate }}
+                </text>
+                <rect class="field" x="104" y="114" width="272" height="24" rx="2" />
+
+                <text class="field-label" x="104" y="162">
+                    {{ 'HOME.STAGE.NO-CODE.FIGURE-FIELD-2' | translate }}
+                </text>
+                <rect class="field" x="104" y="170" width="272" height="24" rx="2" />
+
+                <rect class="submit" x="104" y="212" width="92" height="26" rx="2" />
+                <text class="submit-label" x="150" y="229">
+                    {{ 'HOME.STAGE.NO-CODE.FIGURE-SUBMIT' | translate }}
+                </text>
+            </g>
+        }
+
+        <!-- ─────────────────────────────────── some code: an address and a key -->
+        @case ('low-code') {
+            <g class="panel-figure">
+                <rect class="panel" x="30" y="76" width="248" height="148" rx="3" />
+                <line class="panel-bar" x1="30" y1="106" x2="278" y2="106" />
+
+                <text class="field-label" x="54" y="140">
+                    {{ 'HOME.STAGE.LOW-CODE.FIGURE-ADDRESS' | translate }}
+                </text>
+                <rect class="field field--filled" x="54" y="148" width="200" height="16" rx="2" />
+
+                <text class="field-label" x="54" y="184">
+                    {{ 'HOME.STAGE.LOW-CODE.FIGURE-KEY' | translate }}
+                </text>
+                <g class="dots">
+                    @for (d of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; track d) {
+                        <circle [attr.cx]="60 + d * 14" cy="197" r="3" />
+                    }
+                </g>
+
+                <line class="arrow" x1="292" y1="150" x2="336" y2="150" />
+                <path class="arrow-head" d="M344,150 l-9,-5 v10 Z" />
+
+                <!-- the work it joins -->
+                <rect class="panel panel--small" x="352" y="104" width="98" height="92" rx="3" />
+                <line class="sheet-line" x1="368" y1="132" x2="434" y2="132" />
+                <line class="sheet-line" x1="368" y1="148" x2="412" y2="148" />
+                <line class="sheet-line" x1="368" y1="164" x2="424" y2="164" />
+            </g>
+        }
+
+        <!-- ─────────────────────────────────── full control: a notebook -->
+        @default {
+            <g class="panel-figure">
+                <rect class="panel" x="64" y="30" width="352" height="240" rx="3" />
+                <line class="panel-bar" x1="64" y1="60" x2="416" y2="60" />
+
+                @for (cell of cells; track cell.y; let i = $index) {
+                    <g [class.is-running]="i === 1">
+                        <text class="cell-mark" x="86" [attr.y]="cell.y + 12">
+                            {{ 'HOME.STAGE.HIGH-CODE.FIGURE-CELL' | translate }}
+                        </text>
+                        <rect
+                            class="cell"
+                            x="116"
+                            [attr.y]="cell.y - 6"
+                            width="278"
+                            [attr.height]="18 * cell.bars.length + 14"
+                            rx="2"
+                        />
+                        @for (bar of cell.bars; track $index; let b = $index) {
+                            <line
+                                class="cell-bar"
+                                x1="132"
+                                [attr.y1]="cell.y + 10 + b * 18"
+                                [attr.x2]="132 + bar"
+                                [attr.y2]="cell.y + 10 + b * 18"
+                            />
+                        }
+                    </g>
+                }
+            </g>
+        }
+    }
+</svg>

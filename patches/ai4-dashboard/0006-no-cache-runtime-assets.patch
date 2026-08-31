@@ -1,0 +1,45 @@
+diff --git a/docker/nginx.conf b/docker/nginx.conf
+--- a/docker/nginx.conf
++++ b/docker/nginx.conf
+@@ -21,6 +21,10 @@ server {
+     }
+ 
+     # Disable cache for config.json
++    #
++    # [CAIOS] This block matches nothing. The application fetches
++    # /assets/config/config.json, not /config.json, so the file it is meant to
++    # protect has been served cacheable since it was written. See below.
+     location = /config.json {
+         root /usr/share/nginx/html;
+         add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate";
+@@ -28,4 +32,29 @@ server {
+         add_header Expires "0";
+     }
+ 
++    # [CAIOS] The files that change without their name changing.
++    #
++    # Everything the Angular build emits carries a content hash, so a new build
++    # is a new filename and a browser cannot serve a stale one. These do not:
++    #
++    #   /assets/config/config.json   the API address, the issuer, the client id
++    #   /assets/config/vllm.yaml     the model catalogue the cards are drawn from
++    #   /assets/i18n/en.json         every string in the interface
++    #
++    # Without a header nginx sends only ETag and Last-Modified, and a browser
++    # is then free to reuse its copy for as long as its own heuristic allows.
++    # The failure is quiet and specific to returning visitors: the person who
++    # opened the dashboard yesterday gets yesterday's words, or yesterday's API
++    # address, against today's build. Found by redeploying and watching a
++    # browser render the previous release's copy.
++    #
++    # A regular-expression location takes precedence over the prefix match
++    # above, so this wins for these two directories and nothing else.
++    location ~ ^/assets/(config|i18n)/ {
++        root /usr/share/nginx/html;
++        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate";
++        add_header Pragma "no-cache";
++        add_header Expires "0";
++    }
++
+ }
+\ No newline at end of file

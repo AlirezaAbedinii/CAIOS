@@ -545,6 +545,64 @@ as the key itself, in display type, with no error — and the inventory counts,
 which turn "we curated the catalogue and forgot the home page" into a failing
 test rather than a wrong number on the first page anybody sees.
 
+### Revised on 2026-08-31, after reading it as the audience would
+
+The first version was written for the wrong person. It described the platform
+the way the people who built it talk about each other's work: seven-node
+cluster, GPU model, scheduler, control plane, container, bearer token. Every one
+of those is true and not one of them is any use to a clinician-scientist, which
+is who opens this page.
+
+Six changes, and the first is the one the others follow from.
+
+**The audience is medical and neuroscience academics, not engineers.** The
+vocabulary is gone, and `tests/test_home_page.py` now fails on a list of
+twenty-six words rather than trusting anyone to remember. Counts of machines
+went with it, for a second reason: this is a demonstration that will grow, and
+a number of nodes on the front page is a promise that dates badly.
+
+**The page is a stage, not a scroll.** It was seven sections and about five
+thousand pixels. It is now three blocks: what this is, one stage carrying six
+slides, and a way in. The slides are the three capabilities and the three
+depths of control, in two labelled groups, because they answer two different
+questions.
+
+**The In Use section is gone.** It and Depth of Control were the same argument
+told twice. Depth of Control survived because it answers "how would I use this"
+rather than "what did somebody else do".
+
+**The cluster diagram is gone.** It was accurate and useless: an architecture
+drawing for a reader who does not need an architecture. Each slide now carries
+a drawing of what the capability *means*. Six of them, one visual language.
+
+**There is a real result on the page.** The federated slide draws the measured
+accuracy curve from `demo/fl/results/`, with the best single site and the
+pooled ceiling as reference levels. It is the most credible thing the project
+has and it is a scientific figure, which this audience reads more fluently than
+prose.
+
+**No em dashes**, which is also a test.
+
+### What the revision found
+
+Both of these are the same fault wearing different clothes, and both look
+exactly like a rendering failure with nothing in any log.
+
+**A CSS property beats an SVG presentation attribute.** The hero motif
+positions its twelve tiles with `transform` attributes. Reusing the entrance
+keyframe, which ends on `transform: none`, moved all twelve to the origin and
+stacked them: twelve elements in the DOM, twelve correct attributes, one tile
+on screen. The chart caption did the same thing with `text-anchor`, centring
+itself on the left edge of the plot and running off the drawing. Both were
+found by measuring bounding boxes in a browser, and there is now a test that
+fails if a property is set in both places.
+
+**Unhashed assets are cacheable, and one of them is every string on the page.**
+After the rewrite a browser that had opened the previous build kept rendering
+the previous build's words, and showed raw translation keys for the strings
+that were new. Nothing was wrong with the deployment. Patch `0006`; upstream
+had tried to prevent this and written a location block that matches nothing.
+
 ### What is still outstanding
 
 - A **screenshot pass** at 1440 and 768 px into `docs/screenshots/after/`, and

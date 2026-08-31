@@ -790,9 +790,72 @@ and a worse one to meet on a projector.
 
 ---
 
+## Settled on 2026-08-31
+
+**D-63 — The home page is written for the people who use the platform, not the
+people who run it.**
+Its readers are medical and neuroscience academics. Not one of them needs to
+know what schedules a job, what serves a model, or what the GPU is called, and
+a count of machines tells them only how small the platform is this month.
+
+So the page carries none of that vocabulary and no size of the installation,
+and `tests/test_home_page.py` enforces both against a word list rather than
+against anyone's memory. The words are easy to reintroduce by accident, in a
+sentence that reads perfectly well to whoever wrote it.
+
+The corollary is what the page shows instead: a measured result, drawn as a
+chart, and five drawings of what each capability means rather than of how it is
+built. A research audience reads a figure more fluently than a paragraph.
+
+**D-64 — Everything the page has to say is on one stage.**
+Seven stacked sections and five thousand pixels became three blocks, with six
+slides in the middle in two labelled groups. The material is the same; the
+reader now chooses what to look at instead of scrolling past it, and the length
+of the page stops being a measure of how much was written.
+
+A word budget on the visible copy keeps it that way. Alt text is excluded from
+it deliberately, because counting it would put a limit in competition with
+accessibility, and that is a trade nobody should be asked to make.
+
+**D-65 — SVG presentation attributes are never set in a template when the
+stylesheet styles them.**
+A CSS property beats a presentation attribute, always. Twice in one afternoon:
+`transform` on the hero tiles stacked twelve of them at the origin, and
+`text-anchor` on a chart caption centred it on the left edge of the plot and ran
+it off the drawing. Both look exactly like a rendering failure, and neither logs
+anything anywhere.
+
+The rule avoids the whole family, and a test enforces it for the properties the
+figures actually style.
+
+**D-66 — A file that changes without changing its name is served with no-store.**
+Everything the Angular build emits is content-hashed, so a new build is a new
+filename. Three files are not: the runtime configuration, the model catalogue
+and every string in the interface. Without a cache header a browser reuses its
+copy for as long as its own heuristic allows, and a returning visitor gets the
+previous release's words, or the previous release's API address, against
+today's bundle.
+
+Found by deploying and watching it happen. Patch `0006`. Upstream had tried to
+prevent exactly this and written a location block that matches nothing, which
+is the more useful half of the lesson: a rule that never fires looks identical
+to a rule that works.
+
+Fonts and images stay cacheable. They are large, they change rarely, and the
+trade goes the other way.
+
+---
+
 ## Log
 
 *Append new decisions below with date and one line of reasoning.*
+
+**2026-08-31** — The home page rewritten for its actual audience. Recorded
+D-63 to D-66. It had been written in the vocabulary of the people who built the
+platform; it is now three blocks and six slides, with a measured chart in place
+of an architecture diagram. Two SVG faults and one caching fault found by
+looking at it in a browser, all three of which passed every test that existed
+at the time.
 
 **2026-08-30** — R-38 closed: the dashboard no longer reads another project's
 status feed. Patch `0005`, D-62, `tests/test_platform_status.py`, and section 3d

@@ -125,6 +125,65 @@ def test_the_fonts_the_home_page_declares_are_actually_staged(root):
             )
 
 
+def test_the_motif_animation_does_not_touch_transform(root):
+    """A CSS `transform` property on an SVG element overrides its `transform`
+    ATTRIBUTE rather than composing with it.
+
+    The hero motif positions each of its twelve tiles by attribute. Animating
+    them with a keyframe that ends on `transform: none` moved every one of them
+    to the origin and stacked them: twelve elements in the DOM, twelve correct
+    attributes, one tile on screen, and nothing in any log. It is a very easy
+    keyframe to reuse.
+    """
+    css = (root / HOME / "components/home/home.component.scss").read_text(
+        encoding="utf-8"
+    )
+    rule = re.search(r"\.slice \{(.+?)\}", css, flags=re.DOTALL)
+    assert rule, "no .slice rule found"
+    animation = re.search(r"animation:\s*([a-z-]+)", rule.group(1))
+    assert animation, ".slice has no animation"
+
+    name = animation.group(1)
+    frames = re.search(
+        rf"@keyframes {re.escape(name)} \{{(.+?)\n\}}", css, flags=re.DOTALL
+    )
+    assert frames, f"@keyframes {name} not found"
+    assert "transform" not in frames.group(1), (
+        f"@keyframes {name} animates transform and is used on an SVG element, "
+        f"which overrides the transform attribute that positions it"
+    )
+
+
+def test_the_figures_set_svg_presentation_in_css_only(root):
+    """A CSS property beats an SVG presentation attribute, always.
+
+    Twice in one afternoon: `transform` on the hero tiles stacked twelve of
+    them at the origin, and `text-anchor` on a chart caption centred it on the
+    left edge of the plot and ran it off the drawing. Both looked like a
+    rendering failure and neither logged anything.
+
+    The rule that avoids the whole family: if a property is styled in the
+    stylesheet, do not also set it as an attribute in the template.
+    """
+    html = (
+        root / HOME / "components/slide-figure/slide-figure.component.html"
+    ).read_text(encoding="utf-8")
+    css = (
+        root / HOME / "components/slide-figure/slide-figure.component.scss"
+    ).read_text(encoding="utf-8")
+
+    styled = {
+        prop
+        for prop in ("text-anchor", "transform", "fill", "stroke", "opacity")
+        if re.search(rf"^\s+{prop}:", css, flags=re.MULTILINE)
+    }
+    clashes = [p for p in styled if re.search(rf'\s{p}="', html)]
+    assert not clashes, (
+        f"these are set both in the stylesheet and as attributes, and the "
+        f"stylesheet wins: {sorted(clashes)}"
+    )
+
+
 # --- the reveal cannot leave the page blank ---------------------------------
 
 
@@ -166,12 +225,17 @@ def test_the_scroll_reveal_has_a_way_out(root):
 
 def test_every_translation_key_the_templates_use_exists(root):
     """ngx-translate renders a missing key as the key itself, so the page would
-    read `HOME.POSITION.P1` in 17px type and nothing would report an error."""
+    read `HOME.STAGE.LLM.BODY` in display type and nothing would report an
+    error."""
     strings = _strings(root)
     missing = []
     for path in _sources(root, ".html", ".ts"):
         text = path.read_text(encoding="utf-8")
         for key in re.findall(r"['\"](HOME\.[A-Z0-9.\-]+)['\"]", text):
+            # `'HOME.STAGE.' + figureKey + '.FIGURE-ALT'` leaves a bare prefix
+            # in the source. It is a fragment, not a key.
+            if key.endswith("."):
+                continue
             node = strings
             for part in key.split("."):
                 node = node.get(part) if isinstance(node, dict) else None
@@ -183,7 +247,11 @@ def test_every_translation_key_the_templates_use_exists(root):
 
 def test_no_string_is_defined_and_never_used(root):
     """The other direction. Dead copy is how a page ends up saying two
-    different things in two places, one of them invisible."""
+    different things in two places, one of them invisible.
+
+    The figure keys are built at runtime from the slide id (`no-code` becomes
+    `NO-CODE`), so they are matched by prefix rather than by literal.
+    """
     used = set()
     for path in _sources(root, ".html", ".ts"):
         used |= set(re.findall(r"['\"](HOME\.[A-Z0-9.\-]+)['\"]", path.read_text(encoding="utf-8")))
@@ -196,7 +264,10 @@ def test_no_string_is_defined_and_never_used(root):
                 yield f"{prefix}.{k}"
 
     defined = set(leaves(_strings(root)["HOME"], "HOME"))
-    assert not (defined - used), f"defined but never rendered: {sorted(defined - used)}"
+    # `'HOME.STAGE.' + figureKey + '.FIGURE-ALT'` covers every slide's alt text.
+    dynamic = {k for k in defined if k.endswith(".FIGURE-ALT")}
+    orphans = defined - used - dynamic
+    assert not orphans, f"defined but never rendered: {sorted(orphans)}"
 
 
 def test_the_upstream_foundation_is_named_once(root):
@@ -205,45 +276,227 @@ def test_the_upstream_foundation_is_named_once(root):
     text = json.dumps(_strings(root)["HOME"])
     assert text.count("AI4OS") == 1, (
         f"AI4OS appears {text.count('AI4OS')} times in the home page copy; it "
-        f"should be named exactly once, in the colophon."
+        f"should be named exactly once, in the closing block."
     )
 
 
-# --- the counts the page prints ---------------------------------------------
+# --- who the page is written for --------------------------------------------
+#
+# The audience is medical and neuroscience academics. Not one of them needs to
+# know what schedules a job, and a count of machines tells them only how small
+# the platform is this month. Both of these are easy to reintroduce by
+# accident, in a sentence that reads perfectly well to whoever wrote it.
+
+INFRASTRUCTURE_WORDS = [
+    "nomad",
+    "kubernetes",
+    "docker",
+    "container",
+    "vllm",
+    "traefik",
+    "keycloak",
+    "vault",
+    "consul",
+    "h100",
+    "nvidia",
+    "gpu",
+    "cpu",
+    "vcpu",
+    "tls",
+    "oidc",
+    "single sign-on",
+    "control plane",
+    "cluster",
+    "node",
+    "scheduler",
+    "bearer",
+    "curl",
+    "json",
+    "yaml",
+    "http",
+]
 
 
-def test_the_inventory_counts_match_the_files_they_count(root):
-    """Every figure on this page is a count of something in the repository. The
-    page is the easiest place on the platform to check and the worst place to
-    be wrong, so the counts are asserted rather than trusted."""
+def _home_prose(root):
+    """Every rendered string, with the annotations stripped as the build strips
+    them. The _comment keys explain the rules and therefore quote the very
+    words the rules ban."""
 
-    def keep(path):
-        return len(
-            [
-                line
-                for line in (root / path).read_text(encoding="utf-8").splitlines()
-                if line.strip() and not line.lstrip().startswith("#")
-            ]
-        )
+    def leaves(node):
+        for k, v in node.items():
+            if isinstance(v, dict):
+                yield from leaves(v)
+            else:
+                yield k, v
 
-    expected = {
-        "9": keep("catalog/keep.txt"),
-        "12": keep("catalog/ai4life-models.txt"),
-    }
-    for printed, actual in expected.items():
-        assert int(printed) == actual, (
-            f"the home page prints {printed} where the repository now has {actual}"
-        )
+    return list(leaves(_strings(root)["HOME"]))
 
-    models = yaml.safe_load((root / "configs/papi/vllm.yaml").read_text(encoding="utf-8"))
-    assert len(models["models"]) == 9, (
-        "the home page prints 9 language models; configs/papi/vllm.yaml has "
-        f"{len(models['models'])}"
+
+def test_the_page_does_not_talk_about_infrastructure(root):
+    """A clinician-scientist reading this page should not meet a word whose
+    only purpose is to describe how the platform is built."""
+    found = []
+    for key, value in _home_prose(root):
+        lowered = value.lower()
+        for word in INFRASTRUCTURE_WORDS:
+            if re.search(rf"\b{re.escape(word)}\b", lowered):
+                found.append(f"{key}: {word!r} in {value!r}")
+    assert not found, (
+        "the home page uses vocabulary its audience has no use for:\n  "
+        + "\n  ".join(found)
     )
 
-    ts = (root / HOME / "components/home/home.component.ts").read_text(encoding="utf-8")
-    for count in re.findall(r"count:\s*'(\d+)'", ts):
-        assert count in {"9", "12", "3"}, f"unexplained count {count} in the inventory"
+
+def test_the_page_states_no_size_of_the_installation(root):
+    """This is a demonstration and it will grow. A number of machines printed
+    on the first page is a promise that dates badly, and it is not a number
+    anybody reading it wanted."""
+    pattern = re.compile(
+        r"\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)[\s-]"
+        r"(node|machine|server|gpu)",
+        re.IGNORECASE,
+    )
+    hits = [f"{k}: {v!r}" for k, v in _home_prose(root) if pattern.search(v)]
+    assert not hits, "the home page counts the installation:\n  " + "\n  ".join(hits)
+
+
+def test_the_copy_uses_no_em_dashes(root):
+    """A house rule, and a legible one: an em dash is the punctuation mark that
+    most makes written English read as though nobody chose the sentence."""
+    hits = [f"{k}: {v!r}" for k, v in _home_prose(root) if "\u2014" in v]
+    assert not hits, "em dashes in the home page copy:\n  " + "\n  ".join(hits)
+
+
+def test_the_platform_does_not_claim_the_catalogue_as_its_own(root):
+    """The catalogue and the ways of serving a model come from the upstream
+    stack. Saying CAIOS adds them overstates what this project did."""
+    text = json.dumps(_strings(root)["HOME"]).lower()
+    for claim in ("its own catalogue", "this interface on top"):
+        assert claim not in text, f"the page claims {claim!r} as CAIOS's own"
+
+
+# --- how much there is to read ----------------------------------------------
+
+
+def test_the_page_stays_short(root):
+    """The page was seven stacked sections and five thousand pixels. It is now
+    a heading, one stage and a way out. This is a blunt guard against it
+    growing back a section at a time."""
+    html = (root / HOME / "components/home/home.component.html").read_text(
+        encoding="utf-8"
+    )
+    blocks = len(re.findall(r"<(section|header)\b", html))
+    assert blocks <= 3, (
+        f"the home page has {blocks} top-level blocks; it is meant to be three"
+    )
+
+    # Visible prose only. Alt text is for readers who cannot see the drawing
+    # and counting it here would put a word budget in competition with
+    # accessibility, which is a trade nobody should be asked to make.
+    words = sum(
+        len(v.split()) for k, v in _home_prose(root) if not k.endswith("FIGURE-ALT")
+    )
+    assert words < 450, (
+        f"the home page has {words} words of visible copy. It is a first "
+        f"impression, not a document; the detail belongs on the pages it "
+        f"links to."
+    )
+
+
+def test_the_stage_carries_the_slides_rather_than_the_page(root):
+    """The point of the rewrite: what used to be sections is now one stage, in
+    two labelled groups."""
+    ts = (root / HOME / "components/stage/stage.component.ts").read_text(
+        encoding="utf-8"
+    )
+    assert ts.count("group: 'what',") == 3, "three slides for what the platform does"
+    assert ts.count("group: 'how',") == 3, "three slides for how you work with it"
+
+
+# --- the figures ------------------------------------------------------------
+
+
+def test_the_measured_chart_is_drawn_from_the_measurements(root):
+    """The federated figure is the one drawing that reports a result, so it is
+    projected from the recorded numbers rather than from a hand-written path.
+    A drawing and the result it reports cannot then drift apart."""
+    ts = (root / HOME / "components/slide-figure/slide-figure.component.ts").read_text(
+        encoding="utf-8"
+    )
+    literal = re.search(r"curve = \[([^\]]+)\]", ts).group(1)
+    curve = [float(n) for n in re.findall(r"[\d.]+", literal)]
+    recorded = json.loads(
+        (root / "demo/fl/results/cluster/federated_site_a.json").read_text(
+            encoding="utf-8"
+        )
+    )["curve"]
+    assert curve == recorded, (
+        "the chart on the home page is not the curve in "
+        "demo/fl/results/cluster/federated_site_a.json"
+    )
+
+    baselines = json.loads(
+        (root / "demo/fl/results/baselines.json").read_text(encoding="utf-8")
+    )["curves"]
+    best_single = max(max(baselines[s]) for s in ("site_a", "site_b", "site_c"))
+    pooled = max(baselines["central"])
+    assert f"bestSingleSite = {round(best_single, 3)}" in ts
+    assert f"pooled = {round(pooled, 3)}" in ts
+
+
+def test_every_slide_has_a_drawing(root):
+    """Six slides, six figures. A slide that falls through to the default case
+    would silently show the wrong picture."""
+    ts = (root / HOME / "components/slide-figure/slide-figure.component.ts").read_text(
+        encoding="utf-8"
+    )
+    ids = re.search(r"export type FigureId =([^;]+);", ts).group(1)
+    declared = set(re.findall(r"'([a-z-]+)'", ids))
+
+    html = (
+        root / HOME / "components/slide-figure/slide-figure.component.html"
+    ).read_text(encoding="utf-8")
+    drawn = set(re.findall(r"@case \('([a-z-]+)'\)", html))
+    assert "@default" in html, "the last figure should be the default branch"
+    assert declared - drawn == {"high-code"}, (
+        f"figures declared but not drawn: {sorted(declared - drawn - {'high-code'})}"
+    )
+
+
+# --- the reveal cannot leave the page blank ---------------------------------
+
+
+def test_the_scroll_reveal_has_a_way_out(root):
+    """The hidden state is applied by script and must be removable by script
+    even when the browser never reports an intersection.
+
+    This is not hypothetical. Verified in a browser during F3: the observer was
+    constructed, given an element filling the viewport, and never called back,
+    not even with the initial report a working implementation always sends.
+    Under the obvious arrangement that leaves a whole section at opacity 0 for
+    good, which is a blank page caused by a decoration.
+    """
+    src = (root / HOME / "reveal.directive.ts").read_text(encoding="utf-8")
+    assert "setTimeout" in src, (
+        "the reveal has no fallback: if IntersectionObserver never reports, "
+        "every armed section stays invisible"
+    )
+    assert "prefers-reduced-motion" in src, (
+        "reduced motion must skip arming entirely, not merely shorten the "
+        "transition (D-48)"
+    )
+    assert "classList.add('reveal-armed')" in src, (
+        "the hidden state must be added by the directive, so an element whose "
+        "script did not run is simply visible"
+    )
+
+    css = (root / HOME / "components/home/home.component.scss").read_text(
+        encoding="utf-8"
+    )
+    assert ".reveal-armed {" in css and "opacity: 0" in css
+    assert "prefers-reduced-motion" in css, (
+        "the stylesheet needs its own reduced-motion branch as well"
+    )
 
 
 # --- how it reaches the browser ---------------------------------------------

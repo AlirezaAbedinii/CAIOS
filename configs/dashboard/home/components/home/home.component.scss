@@ -308,67 +308,21 @@
 }
 
 /* ───────────────────────────────────────────────────────────────── the motif
-   A series of imaging slices. Outlines, never greyscale: it should read as a
-   reference to the work and never as an imitation of a study. */
+   Supplied artwork. It sits on the same warm paper as the page, so it needs no
+   frame and no shadow: a rule under it would make it look like a card, which
+   is the one thing this page does not do. */
 
 .motif {
     margin: 0;
 }
 
-.motif__svg {
+.motif__image {
     display: block;
     width: 100%;
     height: auto;
-}
-
-/* Weights found by looking, not chosen. At a 16% hairline the series was
-   invisible on paper: one tile carried the accent and the other eleven read as
-   an empty rectangle. These are the values at which the whole series is
-   legible and still quiet. */
-.slice__tile {
-    fill: var(--h-paper-sunk);
-    stroke: var(--h-rule-strong);
-    stroke-width: 1;
-    opacity: 0.5;
-}
-
-.slice__form {
-    fill: none;
-    stroke: var(--h-ink-3);
-    stroke-width: 1.25;
-}
-
-.slice__core {
-    fill: rgba(11, 32, 39, 0.14);
-    stroke: none;
-}
-
-.slice__mid {
-    stroke: var(--h-ink-3);
-    stroke-width: 1;
-    opacity: 0.6;
-}
-
-.slice.is-marked {
-    .slice__tile {
-        fill: rgba(11, 108, 124, 0.06);
-        stroke: var(--h-accent);
-        opacity: 1;
-    }
-
-    .slice__form {
-        stroke: var(--h-accent);
-        opacity: 1;
-    }
-
-    .slice__core {
-        fill: rgba(11, 108, 124, 0.22);
-    }
-
-    .slice__mid {
-        stroke: var(--h-accent);
-        opacity: 1;
-    }
+    /* The intrinsic ratio is on the element, so this only has to say that the
+       image may shrink. It must never grow past its own resolution. */
+    max-width: 800px;
 }
 
 /* ═══════════════════════════════════════════════════════════ 02 · the stage */
@@ -500,32 +454,6 @@
 
 .masthead .actions {
     animation: rise 560ms cubic-bezier(0.2, 0, 0.2, 1) 410ms both;
-}
-
-/* The motif assembles a tile at a time, in reading order. --i is bound per
-   tile in the template; the last one lands at about 780ms, inside the same
-   second as the text beside it.
-
-   Opacity only, and that is not a stylistic choice. Each tile is positioned by
-   an SVG `transform` ATTRIBUTE, and a CSS `transform` PROPERTY overrides the
-   attribute rather than composing with it. Reusing `rise` here, which ends on
-   `transform: none`, silently moved all twelve tiles to the origin and stacked
-   them one on top of another: twelve elements in the DOM, correct transform
-   attributes, identical bounding boxes, one tile on screen. Found by measuring
-   the boxes in a browser, because it looks exactly like eleven tiles that
-   failed to render. */
-@keyframes fade-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.slice {
-    animation: fade-in 460ms cubic-bezier(0.2, 0, 0.2, 1) both;
-    animation-delay: calc(var(--i, 0) * 48ms + 180ms);
 }
 
 /* Scroll reveal. `reveal-armed` is added by the directive, never by this

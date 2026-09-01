@@ -200,7 +200,7 @@ mkdir -p "$DST/src/assets/images/caios"
 # Generate them with: demo/.venv/bin/python scripts/make-brand-assets.py
 # pacslab-logo.png is referenced by patches/ai4-dashboard/0001: it sits beside
 # the CAIOS mark at the bottom of the sidenav, where upstream shows an EU flag.
-REQUIRED_IMAGES=(dashboard-logo.png favicon.ico forbidden.png not-found.png pacslab-logo.png)
+REQUIRED_IMAGES=(dashboard-logo.png favicon.ico forbidden.png not-found.png pacslab-logo.png header_image.webp)
 missing_images=()
 for img in "${REQUIRED_IMAGES[@]}"; do
     [[ -s "$CFG/images/$img" ]] || missing_images+=("$img")
@@ -224,6 +224,12 @@ else
             # do not draw our own version of it.
             echo "             $img is supplied by PACS Lab — save the official"
             echo "               file to $CFG/images/$img"
+        elif [[ "$img" == "header_image.webp" ]]; then
+            # Also supplied. The home page references it directly, so a missing
+            # file is a broken image at the top of the first page anybody sees,
+            # behind nginx's HTTP 200.
+            echo "             $img is the home page illustration — save it to"
+            echo "               $CFG/images/$img"
         else
             echo "             $img: demo/.venv/bin/python scripts/make-brand-assets.py"
         fi

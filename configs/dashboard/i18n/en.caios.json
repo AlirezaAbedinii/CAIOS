@@ -17,9 +17,9 @@
             "LLMS": "See the models"
         },
 
-        "_comment_figure_hero": "The hero illustration is supplied artwork, staged from configs/dashboard/images/. The alt text describes what it shows rather than listing its parts, and follows the same vocabulary rules as everything else here.",
+        "_comment_figure_hero": "The hero illustration is supplied artwork, derived from configs/dashboard/images/source/ by scripts/make-header-image.py. The alt text describes what it shows rather than listing its parts, and follows the same vocabulary rules as everything else here. Re-read it whenever the artwork changes.",
         "FIGURE": {
-            "HERO-ALT": "An illustration linking brain imaging and a neuron to a map of Canada, with researchers reading scans together and a hospital below."
+            "HERO-ALT": "An engraved drawing of five sections through a human brain, overlapping in a column, with one of them filled in and a fine map grid behind them."
         },
 
         "STAGE": {

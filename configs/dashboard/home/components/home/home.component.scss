@@ -308,9 +308,10 @@
 }
 
 /* ───────────────────────────────────────────────────────────────── the motif
-   Supplied artwork. It sits on the same warm paper as the page, so it needs no
-   frame and no shadow: a rule under it would make it look like a card, which
-   is the one thing this page does not do. */
+   Supplied artwork, with its own background keyed out by
+   scripts/make-header-image.py so the page's paper shows through it. That is
+   why there is no frame, no rule and no shadow here: there is nothing to
+   frame. The drawing sits on the page rather than on top of it. */
 
 .motif {
     margin: 0;
@@ -322,7 +323,7 @@
     height: auto;
     /* The intrinsic ratio is on the element, so this only has to say that the
        image may shrink. It must never grow past its own resolution. */
-    max-width: 800px;
+    max-width: 640px;
 }
 
 /* ═══════════════════════════════════════════════════════════ 02 · the stage */

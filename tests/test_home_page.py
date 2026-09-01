@@ -158,6 +158,23 @@ def test_the_figures_set_svg_presentation_in_css_only(root):
 # --- the hero illustration --------------------------------------------------
 
 
+def test_the_hero_image_can_be_rebuilt_from_its_source(root):
+    """The WebP is a derivative. Keeping the file it was derived from means the
+    next version is one command rather than a negotiation, and it means nobody
+    has to guess what was done to the last one.
+
+    A previous illustration was resized in place and its original lost, which
+    is the reason this test exists.
+    """
+    sources = list((root / "configs/dashboard/images/source").glob("*"))
+    assert sources, (
+        "configs/dashboard/images/source/ is empty. The hero illustration "
+        "cannot be regenerated, and scripts/make-header-image.py has nothing "
+        "to run on."
+    )
+    assert (root / "scripts/make-header-image.py").is_file()
+
+
 def test_the_hero_image_is_staged_by_the_build(root):
     """The page references the file directly, and every missing path under this
     dashboard answers HTTP 200 with index.html. An unstaged image is therefore
@@ -198,6 +215,31 @@ def test_the_hero_image_cannot_shift_the_page_as_it_loads(root):
     )
 
 
+def test_the_hero_image_has_no_background_of_its_own(root):
+    """The illustration arrives on its own cream, close to the page's paper but
+    not the same, so dropped in as supplied it reads as a rectangle pasted onto
+    the page. `scripts/make-header-image.py` keys that background out.
+
+    Checked by reading the container rather than by decoding the image, which
+    keeps the test dependency-free: a WebP with transparency is an extended
+    file, so the RIFF stream carries a VP8X chunk whose first flags byte has
+    bit 4 set.
+    """
+    hero = root / "configs/dashboard/images/header_image.webp"
+    assert hero.is_file(), "no hero image"
+    data = hero.read_bytes()
+
+    assert data[:4] == b"RIFF" and data[8:12] == b"WEBP", "not a WebP file"
+    assert data[12:16] == b"VP8X", (
+        "the hero image is a simple WebP, which cannot carry transparency. It "
+        "still has its own background, and will sit on the page as a rectangle."
+    )
+    assert data[20] & 0b0001_0000, (
+        "the hero image's VP8X header does not declare an alpha channel, so "
+        "its background was never keyed out"
+    )
+
+
 def test_the_hero_image_is_small_enough_to_be_the_first_thing_that_loads(root):
     """This page loads two font files and nothing else. An illustration that
     weighs more than everything around it put together is not a decision
@@ -206,9 +248,10 @@ def test_the_hero_image_is_small_enough_to_be_the_first_thing_that_loads(root):
     assert images, "no hero image in configs/dashboard/images/"
     size = images[0].stat().st_size
     assert size < 400 * 1024, (
-        f"{images[0].name} is {size / 1024:.0f} KB. Resize it, and prefer WebP: "
-        f"the same picture at the width the page gives it is a quarter of a "
-        f"comparable PNG."
+        f"{images[0].name} is {size / 1024:.0f} KB. Re-run "
+        f"scripts/make-header-image.py, which sizes it for the slot the page "
+        f"actually gives it and writes WebP: the same drawing at 800 wide is "
+        f"400 KB against 290 at 640, and as a PNG it is several times either."
     )
 
 

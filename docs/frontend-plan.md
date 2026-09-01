@@ -5,8 +5,11 @@ MVP works, federated learning works, the private language model works. This
 makes the dashboard look like it was built by people who knew what they were
 doing, without changing what any of it does.
 
-**Status: F1 SHELVED after a bad deploy. F2 built and verified 2026-08-24, not
-deployed. F3 built and verified 2026-08-29, not deployed. F0 outstanding.**
+**Status: F2 and F3 DEPLOYED 2026-09-01. F1 still shelved. F0 outstanding.**
+
+Until that date the live dashboard was still `pre-f1`: neither the typography
+pass nor the home page had ever served a request. Deploying F3 therefore
+shipped F2 with it, which is why the page-by-page look below finally happened.
 
 F4's work landed inside F3 rather than after it: motion that has no
 reduced-motion path is not shippable (D-48), so the entrance sequence and the
@@ -383,7 +386,7 @@ overflowing its column, status pills and action icons untouched.
 
 ### Risks carried out of F2
 
-**R-35 · The theme is global; verification was not.** `overrides.scss` applies
+**R-35 · The theme is global; verification was not.** *CLOSED 2026-09-01.* `overrides.scss` applies
 to every page. Deployments and Modules were checked in a browser. Statistics,
 LLMs, Inference, Try-me, Batch training and Profile were **not**. Nothing in
 the stage is structural, so the expected worst case is cosmetic — but "expected"

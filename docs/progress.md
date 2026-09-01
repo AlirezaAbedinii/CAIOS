@@ -51,6 +51,56 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-01 — Deployed. The dashboard people see is now the one we have been building
+
+`caios/dashboard:latest` was still `pre-f1`. Neither the typography pass nor the
+home page had ever served a request, so deploying F3 shipped F2 with it and the
+change was larger than "the home page":
+
+- the home page at `/`, where the modules catalogue used to be
+- F2's tokens on **every** page: one typeface, machine values in a monospace
+  with figures that line up, hairlines in place of Material's drop shadows
+- the platform-status feed off, so nothing asks GitHub about another project
+- no-cache on `config.json`, `vllm.yaml` and `en.json`
+
+Deployed by retagging rather than rebuilding, so the bytes that were verified
+are the bytes that are serving:
+
+```bash
+docker tag caios/dashboard:f3-home caios/dashboard:latest
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env up -d --force-recreate dashboard
+```
+
+Git tag `f3-home` records what the image was built from.
+
+### The page pass R-35 asked for, finally done
+
+F2 was verified on Modules and Deployments only, and R-35 has been carrying the
+other six pages ever since. Deploying made the check possible against live data,
+and it found nothing: **Statistics, Modules, Tools, LLMs, Deployments,
+Inference, Try me, Batch training and Profile** all render correctly. Status
+pills unchanged in hue, no page with a horizontal scrollbar, no error toast.
+
+The LLM catalogue page, outstanding in `CLAUDE.md` since Stage L5, has now been
+looked at: nine models, every badge a real image, every card with a
+description. **R-35 closed.**
+
+### Verified after the deploy
+
+`scripts/check-branding.sh` passes, including the section added on 2026-08-30
+that had been failing on purpose until this deploy. `scripts/check-home-page.sh`
+passes against the live host. `pytest tests/` is 122 green.
+
+### Rollback
+
+`rollback/dashboard-pre-f1.tar` is the exact image that was serving until today,
+so the undo is a load, a retag and a recreate, in about ten seconds. The image
+just deployed is saved as `rollback/dashboard-f3-home.tar` for whatever replaces
+it next.
+
+---
+
 ## 2026-08-31 — The home page, rewritten for the people who will read it
 
 The first version was written for the wrong person. It described the platform

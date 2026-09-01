@@ -12,7 +12,7 @@ them reproducible.
 ```bash
 sudo docker load -i rollback/dashboard-pre-f1.tar
 sudo docker tag caios/dashboard:pre-f1 caios/dashboard:latest
-cd compose && sudo docker compose up -d dashboard
+cd compose && sudo docker compose --env-file ../configs/env/caios.env up -d --force-recreate dashboard
 ```
 
 Roughly ten seconds. No build, no network.
@@ -21,7 +21,12 @@ Roughly ten seconds. No build, no network.
 
 | File | Image id | Git tag | What it is |
 |---|---|---|---|
-| `dashboard-pre-f1.tar` | `1c6dd451b6a4` | `pre-f1` | The dashboard as it served on 2026-08-23, before self-hosted fonts. Loads Roboto and the Material Symbols sets from Google, so it needs internet to render its icons. |
+| `dashboard-f3-home.tar` | `417647e928b6` | `f3-home` | **Deployed 2026-09-01, and what is serving now.** The home page, F2's theme on every page, the platform-status feed off, and no-cache on the unhashed runtime assets. |
+| `dashboard-pre-f1.tar` | `1c6dd451b6a4` | `pre-f1` | What served from 2026-08-23 until 2026-09-01, and **the one to roll back to**. Loads Roboto and the Material Symbols sets from Google, so it needs internet to render its icons. |
+
+`f3-home` is here for the deploy after this one, not for undoing this one: the
+convention is to keep the image you are replacing, and by the time anything
+replaces `f3-home` this is the file that will undo it.
 
 ## Why both a tarball and a git tag
 

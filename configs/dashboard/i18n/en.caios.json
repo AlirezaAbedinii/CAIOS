@@ -17,9 +17,9 @@
             "LLMS": "See the models"
         },
 
-        "_comment_figure_hero": "The hero motif is a series of imaging slices, drawn as outlines rather than as anything resembling a real scan. It is a reference to what the platform is used for, not a claim about a particular study.",
+        "_comment_figure_hero": "The hero illustration is supplied artwork, staged from configs/dashboard/images/. The alt text describes what it shows rather than listing its parts, and follows the same vocabulary rules as everything else here.",
         "FIGURE": {
-            "HERO-ALT": "An abstract series of medical imaging slices, one of them highlighted."
+            "HERO-ALT": "An illustration linking brain imaging and a neuron to a map of Canada, with researchers reading scans together and a hospital below."
         },
 
         "STAGE": {

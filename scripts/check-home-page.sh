@@ -136,7 +136,27 @@ for font in ibm-plex-sans-1 ibm-plex-sans-2 ibm-plex-mono-2 ibm-plex-mono-4; do
 done
 
 echo
-echo "=== 4. the page is self-contained ==="
+echo "=== 4. the illustration is an illustration ==="
+# The classic trap under this dashboard: every missing path answers HTTP 200
+# with index.html, so an unstaged image is a broken picture at the top of the
+# first page anybody sees and no status code says so. `file`, not curl -o
+# /dev/null -w %{http_code}.
+curl -k -sS --max-time 30 "$DASH/assets/images/header_image.webp" -o "$TMP/hero" 2>/dev/null
+kind="$(file -b "$TMP/hero" 2>/dev/null)"
+case "$kind" in
+    *Web/P*|*WebP*|PNG*|JPEG*)
+        bytes=$(wc -c < "$TMP/hero")
+        ok "the hero illustration is $(echo "$kind" | cut -d, -f1,2) ($((bytes / 1024)) KB)"
+        if (( bytes > 400 * 1024 )); then
+            bad "and it weighs $((bytes / 1024)) KB, more than everything else the page loads"
+        fi
+        ;;
+    HTML*) bad "the hero illustration served index.html — the build did not stage it" ;;
+    *)     bad "the hero illustration is not an image: $kind" ;;
+esac
+
+echo
+echo "=== 5. the page is self-contained ==="
 # D-46. The home page issues no request of its own and fetches nothing from
 # anybody else. Its lazy chunk is where a later change would put either.
 #

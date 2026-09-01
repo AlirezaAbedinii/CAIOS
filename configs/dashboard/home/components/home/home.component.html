@@ -42,57 +42,24 @@
         </div>
 
         <!--
-          A series of imaging slices, drawn rather than photographed. Geometric
-          on purpose: it should read as a reference to the work, and never as
-          an imitation of a real study.
+          The hero illustration. Supplied artwork, not generated here.
+
+          width and height are on the element deliberately: they give the
+          browser the aspect ratio before the bytes arrive, so the headline
+          beside it does not jump when the image lands. No lazy loading, for
+          the same reason. This is the first thing on the page.
         -->
         <figure class="motif">
-            <svg
-                class="motif__svg"
-                viewBox="0 0 300 400"
-                preserveAspectRatio="xMidYMid meet"
-                role="img"
-                [attr.aria-label]="'HOME.FIGURE.HERO-ALT' | translate"
-            >
-                @for (slice of slices; track $index; let i = $index) {
-                    <g
-                        class="slice"
-                        [class.is-marked]="slice.marked"
-                        [style.--i]="i"
-                        [attr.transform]="
-                            'translate(' + slice.x + ',' + slice.y + ')'
-                        "
-                    >
-                        <rect class="slice__tile" width="85" height="85" rx="2" />
-                        <ellipse
-                            class="slice__form"
-                            cx="42.5"
-                            cy="42.5"
-                            [attr.rx]="30 * slice.size"
-                            [attr.ry]="34 * slice.size"
-                        />
-                        <!-- A midline and an off-centre core. Concentric
-                             rings alone read as a target; these two marks are
-                             what make the series read as sections through
-                             something instead. -->
-                        <line
-                            class="slice__mid"
-                            x1="42.5"
-                            [attr.y1]="42.5 - 26 * slice.size"
-                            x2="42.5"
-                            [attr.y2]="42.5 + 28 * slice.size"
-                        />
-                        <ellipse
-                            class="slice__core"
-                            cx="42.5"
-                            [attr.cy]="42.5 - 7 * slice.size"
-                            [attr.rx]="13 * slice.size"
-                            [attr.ry]="9 * slice.size"
-                        />
-                    </g>
-                }
-            </svg>
+            <img
+                class="motif__image"
+                src="/assets/images/header_image.webp"
+                width="800"
+                height="1200"
+                decoding="async"
+                [alt]="'HOME.FIGURE.HERO-ALT' | translate"
+            />
         </figure>
+
     </header>
 
     <!-- ═══════════════════════════════════════════════════════════ 02 · the stage -->

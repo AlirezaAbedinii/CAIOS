@@ -125,35 +125,6 @@ def test_the_fonts_the_home_page_declares_are_actually_staged(root):
             )
 
 
-def test_the_motif_animation_does_not_touch_transform(root):
-    """A CSS `transform` property on an SVG element overrides its `transform`
-    ATTRIBUTE rather than composing with it.
-
-    The hero motif positions each of its twelve tiles by attribute. Animating
-    them with a keyframe that ends on `transform: none` moved every one of them
-    to the origin and stacked them: twelve elements in the DOM, twelve correct
-    attributes, one tile on screen, and nothing in any log. It is a very easy
-    keyframe to reuse.
-    """
-    css = (root / HOME / "components/home/home.component.scss").read_text(
-        encoding="utf-8"
-    )
-    rule = re.search(r"\.slice \{(.+?)\}", css, flags=re.DOTALL)
-    assert rule, "no .slice rule found"
-    animation = re.search(r"animation:\s*([a-z-]+)", rule.group(1))
-    assert animation, ".slice has no animation"
-
-    name = animation.group(1)
-    frames = re.search(
-        rf"@keyframes {re.escape(name)} \{{(.+?)\n\}}", css, flags=re.DOTALL
-    )
-    assert frames, f"@keyframes {name} not found"
-    assert "transform" not in frames.group(1), (
-        f"@keyframes {name} animates transform and is used on an SVG element, "
-        f"which overrides the transform attribute that positions it"
-    )
-
-
 def test_the_figures_set_svg_presentation_in_css_only(root):
     """A CSS property beats an SVG presentation attribute, always.
 
@@ -181,6 +152,63 @@ def test_the_figures_set_svg_presentation_in_css_only(root):
     assert not clashes, (
         f"these are set both in the stylesheet and as attributes, and the "
         f"stylesheet wins: {sorted(clashes)}"
+    )
+
+
+# --- the hero illustration --------------------------------------------------
+
+
+def test_the_hero_image_is_staged_by_the_build(root):
+    """The page references the file directly, and every missing path under this
+    dashboard answers HTTP 200 with index.html. An unstaged image is therefore
+    a broken picture at the top of the first page anybody sees, with nothing
+    anywhere reporting it."""
+    html = (root / HOME / "components/home/home.component.html").read_text(
+        encoding="utf-8"
+    )
+    src = re.search(r'src="/assets/images/([^"]+)"', html)
+    assert src, "the hero image is not referenced from the page"
+    name = src.group(1)
+
+    assert (root / "configs/dashboard/images" / name).is_file(), (
+        f"{name} is referenced by the page and is not in configs/dashboard/images/"
+    )
+
+    script = (root / BUILD_SCRIPT).read_text(encoding="utf-8")
+    required = re.search(r"REQUIRED_IMAGES=\(([^)]+)\)", script).group(1)
+    assert name in required, (
+        f"{name} is not in REQUIRED_IMAGES, so a missing copy would be a broken "
+        f"image rather than a loud build warning"
+    )
+
+
+def test_the_hero_image_cannot_shift_the_page_as_it_loads(root):
+    """Without intrinsic dimensions the browser lays the page out at zero
+    height for the image and reflows when it arrives, moving the headline and
+    the buttons beside it under the reader's cursor."""
+    html = (root / HOME / "components/home/home.component.html").read_text(
+        encoding="utf-8"
+    )
+    img = re.search(r"<img[^>]*motif__image.*?/>", html, flags=re.DOTALL)
+    assert img, "no hero image element found"
+    assert re.search(r'width="\d+"', img.group(0)), "the hero image has no width"
+    assert re.search(r'height="\d+"', img.group(0)), "the hero image has no height"
+    assert "loading=\"lazy\"" not in img.group(0), (
+        "the hero image is the first thing on the page and must not be deferred"
+    )
+
+
+def test_the_hero_image_is_small_enough_to_be_the_first_thing_that_loads(root):
+    """This page loads two font files and nothing else. An illustration that
+    weighs more than everything around it put together is not a decision
+    anybody made; it is a file nobody looked at."""
+    images = list((root / "configs/dashboard/images").glob("header_image.*"))
+    assert images, "no hero image in configs/dashboard/images/"
+    size = images[0].stat().st_size
+    assert size < 400 * 1024, (
+        f"{images[0].name} is {size / 1024:.0f} KB. Resize it, and prefer WebP: "
+        f"the same picture at the width the page gives it is a quarter of a "
+        f"comparable PNG."
     )
 
 

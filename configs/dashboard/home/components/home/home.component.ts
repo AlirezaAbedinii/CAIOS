@@ -5,14 +5,6 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { RevealDirective } from '../../reveal.directive';
 import { StageComponent } from '../stage/stage.component';
 
-/** One tile of the hero motif, already positioned. */
-export interface SliceTile {
-    size: number;
-    x: number;
-    y: number;
-    marked: boolean;
-}
-
 /**
  * [CAIOS] The landing page.
  *
@@ -27,8 +19,12 @@ export interface SliceTile {
  *   1. It is written for medical and neuroscience academics. Not one of them
  *      needs to know what schedules a job, and a count of machines tells them
  *      only how small the platform is this month.
- *   2. It makes no HTTP request of any kind, so the first page anybody sees
- *      renders correctly whatever the cluster is doing.
+ *   2. It makes no request of its own. The one image it shows is served by
+ *      this cluster, so the first page anybody sees renders correctly whatever
+ *      the rest of the platform is doing.
+ *
+ * There is no logic left here. The hero illustration is supplied artwork, and
+ * everything that moves lives in the stage.
  */
 @Component({
     selector: 'app-home',
@@ -37,25 +33,4 @@ export interface SliceTile {
     changeDetection: ChangeDetectionStrategy.Eager,
     imports: [RouterLink, TranslatePipe, StageComponent, RevealDirective],
 })
-export class HomeComponent {
-    /**
-     * The hero motif: a series of imaging slices.
-     *
-     * Deliberately geometric. It is a reference to the work the platform is
-     * for, not an imitation of a scan, and it should not be mistakable for
-     * one. `size` is the relative size of the form inside its tile, which is
-     * what gives the series its shape as the eye runs down it.
-     *
-     * Laid out here rather than in the template: three columns of four, and
-     * arithmetic in a binding is arithmetic nobody can check.
-     */
-    protected readonly slices: SliceTile[] = [
-        0.32, 0.46, 0.58, 0.68, 0.74, 0.78, 0.76, 0.7, 0.6, 0.48, 0.36, 0.24,
-    ].map((size, i) => ({
-        size,
-        x: 10 + (i % 3) * 95,
-        y: 10 + Math.floor(i / 3) * 95,
-        // One tile carries the accent, so the eye has somewhere to land.
-        marked: i === 5,
-    }));
-}
+export class HomeComponent {}

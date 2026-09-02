@@ -1,32 +1,24 @@
 {
     "_comment": "CAIOS additions to the dashboard's English strings. Deep-merged over vendor/ai4-dashboard/src/assets/i18n/en.json by scripts/build-dashboard.sh, the same way caios.json is merged over _base.json. Keys here win. _comment keys are stripped on the way in, so notes in this file never reach the browser.",
-
     "_comment_audience": "WHO THIS IS WRITTEN FOR. Medical and neuroscience academics, not engineers. They have not heard of Nomad, they do not know what a control plane is, and a node count tells them nothing except how small the thing is today. Every sentence here should survive being read by a clinician-scientist who has never deployed anything. tests/test_home_page.py enforces the vocabulary ban and the em-dash ban; both are easy to reintroduce by accident.",
-
     "HOME": {
         "EYEBROW": "CAIOS. Canadian Artificial Intelligence Operating System",
-
         "HEADLINE": "Research AI infrastructure,",
         "HEADLINE-EM": "operated in Canada.",
         "DECK": "Somewhere for medical and neuroscience groups to build, train and use AI models without handing anything to a commercial service. Work through a browser, or write your own code.",
-
         "THESIS": "Train on data that never leaves the hospital, or the country.",
-
         "ACTION": {
             "CATALOGUE": "Explore the platform",
             "LLMS": "See the models"
         },
-
         "_comment_figure_hero": "The hero illustration is supplied artwork, derived from configs/dashboard/images/source/ by scripts/make-header-image.py. The alt text describes what it shows rather than listing its parts, and follows the same vocabulary rules as everything else here. Re-read it whenever the artwork changes.",
         "FIGURE": {
             "HERO-ALT": "An engraved drawing of five sections through a human brain, overlapping in a column, with one of them filled in and a fine map grid behind them."
         },
-
         "STAGE": {
             "GROUP-WHAT": "What it does",
             "GROUP-HOW": "How you work with it",
             "TABLIST": "Platform overview",
-
             "SERVERLESS": {
                 "TAB": "On demand models",
                 "TITLE": "Publish a model that costs nothing while nobody is using it.",
@@ -36,7 +28,6 @@
                 "FIGURE-ACTIVE": "request",
                 "FIGURE-IDLE-2": "nothing running"
             },
-
             "FEDERATED": {
                 "TAB": "Federated learning",
                 "TITLE": "Train across hospitals without moving their data.",
@@ -47,7 +38,6 @@
                 "FIGURE-POOLED": "all data pooled",
                 "FIGURE-SINGLE": "best single site"
             },
-
             "LLM": {
                 "TAB": "Private language models",
                 "TITLE": "A language model that reads clinical text without sending it anywhere.",
@@ -57,7 +47,6 @@
                 "FIGURE-OUTSIDE": "commercial service",
                 "FIGURE-BOUNDARY": "stays in Canada"
             },
-
             "NO-CODE": {
                 "TAB": "No code",
                 "TITLE": "Start without writing anything.",
@@ -65,9 +54,8 @@
                 "FIGURE-ALT": "A short form with four fields and a submit button.",
                 "FIGURE-FIELD-1": "What to run",
                 "FIGURE-FIELD-2": "What to call it",
-                    "FIGURE-SUBMIT": "Start"
+                "FIGURE-SUBMIT": "Start"
             },
-
             "LOW-CODE": {
                 "TAB": "Some code",
                 "TITLE": "Bring it into the work you already do.",
@@ -76,7 +64,6 @@
                 "FIGURE-ADDRESS": "Address",
                 "FIGURE-KEY": "Access key"
             },
-
             "HIGH-CODE": {
                 "TAB": "Full control",
                 "TITLE": "Or work as deeply as you like.",
@@ -85,7 +72,6 @@
                 "FIGURE-CELL": "In"
             }
         },
-
         "CLOSING": {
             "TITLE": "See what is available.",
             "NOTE": "The catalogue is open to read. Anything you create belongs to your own account once you sign in.",
@@ -95,6 +81,21 @@
             "STACK": "AI4OS, an open source stack for research computing.",
             "HOST-TERM": "Runs on",
             "HOST": "Canadian academic research infrastructure."
+        }
+    },
+    "_comment_demo": "T4. The sentence shown in place of a feature this deployment does not run (patches/ai4-dashboard/0007). Which surfaces get it is configured in caios.json's demoUnavailable list, not here.",
+    "DEMO": {
+        "UNAVAILABLE": "Not included in the Demo Version. This part of the platform is not running on this deployment."
+    },
+    "_comment_upstream_strings": "T3. Upstream strings that name another project on our screen. These are overrides, not new keys - the originals live in vendor/ai4-dashboard's en.json and are deep-merged under these. AI4Life is deliberately NOT renamed: it is the real name of the bioimage.io model zoo project, so it is accurate attribution rather than residue.",
+    "DASHBOARD": {
+        "USAGE": "Usage Over Time"
+    },
+    "CATALOG": {
+        "MODULE": "Model",
+        "TOOL": "Tool",
+        "TABS": {
+            "PLATFORM": "CAIOS"
         }
     }
 }

@@ -1,0 +1,253 @@
+diff --git a/src/app/core/services/app-config/app-config.mock.ts b/src/app/core/services/app-config/app-config.mock.ts
+index 0bae98a..b9222e1 100644
+--- a/src/app/core/services/app-config/app-config.mock.ts
++++ b/src/app/core/services/app-config/app-config.mock.ts
+@@ -1,4 +1,7 @@
+ export const mockedConfigService: any = {
++    // [CAIOS] Empty so every existing spec keeps exercising the path where a
++    // feature IS available. The not-available path has its own test.
++    demoUnavailable: [],
+     projectName: 'Test AI4EOSC',
+     voName: 'vo.ai4eosc.eu',
+     footerLinks: [
+diff --git a/src/app/core/services/app-config/app-config.service.ts b/src/app/core/services/app-config/app-config.service.ts
+index 8bf3375..1cf8b5a 100644
+--- a/src/app/core/services/app-config/app-config.service.ts
++++ b/src/app/core/services/app-config/app-config.service.ts
+@@ -108,6 +108,28 @@ export class AppConfigService {
+         return this.appConfig.platformStatusUrl ?? '';
+     }
+ 
++    /**
++     * [CAIOS] Ids of features this deployment does not provide.
++     *
++     * The dashboard is built for a platform with Nextcloud, MLflow, a LiteLLM
++     * gateway and a Harbor registry. A flavour running none of those still
++     * renders their pages, and they fail in the worst possible way: the API
++     * Keys tab proxies to a LiteLLM that is not ours, gets 401, and the error
++     * interceptor throws the user out onto /forbidden carrying another
++     * platform's error message in the URL.
++     *
++     * Listing an id here replaces that surface's body with one honest sentence.
++     * Empty or absent means show everything, which is upstream's behaviour.
++     *
++     * This is deliberately a list rather than a per-feature flag: the set of
++     * things a flavour does not run is data, and it changes as services are
++     * added. See docs/finalization-plan.md.
++     */
++    get demoUnavailable(): string[] {
++        this.checkConfigFileLoaded();
++        return this.appConfig.demoUnavailable ?? [];
++    }
++
+     get deployedInNomad() {
+         this.checkConfigFileLoaded();
+         return this.appConfig.deployedInNomad;
+diff --git a/src/app/modules/catalog/components/lists/modules-list/modules-list.component.html b/src/app/modules/catalog/components/lists/modules-list/modules-list.component.html
+index 65b47af..e13c427 100644
+--- a/src/app/modules/catalog/components/lists/modules-list/modules-list.component.html
++++ b/src/app/modules/catalog/components/lists/modules-list/modules-list.component.html
+@@ -30,7 +30,7 @@
+         [(selectedIndex)]="selectedTabIndex"
+         (selectedTabChange)="selectMarketplace($event)"
+         >
+-        <mat-tab label="AI4EOSC">
++        <mat-tab label="{{ 'CATALOG.TABS.PLATFORM' | translate }}">
+           <app-catalog-list
+             [elements]="ai4eoscModules"
+           ></app-catalog-list>
+diff --git a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
+index 5279541..0df4b79 100644
+--- a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
++++ b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
+@@ -188,62 +188,23 @@
+                                     </div>
+                                 </span>
+                             </button>
+-                            <a
+-                                class="action-button sub-button"
+-                                mat-menu-item
+-                                target="_blank"
+-                                [href]="
+-                                    'https://im.egi.eu/im-dashboard/configure?selected_tosca=simple-node-disk.yml&childs=ai4eoscvm.yaml&ai4eosc_model_image=' +
+-                                    module.links.docker_image
+-                                "
+-                            >
+-                                <span class="button-with-icon">
+-                                    <img
+-                                        src="../../../../../assets/images/module-detail/im-logo.png"
+-                                    />
+-                                    <div class="button-texts">
+-                                        <b>
+-                                            {{
+-                                                'CATALOG.MODULE-DETAIL.DEPLOY.API-CLOUD'
+-                                                    | translate
+-                                            }}
+-                                        </b>
+-                                        <span class="button-description-text">
+-                                            {{
+-                                                'CATALOG.MODULE-DETAIL.DEPLOY.IM'
+-                                                    | translate
+-                                            }}
+-                                        </span>
+-                                    </div>
+-                                </span>
+-                            </a>
+-                            <a
+-                                class="action-button sub-button"
+-                                mat-menu-item
+-                                target="_blank"
+-                                href="https://docs.ai4eosc.eu/en/latest/howtos/deploy/eosc-node.html"
+-                            >
+-                                <span class="button-with-icon">
+-                                    <img
+-                                        style="width: 24px; height: 24px"
+-                                        src="../../../../../assets/images/module-detail/circle-eu-flag.png"
+-                                    />
+-                                    <div class="button-texts">
+-                                        <b>
+-                                            {{
+-                                                'CATALOG.MODULE-DETAIL.DEPLOY.API-EU'
+-                                                    | translate
+-                                            }}
+-                                        </b>
+-                                        <span class="button-description-text">
+-                                            {{
+-                                                'CATALOG.MODULE-DETAIL.DEPLOY.EU-NODE'
+-                                                    | translate
+-                                            }}
+-                                        </span>
+-                                    </div>
+-                                </span>
+-                            </a>
++                            <!--
++                              [CAIOS] Two deploy targets removed, not annotated.
++                              They are not features this platform is missing;
++                              they are offers it should never make.
++
++                              "Inference API (cloud)" hands the module to
++                              im.egi.eu, EGI's Infrastructure Manager, which we
++                              do not run and have no account on.
++
++                              "Inference API (EU Node)" offers to deploy on
++                              EOSC EU Node cloud resources — European
++                              infrastructure, on a platform whose entire
++                              argument is that the data stays in Canada. It
++                              also linked to docs.ai4eosc.eu.
++
++                              A user clicking either leaves CAIOS entirely.
++                            -->
+                         </mat-menu>
+                         <div
+                             class="tooltip-container"
+diff --git a/src/app/modules/profile/components/profile/profile.component.html b/src/app/modules/profile/components/profile/profile.component.html
+index 47b4b8a..3c42229 100644
+--- a/src/app/modules/profile/components/profile/profile.component.html
++++ b/src/app/modules/profile/components/profile/profile.component.html
+@@ -12,6 +12,22 @@
+ </app-ui-tabs>
+ 
+ <div class="tab-content-container">
++    @if (isDemoUnavailable(activeTab)) {
++        <!--
++          [CAIOS] The feature is not part of this deployment.
++
++          Before this, clicking API Keys navigated the browser to
++          /forbidden;errorMessage={"error":{"message":"Authentication Error,
++          LiteLLM Virtual Key expected..."}} — another platform's internal
++          error, in our URL bar, on a page that says Forbidden.
++
++          D-50: an absent optional feature is a state, not a failure.
++        -->
++        <div class="demo-unavailable">
++            <mat-icon>info</mat-icon>
++            <p>{{ 'DEMO.UNAVAILABLE' | translate }}</p>
++        </div>
++    } @else {
+     @switch (activeTab) {
+         @case ('overview') {
+             <app-overview-tab [vos]="vos"></app-overview-tab>
+@@ -31,4 +47,5 @@
+             <app-services-tab></app-services-tab>
+         }
+     }
++    }
+ </div>
+diff --git a/src/app/modules/profile/components/profile/profile.component.scss b/src/app/modules/profile/components/profile/profile.component.scss
+index b49b575..7137748 100644
+--- a/src/app/modules/profile/components/profile/profile.component.scss
++++ b/src/app/modules/profile/components/profile/profile.component.scss
+@@ -1,3 +1,31 @@
+ .tab-content-container {
+     margin-top: 24px;
+ }
++
++/* [CAIOS] The panel shown in place of a feature this deployment does not run.
++
++   Deliberately quiet: a neutral card with an information icon, not a warning
++   and not an error. Nothing has gone wrong — the platform simply does not
++   offer this here, and the difference between "broken" and "not included"
++   is the whole point (D-50). */
++.demo-unavailable {
++    display: flex;
++    align-items: flex-start;
++    gap: 0.75rem;
++    padding: 1.25rem 1.5rem;
++    border: 1px solid var(--border-gray);
++    border-radius: 4px;
++    background: var(--light-gray);
++    color: var(--greyish-brown);
++    max-width: 60ch;
++
++    mat-icon {
++        color: var(--dark-gray);
++        flex-shrink: 0;
++    }
++
++    p {
++        margin: 0;
++        line-height: 1.5;
++    }
++}
+diff --git a/src/app/modules/profile/components/profile/profile.component.ts b/src/app/modules/profile/components/profile/profile.component.ts
+index e336887..73652f3 100644
+--- a/src/app/modules/profile/components/profile/profile.component.ts
++++ b/src/app/modules/profile/components/profile/profile.component.ts
+@@ -18,6 +18,9 @@ import { OverviewTabComponent } from '../tabs/overview-tab/overview-tab.componen
+ import { ApiKeysTabComponent } from '../tabs/api-keys-tab/api-keys-tab.component';
+ import { StorageTabComponent } from '../tabs/storage-tab/storage-tab.component';
+ import { ServicesTabComponent } from '../tabs/services-tab/services-tab.component';
++// [CAIOS] Used by the "not included in the demo" panel below.
++import { MatIcon } from '@angular/material/icon';
++import { TranslatePipe } from '@ngx-translate/core';
+ 
+ @Component({
+     selector: 'app-profile',
+@@ -31,6 +34,8 @@ import { ServicesTabComponent } from '../tabs/services-tab/services-tab.componen
+         ApiKeysTabComponent,
+         StorageTabComponent,
+         ServicesTabComponent,
++        MatIcon,
++        TranslatePipe,
+     ],
+ })
+ export class ProfileComponent implements OnInit {
+@@ -80,6 +85,18 @@ export class ProfileComponent implements OnInit {
+     }
+     activeTab = 'overview';
+ 
++    /**
++     * [CAIOS] Whether this tab's feature exists on this deployment.
++     *
++     * Checked in the template before the @switch, so an unavailable tab is
++     * still visible and still clickable — a user should be able to see that
++     * the platform HAS the concept of storage or API keys — but its body is
++     * one sentence instead of a control that cannot work.
++     */
++    isDemoUnavailable(tabId: string): boolean {
++        return this.appConfigService.demoUnavailable.includes(tabId);
++    }
++
+     onTabSelected(tabId: string) {
+         this.activeTab = tabId;
+     }

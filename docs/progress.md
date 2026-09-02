@@ -51,6 +51,70 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-02 — T3 and T4: what the platform does not run, said once and honestly
+
+Deployed. The dashboard image is rebuilt and serving.
+
+### The worst bug on the platform is closed
+
+Profile -> API Keys used to **eject the user out of the application**. Not an
+error toast: `/v1/llm/api_keys` proxies to AI4EOSC's LiteLLM, gets 401, and the
+error interceptor navigated the browser to
+`/forbidden;errorMessage={"error":{"message":"Authentication Error, LiteLLM
+Virtual Key expected..."}}` — another platform's internal error, in our URL bar,
+on a page that says Forbidden. One click from the profile menu.
+
+It now reads: *"Not included in the Demo Version. This part of the platform is
+not running on this deployment."* Verified in a browser on all three tabs —
+API Keys, Storage and Services — with Overview untouched.
+
+`demoUnavailable` in the tenant config decides which surfaces get it, so the day
+a Nextcloud or an MLflow exists it is one line to turn back on. Rendered
+*instead of* the tab body rather than disabling the tab, because a disabled tab
+still mounts the component and still makes the call.
+
+### Two deploy targets removed, not annotated
+
+They are not features this platform lacks; they are offers it should never make.
+**Inference API (cloud)** hands the module to `im.egi.eu`, EGI's Infrastructure
+Manager, which we do not run. **Inference API (EU Node)** offers EOSC EU Node
+cloud resources — European infrastructure, on a platform whose whole argument is
+that the data stays in Canada.
+
+The Deploy menu is now exactly the two that work, confirmed live:
+
+```
+Inference API (serverless)   the project's OSCAR cluster    <- low-code
+Inference API + UI (dedicated)  the project's Nomad cluster <- high-code
+```
+
+### The AI4EOSC strings a visitor actually reads
+
+The Statistics heading said "**AI4EOSC** Usage Over Time"; every catalogue card
+was labelled "AI4 Module" or "AI4 Tool"; and the marketplace's own tab strip
+read **AI4EOSC** above our curated catalogue. The first two are ordinary i18n
+overrides. The third could not be — `modules-list.component.html` hardcodes it
+as a literal rather than a translation key — so it took a patch. It reads
+**CAIOS** now.
+
+`AI4Life` is deliberately left alone, with a test saying so: it is the real name
+of the bioimage.io model zoo project, so it is attribution rather than residue.
+
+### Verified
+
+162 tests green (14 new); `check-branding.sh` and `check-home-page.sh` both
+pass; and a browser pass over every profile tab, the catalogue tab strip and the
+Deploy menu.
+
+### Still open from this stage
+
+Tool cards for **CVAT** (needs ~71 GB on one node, gotcha 9) and **NVFLARE**
+still deploy-able from the Tools list; **Batch training**, **Snapshots** and the
+**Zenodo dataset picker** still render controls with nothing behind them. Second
+pass.
+
+---
+
 ## 2026-09-02 — The vanishing deployment, reproduced and fixed
 
 A report that a deployment "goes starting, then running, then disappears". It

@@ -460,6 +460,58 @@ across the whole catalogue: nine images of nine, none carrying the flag. `config
 as `deepaas` only; the interactive workspace is the dev-env **tool**, whose
 image is newer and whose JupyterLab was verified in a browser.
 
+### `ai4-dashboard/0007-demo-unavailable.patch`
+
+**T4, and the supervisor's checklist item 3.** The dashboard is built for a
+platform with Nextcloud, MLflow, a LiteLLM gateway and a Harbor registry. CAIOS
+runs none of them, and upstream renders their pages anyway.
+
+**The urgent one.** Profile → API Keys calls `/v1/llm/api_keys`, which proxies
+to **AI4EOSC's** LiteLLM (hardcoded in `routers/v1/llm/keys.py`). It answers
+401, and the error interceptor navigated the browser to:
+
+```
+/forbidden;errorMessage=Error: {"error":{"message":"Authentication Error,
+LiteLLM Virtual Key expected. Received=****, expected to start with 'sk-'."}}
+```
+
+Another platform's internal error, in our URL bar, on a page that says
+Forbidden — one click from the profile menu. Found in a browser on 2026-09-02;
+no API probe could have seen it, because the endpoint's 401 is *correct*.
+
+`demoUnavailable` in the tenant config lists the surfaces whose backing service
+this deployment does not run, and their body becomes one sentence instead. It
+is rendered *instead of* the tab body rather than disabling the control,
+because a disabled tab would still have mounted the component and made the
+call. Absent or empty behaves exactly as upstream, so the patch is safe for a
+flavour that runs all of these.
+
+Ours lists `apikeys`, `storage` and `services`. Remove an id the day the service
+exists.
+
+**Two deploy targets removed rather than annotated.** These are not features
+this platform is missing; they are offers it should never make:
+
+- **Inference API (cloud)** hands the module to `im.egi.eu`, EGI's
+  Infrastructure Manager, which we do not run and have no account on.
+- **Inference API (EU Node)** offers EOSC EU Node cloud resources — European
+  infrastructure, on a platform whose entire argument is that the data stays in
+  Canada. It also linked to `docs.ai4eosc.eu`.
+
+Either one takes a user out of CAIOS entirely. The two that remain — OSCAR
+serverless and Nomad dedicated — are the low-code and high-code use cases, and
+a test asserts the patch does not touch them.
+
+**One label that could not be configuration.** `modules-list.component.html`
+hardcodes `<mat-tab label="AI4EOSC">` as a literal rather than a translation
+key, so it names another project above our own curated catalogue and cannot be
+overridden in `en.caios.json` like the rest. Now a key, and it reads `CAIOS`.
+
+The remaining AI4/AI4EOSC strings a visitor reads — the Statistics heading and
+the card type labels — are ordinary i18n overrides and need no patch. `AI4Life`
+is deliberately left alone: it is the real name of the bioimage.io model zoo
+project, so it is attribution rather than residue.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

@@ -51,6 +51,100 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-02 — The finalization browser pass, and three faults no API probe could see
+
+`docs/finalization-plan.md` is the plan for the last stage, against the
+supervisor's eleven-item checklist. This entry records what the browser pass
+that opens it actually found.
+
+### It corrected the headline of the plan's first draft
+
+The draft said `raw.githubusercontent.com` was permanently unreachable from the
+cluster. It is not — it was unreachable for about three hours on 2026-09-01, and
+the draft was written inside that window. PAPI's own log dates it: every
+`Network is unreachable` falls in `19:47-19:59` and `22:36-22:54` UTC, with
+successful catalogue loads before, between and after, and a 60-sample probe the
+next morning came back 60/60.
+
+That makes the fix easier to justify, not harder. The dependency is consulted at
+request time, on the demo's critical path, about ten times per cold catalogue
+load — and `requests.Session()` carries **no timeout anywhere**, so when it does
+fail the page spins rather than errors. An intermittent hang is worse to plan
+around than an outage.
+
+### Three faults that only a browser could report
+
+**Profile -> API Keys ejects the user out of the application.** Not an error
+toast: `/v1/llm/api_keys` proxies to AI4EOSC's LiteLLM at
+`vllm.cloud.ai4eosc.eu`, hardcoded in `routers/v1/llm/keys.py`, which answers
+401 — and the error interceptor lands the browser on
+`/forbidden;errorMessage=...` carrying another platform's internal error in our
+URL bar. One click from the profile menu.
+
+**Every module in the marketplace reports the wrong licence.** `IS_PROD` must be
+`false` (gotcha 1, not optional), so `IS_DEV` is true, so
+`utils.get_github_info()` returns mock data — and `catalog/common.py` writes it
+straight over the module's real metadata:
+
+```
+metadata["license"] = gh_info.get("license", "")   # -> "MIT", always
+metadata["dates"]["created"] = ...                  # -> "1970-01-01", always
+```
+
+All nine modules report `MIT` and `1970-01-01`. `ai4os-yolo-torch` wraps
+Ultralytics YOLO, which is **AGPL-3.0**. Stating someone else's AGPL work as MIT
+on our own marketplace is the one real licensing problem this project has, and
+it is ours rather than anything inherited from AI4OS.
+
+**The Deploy menu offers four targets and two do not exist here** — "Inference
+API (cloud)" via an Infrastructure Manager we do not run, and "Inference API
+(EU Node)", which offers European infrastructure on a platform whose argument is
+that data stays in Canada. Not missing features to be annotated; wrong offers to
+be removed.
+
+### Three more third-party leaks, after the six already closed
+
+All on module detail pages: a **`build aborted`** badge served from
+`jenkins.cloud.ai4eosc.eu`, every image in a module description fetched from
+`raw.githubusercontent.com` by the visitor's browser, and `api.github.com` for
+dates and licence — currently short-circuited by `IS_DEV`, so it fires only if
+that is ever fixed naively.
+
+And four AI4 strings the earlier grep could not see, because they come from
+module metadata rather than from `en.json`: the dev-env's own title "AI4OS
+Development Environment", the "AI4 pre trained / trainable / inference" category
+chips, the tag **`vo.imagine-ai.eu`** rendered on our modules, and the Modules
+page tab strip reading "AI4EOSC".
+
+### Two earlier findings withdrawn
+
+Both came from probing the API without a browser:
+
+- **User statistics are not zeros.** `Your Usage` renders live figures — 5 jobs,
+  6 CPUs, 33 GiB, 1 GPU. Only the historical timeseries is empty. No annotation
+  needed.
+- **The catalogue outage is intermittent, not permanent.** As above.
+
+### Checked and working
+
+Home page, login, Modules (9), Tools (6), LLMs, Deployments, Inference (3 OSCAR
+services), Batch training, Try me, Statistics and Profile -> Overview / Storage /
+Services all render with no console error. OSCAR is healthy throughout — what
+the outage broke was the *route* to it, since "Deploy -> Inference API
+(serverless)" lives on a module detail page.
+
+### Also recorded
+
+Five stale deployments, not four: three `tool-devenv-*` workspaces, the
+`CAIOS federated server` (all four from 2026-08-15, registered under the old
+private hostname and unreachable publicly), and a `tool-llm-*` titled "test
+meeting". The four federated ones are approved for deletion.
+
+Registration is deferred by decision — demo accounts with passwords are
+acceptable for the walkthrough, so T6 is built only if time allows.
+
+---
+
 ## 2026-09-01 — Deployed. The dashboard people see is now the one we have been building
 
 `caios/dashboard:latest` was still `pre-f1`. Neither the typography pass nor the

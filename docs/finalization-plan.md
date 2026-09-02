@@ -417,16 +417,50 @@ Then record. Difficulty: low, gated on everything else.
 
 ---
 
+## Phase R — worth doing, not required
+
+Added 2026-09-02 at the supervisor's request. Everything here would improve the
+demo and none of it blocks it. **The rule for this phase: work it only when the
+required stages are done or blocked on someone else**, and take items in the
+order below, because that order is reward against risk rather than reward alone.
+
+Two of these are cheap enough that they will probably happen; the last two
+almost certainly will not, and are written down so the decision is deliberate
+rather than forgotten.
+
+| # | Item | Reward | Risk / complexity | Verdict |
+|---|---|---|---|---|
+| **R1** | **Deploy `ai4-accounting`** | **High.** Turns the Statistics history from an empty chart into a real usage story, and answers Q-04 — the open question with the shortest fuse. It is the one page that currently shows nothing where a reviewer expects something. | **Low.** Already an upstream repo in our list; `ACCOUNTING_PTH` is the only wiring, and patch `0004` already made its absence graceful. Nothing else depends on it, so a failed attempt costs an afternoon and changes nothing. | **Do it first** |
+| **R2** | **A CAIOS status repository** | **Low-medium.** Turns the notifications bell from "unconfigured" into a working feature, and gives the demo somewhere to announce a maintenance window. | **Very low.** One line of tenant config — D-62 deliberately left the hook in place. The cost is not the change, it is acquiring the habit of maintaining the repository. | **Do if idle** |
+| **R3** | **Replace the workspace landing page** | **Medium-high.** `INFO.md` inside every dev-env renders a large AI4/eosc logo and "Welcome to AI4OS Development Environment" — *inside the window the high-code beat spends three minutes in*. It is the most prominent AI4EOSC branding left anywhere, and the one place a viewer reads closely. | **Medium.** The file is baked into the module image, so the options are a `template` stanza in the dev-env job that overwrites `/srv/INFO.md` at start, or a forked image. The first is ~10 lines of HCL and reversible; the risk is that it runs before the volume mount and gets clobbered, which needs a deploy to find out. | **Do if time** |
+| **R4** | **Default the dev-env to a scientific image** | **Medium.** `u24.04` is bare Ubuntu with no numpy, so a test user taking the default gets an empty workspace. Deferred by decision on 2026-09-02: the demo script will say to pick `tf2.14.0` instead. | **Low-medium**, but awkward. Upstream overwrites the configured default in code (`docker_tag.value = tags[0]`, natsorted Z-A), so it needs a patch to a line that exists specifically to pick the newest tag. Small, but it fights upstream's intent rather than filling a gap. | **Documented, deferred** |
+| **R5** | **Registration and admin console** | **Medium.** Checklist item 4, and it would let a stranger reach the platform without us minting an account. Downgraded on 2026-09-02: demo accounts with passwords are acceptable for the walkthrough. | **High.** The only genuinely new software in the plan — a Keycloak service account, an approval API, a new dashboard page. 1.5-2 days, and it touches the realm that login depends on. | **Only if everything else lands** |
+| **R6** | **A Nextcloud, a Harbor, or a `tryme` node** | **Low for the demo.** Each switches one disabled control back on — storage and Batch, Snapshots, Try me respectively. None of them appears in the walkthrough. | **High**, and misdirected: these are three separate services for three controls the demo never touches. The honest version of this reward is "the interface has fewer greyed-out things in it". | **No** |
+
+**Why R1 before R3** even though R3's reward is higher: R1 cannot break anything
+that currently works, and R3 edits the job template that the entire high-code
+beat runs on. When two items are close on reward, the one that cannot damage a
+working demo goes first.
+
+**Why R6 is a no rather than a maybe.** Three services to un-grey three controls
+nobody clicks during the walkthrough is the definition of effort spent on the
+appearance of completeness. The controls now say why they are off, which is the
+part that mattered.
+
+---
+
 ## Execution order
 
 1. Browser pass — **done 2026-09-02**
-2. T1 — catalogue mirror, with the timeout
-3. T2 — clear the stale deployments
-4. T3 + T4 — licensing, references, demo notice *(one dashboard build)*
-5. T5 — HTTP switch
-6. T7 — availability and preflight
-7. T6 — registration, if time allows
+2. T1 — catalogue mirror, with the timeout — **done**
+3. T2 — clear the stale deployments — **done**
+4. T3 — licensing, LICENSE/NOTICE, AI4OS references — **done**
+5. T4 — every control tested; unavailable ones disabled or removed — **done**
+6. **T5 — HTTP switch** ← next
+7. T7 — availability and preflight
 8. T8 — demo script, read-throughs, record
+
+Phase R runs alongside, whenever the above is blocked on someone else.
 
 T1 goes first because two of the five demo paths run through the catalogue. T5
 sits after the fixes so nothing is written twice against a scheme that then

@@ -200,7 +200,7 @@ job "tool-llm-${JOB_UUID}" {
       port = "ui"
       tags = [
         "traefik.enable=true",
-        "traefik.http.routers.${JOB_UUID}-ui.tls=true",
+        "traefik.http.routers.${JOB_UUID}-ui.${CAIOS_ROUTER_TLS}",
         "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
       ]
 
@@ -228,7 +228,7 @@ job "tool-llm-${JOB_UUID}" {
       port = "vllm"
       tags = [
         "traefik.enable=true",
-        "traefik.http.routers.${JOB_UUID}-vllm.tls=true",
+        "traefik.http.routers.${JOB_UUID}-vllm.${CAIOS_ROUTER_TLS}",
         "traefik.http.routers.${JOB_UUID}-vllm.rule=Host(`vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
       ]
 

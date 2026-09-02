@@ -1,6 +1,24 @@
 # CAIOS ingress for the control plane, on caios_server.
 #
-# Serves four hostnames over TLS and proxies each to a container on loopback.
+# TEMPLATE. Rendered by scripts/render-configs.sh into
+# compose/generated/caddy/Caddyfile, which is what compose mounts. Editing the
+# rendered copy does nothing that survives the next render.
+#
+# Every ${...} below is expanded at render time. Caddy's own {...} placeholders
+# — {host}, {uri} — carry no dollar sign and are left alone.
+#
+# SCHEME
+# ------
+# ${CAIOS_SCHEME} is the scheme the platform serves; ${CAIOS_ALT_SCHEME} is the
+# other one. BOTH are answered. The active scheme serves the site; the inactive
+# one answers a 302 to the active one.
+#
+# The bounce is not tidiness. Chrome upgrades http:// navigations to https:// on
+# its own and only falls back if the upgrade FAILS. Our TLS works, so without
+# the bounce a visitor typing the dashboard hostname lands on a perfectly valid
+# HTTPS page whose calls to the http:// API are then blocked as mixed content —
+# a dead dashboard that looks like our bug rather than the browser's helpfulness.
+# With the bounce, the upgrade succeeds, gets a 302, and comes straight back.
 #
 # CERTIFICATES
 # ------------
@@ -16,6 +34,10 @@
 # caios-ca.pem once and the dashboard, the API, Keycloak, Vault and every
 # deployment are all trusted.
 #
+# The certificate is kept and served even when CAIOS_SCHEME is http. It is what
+# the bounce blocks above need in order to answer at all, and it is what makes
+# the switch back a one-variable change rather than a second migration.
+#
 # Deployment hostnames (*.pacs-deployments...) are Traefik's job on caios_edge,
 # not Caddy's. Two ingresses, two certificates, one authority.
 
@@ -28,23 +50,33 @@
 	tls /etc/caddy/certs/control-plane.pem /etc/caddy/certs/control-plane.key
 }
 
+# The inactive scheme. Carries a certificate only when the inactive scheme is
+# https — a Caddy site block on http:// rejects a tls directive outright.
+(caios_bounce) {
+	${CAIOS_ALT_TLS}
+	redir ${CAIOS_SCHEME}://{host}{uri} 302
+}
+
 # ---------------------------------------------------------------------------
 # Dashboard — the only hostname a demo audience ever sees.
 # ---------------------------------------------------------------------------
-https://{$CAIOS_DASHBOARD_HOST} {
-	import caios_tls
+${CAIOS_SCHEME}://${CAIOS_DASHBOARD_HOST} {
+	${CAIOS_TLS}
 	encode gzip
 
 	# Serve the CA certificate for download.
 	#
-	# Not a convenience: without our CA installed, the browser blocks the
-	# dashboard's calls to api.<...> entirely. Clicking through the warning on
-	# the dashboard host grants an exception for THAT host only, and background
-	# XHR/fetch requests to the API host cannot prompt — they simply fail, and
-	# the page reports "Error calling the API, please try again later".
+	# Under CAIOS_SCHEME=http nothing needs it to reach the dashboard any more,
+	# and that is the point of the switch. It stays served because the site
+	# workspaces still fetch it: the federated bundle points SSL_CERT_FILE at
+	# this file (D-43), and the federated server keeps TLS (D-67).
 	#
-	# So this is the fix for a functional problem, and it needs to be reachable
-	# from the machine that has the problem.
+	# Under CAIOS_SCHEME=https it is load-bearing. Without our CA installed, the
+	# browser blocks the dashboard's calls to api.<...> entirely. Clicking
+	# through the warning on the dashboard host grants an exception for THAT
+	# host only, and background XHR/fetch requests to the API host cannot
+	# prompt — they simply fail, and the page reports "Error calling the API,
+	# please try again later".
 	handle /caios-ca.pem {
 		header Content-Type application/x-pem-file
 		header Content-Disposition "attachment; filename=caios-ca.pem"
@@ -85,14 +117,22 @@ https://{$CAIOS_DASHBOARD_HOST} {
 	}
 }
 
+${CAIOS_ALT_SCHEME}://${CAIOS_DASHBOARD_HOST} {
+	import caios_bounce
+}
+
 # ---------------------------------------------------------------------------
 # PAPI. CORS is handled by PAPI itself from main.yaml's CORS_origins; adding
 # headers here as well produces duplicates and browsers reject the response.
 # ---------------------------------------------------------------------------
-https://{$CAIOS_API_HOST} {
-	import caios_tls
+${CAIOS_SCHEME}://${CAIOS_API_HOST} {
+	${CAIOS_TLS}
 	encode gzip
 	reverse_proxy 127.0.0.1:8000
+}
+
+${CAIOS_ALT_SCHEME}://${CAIOS_API_HOST} {
+	import caios_bounce
 }
 
 # ---------------------------------------------------------------------------
@@ -101,32 +141,43 @@ https://{$CAIOS_API_HOST} {
 # The scheme and host here must match KC_HOSTNAME and PAPI's KEYCLOAK_URL
 # exactly. Every token carries the issuer as a literal string and PAPI compares
 # it character by character — http vs https, or a trailing slash, is enough to
-# fail every request with 401 and no useful explanation.
+# fail every request with 401 and no useful explanation. All three now derive
+# from CAIOS_SCHEME, which is what stops them drifting apart.
 #
-# X-Forwarded-Proto matters for the same reason: without it Keycloak believes it
-# is being reached over plain HTTP and mints tokens with an http:// issuer.
+# X-Forwarded-Proto matters for the same reason: it is how Keycloak decides
+# which scheme to mint issuers with. It must carry the ACTIVE scheme, not a
+# hardcoded https — under CAIOS_SCHEME=http a hardcoded https here would make
+# Keycloak issue https:// issuers into an http:// platform, and every PAPI call
+# would 401 while the login page itself looked perfect.
 # ---------------------------------------------------------------------------
-https://{$CAIOS_AUTH_HOST} {
-	import caios_tls
+${CAIOS_SCHEME}://${CAIOS_AUTH_HOST} {
+	${CAIOS_TLS}
 	encode gzip
 	reverse_proxy 127.0.0.1:8180 {
-		header_up X-Forwarded-Proto https
-		header_up X-Forwarded-Port 443
+		header_up X-Forwarded-Proto ${CAIOS_SCHEME}
+		header_up X-Forwarded-Port ${CAIOS_PORT}
 	}
+}
+
+${CAIOS_ALT_SCHEME}://${CAIOS_AUTH_HOST} {
+	import caios_bounce
 }
 
 # ---------------------------------------------------------------------------
 # Vault UI. Admin only — nothing in the demo touches this directly.
-# Reachable only from the VPN, like everything else here.
 # ---------------------------------------------------------------------------
-https://{$CAIOS_VAULT_HOST} {
-	import caios_tls
+${CAIOS_SCHEME}://${CAIOS_VAULT_HOST} {
+	${CAIOS_TLS}
 	reverse_proxy 127.0.0.1:8200
 }
 
+${CAIOS_ALT_SCHEME}://${CAIOS_VAULT_HOST} {
+	import caios_bounce
+}
+
 # ---------------------------------------------------------------------------
-# Anything else arriving on port 80 or by bare IP. Answering plainly beats a
-# confusing default page when someone mistypes a hostname.
+# Anything else arriving on port 80 or 443 by bare IP or an unknown hostname.
+# Answering plainly beats a confusing default page when someone mistypes.
 # ---------------------------------------------------------------------------
 :80 {
 	respond "CAIOS. Use a hostname, not the bare address — see docs/runbook.md." 404

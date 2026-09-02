@@ -1,0 +1,83 @@
+---
+# Re-submit the Traefik job without the web -> websecure redirect.
+#
+#   cd ansible && ansible-playbook playbook-traefik.yml
+#
+# Safe and re-runnable. Renders one Nomad service job and submits it; deletes
+# nothing. Submitting an unchanged job is a no-op to Nomad.
+#
+# WHY IT IS SEPARATE FROM playbook-nomad.yml
+# ------------------------------------------
+# The nomad role builds Traefik from its own template, which redirects the web
+# entrypoint to websecure. That redirect is entrypoint-level: it fires before
+# routing, so no router can opt out of it, and with CAIOS_SCHEME=http every
+# plain-HTTP deployment URL is answered with a 301 to an https:// address that
+# no router serves. Deployments look healthy and every endpoint is dead.
+#
+# vendor/ is never edited, and shadowing one template from a vendored role means
+# shadowing the whole role. So ansible/templates/traefik.j2 is a copy with that
+# one block removed, and this playbook deploys it. Same shape as
+# playbook-docuum.yml, and for the same reason.
+#
+#   !!  Running playbook-nomad.yml REVERTS this. Re-run this playbook
+#       afterwards. scripts/verify-cluster.sh reads the LIVE job and fails if
+#       the redirect is back, so the regression is caught rather than found
+#       during a walkthrough.
+#
+# The Consul token comes from the file the consul role already wrote on this
+# machine, exactly as roles/nomad/tasks/traefik_service.yml reads it. Nothing
+# secret is added to the repository.
+
+# Runs on nomad_master, not on the Traefik node. Submitting a job is a
+# cluster-wide operation and the job's own constraint pins WHERE it lands; the
+# Nomad server is where the mTLS client certificates already are.
+- name: Deploy Traefik without the HTTPS redirect
+  hosts: nomad_master
+  gather_facts: false
+
+  vars:
+    # Matches roles/nomad/tasks/traefik_service.yml, which names the Nomad and
+    # Consul agents "<dc>-traefik" and pins the job to that node.
+    consul_hostname: "{{ consul_dc_name }}-traefik"
+    caios_traefik_job: "{{ path }}traefik-{{ nomad_dc | default(consul_dc_name) }}.hcl"
+
+  environment:
+    NOMAD_ADDR: "https://127.0.0.1:4646"
+    NOMAD_CACERT: "{{ nomad_certs }}nomad-ca.pem"
+    NOMAD_CLIENT_CERT: "{{ nomad_certs }}cli.pem"
+    NOMAD_CLIENT_KEY: "{{ nomad_certs }}cli-key.pem"
+    NOMAD_NAMESPACE: "default"
+
+  tasks:
+
+    - name: Read the Traefik Consul token the consul role wrote
+      ansible.builtin.set_fact:
+        token_consul_token: "{{ lookup('file', consul_fetched + 'traefik_token')
+                                | regex_search(regexp, '\\1') | first }}"
+      vars:
+        regexp: 'SecretID:\s+(.*)'
+      delegate_to: 127.0.0.1
+      no_log: true
+
+    - name: Render the job file
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/templates/traefik.j2"
+        dest: "{{ caios_traefik_job }}"
+        owner: "{{ username }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Check the job file parses before submitting it
+      ansible.builtin.command: "nomad job validate {{ caios_traefik_job }}"
+      changed_when: false
+
+    - name: Submit the job
+      ansible.builtin.command: "nomad job run {{ caios_traefik_job }}"
+      register: caios_traefik_run
+      changed_when: "'Deployment completed successfully' in caios_traefik_run.stdout
+                     or 'Evaluation' in caios_traefik_run.stdout"
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ caios_traefik_run.stdout_lines
+                 | select('search', 'Status|Deployed|traefik') | list }}"

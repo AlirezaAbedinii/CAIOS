@@ -1,0 +1,168 @@
+{#
+  CAIOS Traefik job.
+
+  A copy of vendor/ai4-ansible/roles/nomad/templates/traefik.j2 with ONE
+  change, marked [CAIOS] below: the web entrypoint no longer redirects to
+  websecure.
+
+  WHY IT IS COPIED RATHER THAN PATCHED
+  ------------------------------------
+  The upstream template is inside the `nomad` role, which playbook-nomad.yml
+  uses whole. Shadowing one template means shadowing the entire role, and
+  vendor/ is never edited (CLAUDE.md). So this is a copy, deployed by
+  ansible/playbook-traefik.yml, exactly as nomad-jobs/docuum.hcl is a copy of
+  the docuum job for the same reason.
+
+  AND THE CONSEQUENCE, WHICH HAS BITTEN US ONCE ALREADY (gotcha 14)
+  ----------------------------------------------------------------
+  Re-running playbook-nomad.yml REVERTS this. It re-renders upstream's template
+  and resubmits the job, the redirect comes back, and every plain-HTTP request
+  to a deployment starts answering 301 to an https:// URL that no router serves
+  any more. The dashboard still shows endpoints; every one of them is dead.
+
+  scripts/verify-cluster.sh reads the LIVE job and fails if the redirect is
+  back. Run it after any Ansible work.
+
+  WHY THE REDIRECT HAS TO GO
+  --------------------------
+  It is entrypoint-level, so it fires before routing and no router can opt out.
+  With it in place a plain-HTTP deployment URL is answered with 301 to https,
+  where no matching TLS router exists — a redirect into a hole.
+
+  Nothing depended on it: every deployment URL the dashboard hands out is
+  absolute and carries its own scheme (PAPI's nomad_utils), and the federated
+  server, which keeps TLS, is addressed on :443 directly.
+
+  The certificate store below is untouched. The federated-learning router still
+  uses it (D-63), and it is what makes CAIOS_SCHEME=https work again with no
+  second migration.
+#}
+job "traefik-{{ consul_dc_name }}" {
+  region      = "{{ nomad_region }}"
+  datacenters = ["{{ consul_dc_name }}"]
+  type     = "service"
+  priority = 100          # traefik job cannot be displaced by a regular job
+ 
+  # We need to fix the client were Traefik is deployed
+  # because the DNS is pointing to that client's IP.
+  constraint {
+    attribute = "${node.unique.name}"
+    operator  = "="
+    value     = "{{ consul_hostname }}"
+  }
+
+  group "traefik-{{ nomad_dc }}" {
+    count = 1
+ 
+    task "traefik-{{ nomad_dc }}" {
+ 
+      driver = "docker"
+ 
+      config {
+        image        = "traefik:v2.10"
+        network_mode = "host"
+        volumes      = [
+          "local/traefik.toml:/etc/traefik/traefik.toml",
+          "local/dynamic.toml:/etc/traefik/dynamic.toml",
+          "{{ traefik_certs_dir }}:/etc/traefik/ssl-certs"
+        ]
+      }
+ 
+      template {
+        data = <<EOF
+[entryPoints]
+  [entryPoints.web]
+    address = ":80"
+
+# [CAIOS] Upstream redirects this entrypoint to websecure. Removed — see the
+# header of this template. Restoring it turns every http:// deployment URL into
+# a 301 pointing at a TLS router that no longer exists.
+
+  [entryPoints.websecure]
+    address = ":443"
+    [entryPoints.websecure.http]
+        middlewares = ["no-www@file"]
+ 
+  [entryPoints.traefik]
+    address = ":8081"
+  
+  [entryPoints.nvflare_fl]
+    address = ":8002"
+  
+  [entryPoints.nvflare_admin]
+    address = ":8003"
+  
+[api]
+  dashboard = false
+  insecure  = false
+ 
+# Enable Consul Catalog configuration backend.
+[providers.consulCatalog]
+  prefix           = "traefik"
+  exposedByDefault = false
+ 
+  [providers.consulCatalog.endpoint]
+    address = "127.0.0.1:8500"
+    # token is first set to default and then changed to each agent's token
+    token = "{{ token_consul_token }}"
+    scheme  = "http"
+ 
+[providers.file]
+  filename = "/etc/traefik/dynamic.toml"
+
+[certificatesResolvers]
+  [certificatesResolvers.letsencrypt.acme]
+    email = "{{ traefik_letsencrypt_email }}"
+    storage = "/etc/traefik/ssl-certs/acme.json"
+
+    [certificatesResolvers.letsencrypt.acme.httpChallenge]
+      entryPoint = "web"
+
+# [log]
+#   level = "DEBUG"
+ 
+EOF
+ 
+        destination = "local/traefik.toml"
+      }
+ 
+      template {
+        data = <<EOF
+ 
+[http]
+ 
+  [http.routers]
+    [http.routers.routerTest]
+      service = "srv-grpc"
+      rule = "Host(`frontend.local`)"
+
+  [http.middlewares]
+    [http.middlewares.no-www]
+        [http.middlewares.no-www.redirectRegex]
+          regex = "https?:\\/\\/www\\.(.+)"
+          replacement = "https://$${1}"
+          permanent = true
+ 
+  [http.services]
+    [http.services.srv-grpc]
+      [http.services.srv-grpc.loadBalancer]
+        [[http.services.srv-grpc.loadBalancer.servers]]
+          url = "h2c://backend.local:8080"
+ 
+  [tls.stores]
+    [tls.stores.default]
+      [tls.stores.default.defaultCertificate]
+        certFile = "/etc/traefik/ssl-certs/domain.pem"
+        keyFile  = "/etc/traefik/ssl-certs/domain.key"
+EOF
+ 
+        destination = "local/dynamic.toml"
+      }
+ 
+      resources {
+        cpu    = 100
+        memory = 128
+      }
+    }
+  }
+}

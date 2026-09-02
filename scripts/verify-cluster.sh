@@ -160,4 +160,42 @@ else
     fi
 fi
 
+# T5. Traefik's web entrypoint must not redirect to websecure.
+#
+# The redirect is entrypoint-level, so it fires before routing and no router can
+# opt out of it. With CAIOS_SCHEME=http every plain-HTTP deployment URL is then
+# answered with a 301 to an https:// address that no router serves — the
+# dashboard lists endpoints and every one of them is dead.
+#
+# Upstream's nomad role puts it back. Re-running playbook-nomad.yml is enough,
+# which is exactly what happened to the docuum threshold above. Same shape of
+# regression, same shape of check: read the LIVE job, not the file on disk.
+echo
+echo "=== Traefik web entrypoint (must NOT redirect to websecure) ==="
+TRAEFIK_TOML="$(NOMAD_NAMESPACE=default nomad job inspect traefik-"${CONSUL_DC:-caios}" 2>/dev/null \
+    | python3 -c '
+import json, sys
+try:
+    job = json.load(sys.stdin)["Job"]
+except Exception:
+    raise SystemExit
+for group in job.get("TaskGroups") or []:
+    for task in group.get("Tasks") or []:
+        for tpl in task.get("Templates") or []:
+            if str(tpl.get("DestPath", "")).endswith("traefik.toml"):
+                print(tpl.get("EmbeddedTmpl") or "")
+' 2>/dev/null)"
+
+if [[ -z "$TRAEFIK_TOML" ]]; then
+    echo "  Traefik job not found — no deployment is reachable at all"
+    VERIFY_FAILED=1
+elif grep -q "redirections" <<<"$TRAEFIK_TOML"; then
+    echo "  PROBLEM: the web entrypoint redirects to websecure."
+    echo "           Something re-ran the nomad role. Fix:"
+    echo "             cd ansible && ansible-playbook playbook-traefik.yml"
+    VERIFY_FAILED=1
+else
+    echo "  no redirect — plain HTTP reaches the routers"
+fi
+
 exit "${VERIFY_FAILED:-0}"

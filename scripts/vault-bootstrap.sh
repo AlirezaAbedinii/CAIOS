@@ -29,7 +29,11 @@ set -a; source "$ENV_FILE"; set +a
 export VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
 export VAULT_TOKEN="${VAULT_ROOT_TOKEN:?VAULT_ROOT_TOKEN is empty in $ENV_FILE}"
 
-ISSUER="https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+ISSUER="${SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
 
 vault() { docker exec -e VAULT_ADDR -e VAULT_TOKEN caios_vault vault "$@"; }
 
@@ -49,13 +53,24 @@ echo "==> trusting $ISSUER"
 # to trust. Without oidc_discovery_ca_pem it fails with a TLS verification error
 # that reads like a network problem. The PEM is passed inline, so nothing has to
 # be mounted into the container.
-CA_PEM="$(cat "${CAIOS_CA_CRT:-$HOME/caios-ca.pem}")"
-
-docker exec -i -e VAULT_ADDR -e VAULT_TOKEN caios_vault \
-    vault write auth/jwt-keycloak/config \
-        oidc_discovery_url="$ISSUER" \
-        oidc_discovery_ca_pem="$CA_PEM" \
-        default_role="caios"
+#
+# Over HTTP there is no certificate to verify, and passing the CA anyway is not
+# merely redundant: Vault validates the two together and rejects a CA supplied
+# for a non-TLS discovery URL. Same conditional as compose/vault/bootstrap.sh,
+# which is what runs unattended.
+if [[ "$SCHEME" == "https" ]]; then
+    CA_PEM="$(cat "${CAIOS_CA_CRT:-$HOME/caios-ca.pem}")"
+    docker exec -i -e VAULT_ADDR -e VAULT_TOKEN caios_vault \
+        vault write auth/jwt-keycloak/config \
+            oidc_discovery_url="$ISSUER" \
+            oidc_discovery_ca_pem="$CA_PEM" \
+            default_role="caios"
+else
+    docker exec -i -e VAULT_ADDR -e VAULT_TOKEN caios_vault \
+        vault write auth/jwt-keycloak/config \
+            oidc_discovery_url="$ISSUER" \
+            default_role="caios"
+fi
 
 echo "==> policy caios-user"
 # Templated so each user can only reach their own subtree. The alias name is

@@ -22,7 +22,11 @@ ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 
-API="https://${CAIOS_API_HOST}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+API="${SCHEME}://${CAIOS_API_HOST}"
 VO="${CAIOS_VO:-vo.caios.ca}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

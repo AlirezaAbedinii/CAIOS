@@ -5,7 +5,8 @@
   "enabled": true,
   "displayName": "CAIOS",
   "displayNameHtml": "<b>CAIOS</b>",
-  "sslRequired": "external",
+  "_comment_ssl": "T5. Derived from CAIOS_SCHEME by scripts/render-configs.sh: 'external' when the platform serves https, 'none' when it serves http. Keycloak treats a request from a public address as external, so leaving this at 'external' on an http platform makes it refuse the login page outright with \"HTTPS required\" — a dead login on a dashboard that otherwise looks perfect. It is a setting on the LIVE realm, and the realm import only ever runs once, so scripts/keycloak-bootstrap.sh applies it again through the admin API.",
+  "sslRequired": "${KEYCLOAK_SSL_REQUIRED}",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
@@ -43,18 +44,20 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
-      "_comment_redirect": "Scoped to the real dashboard origin. Never widen this to '*' — a wildcard redirect URI on a public client is how access tokens get stolen.",
+      "_comment_redirect": "Scoped to the real dashboard origin. Never widen this to '*' — a wildcard redirect URI on a public client is how access tokens get stolen. BOTH schemes are listed deliberately (T5): the dashboard sends window.location.origin as its redirect URI, so whichever scheme the visitor arrived on is the one Keycloak is asked to return to, and a scheme missing from this list fails the login with an 'Invalid parameter: redirect_uri' page rather than anything that names the cause. Listing both is not a widening — each entry is still one exact origin.",
       "redirectUris": [
         "https://${CAIOS_DASHBOARD_HOST}/*",
+        "http://${CAIOS_DASHBOARD_HOST}/*",
         "http://localhost:8080/*"
       ],
       "webOrigins": [
         "https://${CAIOS_DASHBOARD_HOST}",
+        "http://${CAIOS_DASHBOARD_HOST}",
         "http://localhost:8080"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "https://${CAIOS_DASHBOARD_HOST}/*##http://localhost:8080/*"
+        "post.logout.redirect.uris": "https://${CAIOS_DASHBOARD_HOST}/*##http://${CAIOS_DASHBOARD_HOST}/*##http://localhost:8080/*"
       },
       "_comment_scopes": "The `basic` scope is NOT optional and is easy to miss. In Keycloak 26 it carries the `sub` protocol mapper, and PAPI requires `sub` on every token (auth.py `require`) and uses it as the user identity for Vault secret paths. Listing defaultClientScopes explicitly without it produces tokens that look complete — correct issuer, name, email, roles — and are rejected by PAPI with no clue why. profile and email supply `name` and `email`; roles supplies realm_access. offline_access is optional and requested by the dashboard for a refresh token.",
       "defaultClientScopes": [

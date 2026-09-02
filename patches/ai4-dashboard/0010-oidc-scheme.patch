@@ -1,0 +1,22 @@
+--- a/src/app/core/services/auth/auth.service.ts
++++ b/src/app/core/services/auth/auth.service.ts
+@@ -103,6 +103,19 @@
+         ) {
+             authCodeFlowConfig.issuer = this.appConfigService.issuer;
+             authCodeFlowConfig.clientId = this.appConfigService.clientId;
++
++            // [CAIOS] T5. angular-oauth2-oidc defaults requireHttps to
++            // 'remoteOnly', which REJECTS an http:// issuer on anything that is
++            // not localhost — loadDiscoveryDocument() below rejects before a
++            // single request is sent, and the dashboard renders a login page
++            // that can never complete. This is the one hard blocker the HTTP
++            // switch had.
++            //
++            // Derived from the issuer rather than switched off, so an https
++            // deployment keeps the check and the same image serves both. That
++            // is what makes the scheme a one-variable rollback with no rebuild.
++            authCodeFlowConfig.requireHttps =
++                this.appConfigService.issuer.startsWith('https://');
+         }
+ 
+         // Some OICD providers require dummyClientSecret

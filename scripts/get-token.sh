@@ -19,7 +19,11 @@ set -a; source "$ENV_FILE"; set +a
 
 USERNAME="${1:?usage: get-token.sh <username> <password>}"
 PASSWORD="${2:?usage: get-token.sh <username> <password>}"
-ISSUER="https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+ISSUER="${SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
 
 # --insecure while we are on self-signed certificates (D-12). Drop it once a
 # real domain is in place.

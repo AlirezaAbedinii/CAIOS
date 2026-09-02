@@ -563,6 +563,24 @@ the opacity is only what says so. Upstream already had a precedent for
 per-id treatment of a card — it hides `ai4os-llm` for the imagine VO with an
 `ngStyle` — so this is the same idea with a state instead of a disappearance.
 
+### `ai4-dashboard/0010-oidc-scheme.patch`
+
+**The one hard blocker the HTTP switch had.** `angular-oauth2-oidc` defaults
+`requireHttps` to `'remoteOnly'`, which rejects an `http://` issuer on anything
+that is not localhost — `loadDiscoveryDocument()` rejects before a single
+request leaves the browser, and the dashboard renders a login page that can
+never complete.
+
+Derived from the issuer rather than switched off, so an HTTPS deployment keeps
+the check and **one image serves both schemes**. That is what makes the scheme
+a one-variable rollback with no rebuild.
+
+Two things that did *not* need patching, checked in the built bundle rather
+than assumed: the Keycloak client requires PKCE `S256`, and `crypto.subtle` is
+unavailable in insecure contexts — but the bundle carries
+`angular-oauth2-oidc`'s pure-JavaScript SHA-256 and calls `subtle.digest`
+nowhere. `crypto.getRandomValues`, which it does use, works on HTTP.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list
@@ -574,6 +592,81 @@ That matters because this test suite is not optional: it is the only thing that
 sets `meta.status=ready` on each node, and every PAPI job template requires it.
 Without the patch we get a cluster that passes its own tests and then fails
 every real deployment.
+
+### `ai4-papi/0016-scheme-switch.patch` — pinned to `e80a2b7`
+
+**One environment variable decides whether this platform speaks HTTP or
+HTTPS.** T5. Upstream writes `https` in three places and hardcodes `tls=true`
+on every Traefik router it declares; all four now follow `CAIOS_SCHEME`, which
+defaults to `https`, so an image built without it behaves exactly as before.
+
+Why it matters at all: the certificates are issued from our own CA, so every
+visitor must install `caios-ca.pem` before the dashboard works — its background
+calls to the API host cannot prompt for an exception, they simply fail. On HTTP
+there is nothing to install.
+
+**Four changes.**
+
+1. `conf.py` gains `CAIOS_SCHEME` and `CAIOS_ROUTER_TLS`, and `load_nomad_job()`
+   substitutes the latter into every job template as it is read. Here rather
+   than at the call sites because this is the one place every template is read,
+   while the call sites each build their own substitution dict — five dicts,
+   five chances to miss one. A missed one is not loud: `safe_substitute` leaves
+   `${CAIOS_ROUTER_TLS}` in place, Consul accepts it as a tag, Traefik ignores
+   a tag it cannot parse, and the deployment comes up healthy with no route to
+   it at all.
+
+2. `nomad_utils.py` builds every endpoint the dashboard displays. Hardcoding
+   `https` there hands out URLs that no longer answer.
+
+3. `tools.py` builds the OpenAI-compatible base URL a researcher pastes into
+   their own client (demo beat 7). Note this is the value shown to the *user*;
+   Open WebUI's own copy is overwritten by patch `0010` with the allocation
+   address, which stays `http://` either way because it never leaves the node.
+
+4. Sixteen router tags across six job templates become
+   `${CAIOS_ROUTER_TLS}` — `tls=true` under https (upstream's literal: a TLS
+   router on every entrypoint), `entrypoints=web` under http. Deliberately not
+   `tls=false`, which would depend on how Traefik's label parser treats a false
+   value for a struct-pointer field.
+
+**One router is exempt, and it is marked in the file.** The federated-learning
+server keeps `tls=true`. It is gRPC on :443 spoken by Flower clients inside
+cluster workspaces that already carry the CA in their bundle (D-43), so it is a
+barrier to nobody, and h2c from client to Traefik is not a thing to be
+discovering on demo day. D-67.
+
+`ai4os-cvat` and `ai4os-nvflare` are left alone: neither can run on this
+cluster (gotchas 9 and 8) and both are listed in the dashboard's
+`demoUnavailable`. `tests/test_scheme_switch.py` asserts that omission so it
+stays a decision rather than an oversight.
+
+### `ai4-papi/0017-quota-with-failed-deployments.patch` — pinned to `e80a2b7`
+
+**The other half of `0015`, found by trying to deploy something.** Making a
+failed deployment visible put it in front of code that assumed every deployment
+has an allocation. A failed one does not, so `nomad_utils` leaves its
+`resources` empty — and `quotas.check_userwise` indexed straight into it:
+
+```python
+user["gpu_num"] += d["resources"]["gpu_num"]      # KeyError on a failed job
+```
+
+The effect was out of all proportion to the line. **Any user with one failed
+deployment in their history could create no new deployment at all** — every
+POST to `/deployments/modules` or `/deployments/tools` answered HTTP 500, with
+a `KeyError` in PAPI's log and nothing in the dashboard beyond "Error". Three
+abandoned `posenet-tf` jobs were enough to make the platform unable to deploy
+anything.
+
+Found on 2026-09-02 during the T5 smoke test, which deployed a workspace for a
+completely unrelated reason. That is the argument for smoke-testing a change by
+using the platform rather than by reading it.
+
+`.get("gpu_num", 0)` is the whole fix, and zero is the correct answer rather
+than merely a safe one: a deployment that is not running holds no GPU. The
+guard the crash was hiding — no more than two GPUs per user — still works, and
+`tests/test_failed_deployments.py` asserts both halves.
 
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 

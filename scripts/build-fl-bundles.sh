@@ -44,7 +44,11 @@ set -a; source "$ENV_FILE"; set +a
 SITES_DIR="demo/data/sites"
 DIST="demo/fl/dist"
 CA_SRC="${CAIOS_CA_PEM:-compose/certs/caios-ca.pem}"
-BASE_URL="https://${CAIOS_DASHBOARD_HOST}/fl"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+BASE_URL="${SCHEME}://${CAIOS_DASHBOARD_HOST}/fl"
 SITES=(site_a site_b site_c)
 
 [[ -f "$SITES_DIR/test.npz" ]] || { echo "No data — run demo/fl/partition.py first."; exit 1; }

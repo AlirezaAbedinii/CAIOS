@@ -27,7 +27,13 @@ set -eu
 : "${CAIOS_AUTH_HOST:?}"
 : "${KEYCLOAK_REALM:?}"
 
-ISSUER="https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
+# T5. The issuer Vault trusts must be the SAME STRING Keycloak mints, which is
+# KC_HOSTNAME in compose/docker-compose.yml. Both derive from CAIOS_SCHEME; if
+# they ever disagree, Vault answers every login "permission denied" and PAPI
+# surfaces that as a bare HTTP 500 on any deployment that stores a secret —
+# which is every federated-learning and LLM deployment.
+SCHEME="${CAIOS_SCHEME:-https}"
+ISSUER="${SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}"
 CA_FILE="${CAIOS_CA_FILE:-/caios-ca.pem}"
 
 echo "waiting for Vault at $VAULT_ADDR"
@@ -74,13 +80,25 @@ vault auth list -format=json | grep -q '"jwt-keycloak/"' \
     || vault auth enable -path=jwt-keycloak jwt
 
 echo "==> trusting $ISSUER"
-# Vault fetches the realm's discovery document over HTTPS, and that certificate
-# is signed by our own CA, which this image has no reason to trust. Without the
-# CA the fetch fails with a TLS error that reads like a network problem.
-vault write auth/jwt-keycloak/config \
-    oidc_discovery_url="$ISSUER" \
-    oidc_discovery_ca_pem=@"$CA_FILE" \
-    default_role="caios"
+# Vault fetches the realm's discovery document from that URL. Over HTTPS the
+# certificate is signed by our own CA, which this image has no reason to trust,
+# so the CA is handed over explicitly — without it the fetch fails with a TLS
+# error that reads like a network problem.
+#
+# Over HTTP there is no certificate to verify, and passing oidc_discovery_ca_pem
+# anyway is not merely redundant: Vault validates the two together and rejects
+# a CA supplied for a non-TLS discovery URL, so vault_init would restart in a
+# loop and every deployment needing a secret would 500.
+if [ "$SCHEME" = "https" ]; then
+    vault write auth/jwt-keycloak/config \
+        oidc_discovery_url="$ISSUER" \
+        oidc_discovery_ca_pem=@"$CA_FILE" \
+        default_role="caios"
+else
+    vault write auth/jwt-keycloak/config \
+        oidc_discovery_url="$ISSUER" \
+        default_role="caios"
+fi
 
 echo "==> policy caios-user"
 # Templated so each user reaches only their own subtree. The alias name is the

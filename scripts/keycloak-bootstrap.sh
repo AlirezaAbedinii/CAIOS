@@ -34,6 +34,53 @@ kc config credentials \
     --user "${KEYCLOAK_ADMIN}" \
     --password "${KEYCLOAK_ADMIN_PASSWORD}"
 
+# ---------------------------------------------------------------------------
+# Realm and client settings that the import cannot deliver.
+#
+# Keycloak imports a realm ONLY on first start. Once caios exists, editing
+# configs/keycloak/caios-realm.json.template and re-rendering changes nothing on
+# the running system — the importer skips it silently and everything keeps
+# working with the old values. That is fine for most fields and fatal for these
+# two, so they are applied here through the admin API, idempotently.
+#
+#   sslRequired    Keycloak treats a request from a public address as external.
+#                  Left at "external" on an http platform it refuses the login
+#                  page with "HTTPS required", which reaches the user as a
+#                  broken login on a dashboard that otherwise renders perfectly.
+#
+#   redirectUris   The dashboard sends window.location.origin as its redirect
+#   webOrigins     URI, so the scheme the visitor arrived on is the one Keycloak
+#                  is asked to return to. Both are registered, so neither can
+#                  fail with "Invalid parameter: redirect_uri".
+#
+# Derived from CAIOS_SCHEME. Re-run this script after flipping it.
+# ---------------------------------------------------------------------------
+if [[ "${CAIOS_SCHEME:-https}" == "https" ]]; then
+    SSL_REQUIRED=external
+else
+    SSL_REQUIRED=none
+fi
+
+echo "==> realm ${REALM}: sslRequired=${SSL_REQUIRED} (CAIOS_SCHEME=${CAIOS_SCHEME:-https})"
+kc update "realms/${REALM}" -s "sslRequired=${SSL_REQUIRED}"
+
+CLIENT_UUID="$(kc get clients -r "$REALM" -q "clientId=caios-dashboard" \
+    --fields id --format csv --noquotes 2>/dev/null | tail -n1 || true)"
+if [[ -z "$CLIENT_UUID" ]]; then
+    echo "  caios-dashboard client not found in realm ${REALM}. Import it first."
+    exit 1
+fi
+
+DASH_HTTPS="https://${CAIOS_DASHBOARD_HOST}"
+DASH_HTTP="http://${CAIOS_DASHBOARD_HOST}"
+echo "==> client caios-dashboard: redirect URIs and web origins for both schemes"
+kc update "clients/${CLIENT_UUID}" -r "$REALM" \
+    -s "redirectUris=[\"${DASH_HTTPS}/*\",\"${DASH_HTTP}/*\",\"http://localhost:8080/*\"]" \
+    -s "webOrigins=[\"${DASH_HTTPS}\",\"${DASH_HTTP}\",\"http://localhost:8080\"]" \
+    -s "attributes.\"post.logout.redirect.uris\"=${DASH_HTTPS}/*##${DASH_HTTP}/*##http://localhost:8080/*"
+
+echo
+
 # username : first : last : email
 USERS=(
   "researcher:Dana:Okafor:researcher@caios.local"

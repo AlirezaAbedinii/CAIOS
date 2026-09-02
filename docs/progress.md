@@ -51,6 +51,82 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-02 — The vanishing deployment, reproduced and fixed
+
+A report that a deployment "goes starting, then running, then disappears". It
+reproduced, and it was two separate faults wearing one symptom.
+
+### Why they died
+
+Three abandoned jobs were sitting in Nomad — all `posenet-tf`, titled "Test
+deployment", "module test" and "1", all `Stop: False`, so nobody stopped them.
+The allocation says it plainly: container exits **code 1** two seconds after
+start, three times, then `Not Restarting — Exceeded allowed attempts`.
+
+Reproduced directly:
+
+```
+docker run ai4oshub/posenet-tf:latest deep-start --jupyter
+[C ServerApp] Running as root is not recommended. Use --allow-root to bypass.
+```
+
+Every module image ships a `deep-start` that launches JupyterLab as root
+**without `--allow-root`**. Checked across the catalogue: five of nine confirmed
+so far, none with it. So the `jupyter` service has never worked on any module,
+and the option was offered on every one of them.
+
+`configs/papi/modules-user.yaml` now offers `deepaas` only, with the measurement
+written next to the line so nobody adds it back. A module *is* an inference API;
+the interactive workspace is the dev-env tool.
+
+### Why they disappeared
+
+`nomad_utils.get_deployments()` filters `Status != "dead"`, which hides a
+deployment the user deleted and a deployment that died by itself equally — and
+the second is the entire reason someone opens that page.
+
+Patch `0015`. `Stop` separates the cases exactly, so the filter becomes
+`(Status != "dead" or Stop == false)`. Two more changes, because "failed" with
+no reason is barely better than gone: the task event stream already carries
+`Exit Code: 1, Exit Message: "…"` and nothing was reading it; and a dead job
+whose allocations have been garbage collected reported **`queued`**, which says
+it is about to start when it is over.
+
+All three abandoned deployments now render as red `failed` rows with a reason.
+D-39 and D-50 at the other end of a deployment's life: *deleted*, *crashed* and
+*queued* are three different words.
+
+### What works, tested rather than assumed
+
+- **A module deploys and runs.** `ai4os-demo-app` with DEEPaaS: `running` for
+  six minutes, endpoint answering.
+- **The high-code path works.** A dev-env deployed *through the dashboard* with
+  the Jupyter service: JupyterLab loads at its own subdomain, accepts the
+  password, opens a workspace and runs commands in a terminal.
+- **The GPU is real.** `check-gpu-scheduling.sh` passes — `torch.cuda = True` on
+  the MIG device, with and without Nomad selecting it.
+
+### Three things found on the way that are not fixed yet
+
+- **The dev-env's default tag is `u24.04`, a bare Ubuntu with no numpy.** A test
+  user taking the default gets an empty environment. Upstream overwrites the
+  configured default in code (`docker_tag.value = tags[0]`, natsorted Z-A), so
+  changing it needs a patch. The FL demo uses `tf2.14.0`.
+- **The workspace's own landing file is AI4EOSC-branded** — a large AI4/eosc
+  logo and "Welcome to AI4OS Development Environment", inside the window the
+  high-code beat spends its time in. It is baked into the module image.
+- **Statistics reporting 4 GPUs is correct**, not a bug: four compute nodes with
+  one MIG slice each, and `caios-traefik` is the ingress node with none by
+  design.
+
+### On the federated results
+
+They were measured 2026-08-15, before the MIG fix on 08-19 — but the FL clients
+run with `gpu_num: 0` by design (gotcha 10, the two-GPU cap), so the MIG defect
+never touched them. The recorded 0.853 stands.
+
+---
+
 ## 2026-09-02 — T1: the marketplace is served by this cluster
 
 The catalogue no longer reads GitHub at request time. `scripts/mirror-catalogue.sh`

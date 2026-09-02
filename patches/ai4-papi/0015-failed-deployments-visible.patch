@@ -1,0 +1,105 @@
+diff --git a/ai4papi/nomad_utils.py b/ai4papi/nomad_utils.py
+index f9df52d..f8b7a88 100644
+--- a/ai4papi/nomad_utils.py
++++ b/ai4papi/nomad_utils.py
+@@ -38,8 +38,26 @@ def get_deployments(
+     """
+     Returns a list of all deployments belonging to a user, in a given namespace.
+     """
++    # [CAIOS] A deployment that CRASHED must not disappear.
++    #
++    # Upstream filters `Status != "dead"`, which hides two very different
++    # things: a deployment the user deleted, and a deployment that died by
++    # itself. The second is the whole reason someone opens this page.
++    #
++    # Observed: a module deployed with the `jupyter` service goes
++    # starting -> running -> gone, with no error anywhere in the interface,
++    # because its container exits 1 and Nomad marks the job dead after two
++    # restarts. Three of them accumulated before anyone knew why.
++    #
++    # Nomad's `Stop` field separates the cases exactly: it is true only when
++    # something asked the job to stop. So `dead and Stop == false` is
++    # "it failed", and that is what a user needs to see.
++    #
++    # Same principle as D-39 and D-50, applied to the other end of a
++    # deployment's life: "deleted" and "crashed" are different words, and
++    # showing neither is the worst of the three options.
+     job_filter = (
+-        'Status != "dead" and '
++        '(Status != "dead" or Stop == false) and '
+         + f'Name matches "^{prefix}" and '
+         + "Meta is not empty and "
+         + f'Meta.owner == "{owner}"'
+@@ -135,6 +153,33 @@ def placement_status(evals):
+     return ("error", f"This deployment could not be placed on any node.{detail}")
+ 
+ 
++def _task_failure_reason(alloc):
++    """[CAIOS] Why did this allocation's tasks fail, in one sentence.
++
++    Reads the task event stream Nomad already keeps. Prefers the `Terminated`
++    event, which carries the exit code and the container's own message, and
++    falls back to the last event of any failed task.
++
++    Returns "" when nothing useful is there — an empty message is honest, and
++    the caller leaves the field alone rather than inventing a reason.
++    """
++    reasons = []
++    for name, state in (alloc.get("TaskStates") or {}).items():
++        if not state.get("Failed"):
++            continue
++        events = state.get("Events") or []
++        chosen = next(
++            (e for e in reversed(events) if e.get("Type") == "Terminated"),
++            events[-1] if events else None,
++        )
++        if not chosen:
++            continue
++        msg = (chosen.get("DisplayMessage") or "").strip()
++        if msg:
++            reasons.append(f"task '{name}': {msg}")
++    return " | ".join(reasons)
++
++
+ def get_deployment(
+     deployment_uuid: str,
+     namespace: str,
+@@ -411,6 +456,16 @@ def get_deployment(
+         if info["status"] == "dead":
+             info["status"] = a["ClientStatus"]
+ 
++        # [CAIOS] A failure with no reason is only marginally better than a
++        # disappearance. Nomad already knows why — the task's own event stream
++        # carries "Exit Code: 1, Exit Message: ..." — and nothing was reading it.
++        #
++        # error_msg is otherwise only ever set for placement failures, so a
++        # container that started and then died reached the dashboard as a bare
++        # "failed" with an empty message.
++        if info["status"] == "failed" and not info.get("error_msg"):
++            info["error_msg"] = _task_failure_reason(a)
++
+     elif evals:
+         # [CAIOS] Nomad distinguishes "I have not looked yet" and "I will place
+         # this when there is room" from "I cannot place this", and upstream
+@@ -420,6 +475,21 @@ def get_deployment(
+         # seconds from starting was deleted because of it. See R-24 and D-39.
+         info["status"], info["error_msg"] = placement_status(evals)
+ 
++    elif j.get("Status") == "dead" and not j.get("Stop"):
++        # [CAIOS] A dead job whose allocations Nomad has already garbage
++        # collected. There is nothing left to read a reason from, but "queued"
++        # is the one answer that is definitely wrong — it says the deployment is
++        # about to start, when in fact it is over.
++        #
++        # Reached in practice: the crashed jobs older than Nomad's
++        # job_gc_threshold reported "queued" indefinitely.
++        info["status"] = "failed"
++        info["error_msg"] = (
++            "This deployment stopped on its own and its allocation has since "
++            "been garbage collected, so no reason is available any more. "
++            "Delete it and deploy again to see the failure."
++        )
++
+     else:
+         info["status"] = "queued"
+ 

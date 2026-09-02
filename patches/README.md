@@ -420,6 +420,46 @@ GitHub host in PAPI's log for the whole run. `scripts/check-catalogue.sh`
 section 4 asserts the 503 by pointing a throwaway container at an unroutable
 address.
 
+### `ai4-papi/0015-failed-deployments-visible.patch` — pinned to `e80a2b7`
+
+**A deployment that crashes must not disappear.** Found on 2026-09-02 while
+reproducing a report that a deployment "goes starting, then running, then
+vanishes". Both halves were real.
+
+`nomad_utils.get_deployments()` filters `Status != "dead"`, which hides two very
+different things: a deployment the user deleted, and a deployment that died by
+itself. The second is the entire reason someone opens that page. Three
+abandoned `posenet-tf` jobs had accumulated in Nomad — `Stop: False`, so nobody
+stopped them — invisible in the dashboard, with nothing anywhere saying anything
+had gone wrong.
+
+Nomad's `Stop` field separates the cases exactly, so the filter becomes
+`(Status != "dead" or Stop == false)`.
+
+**Three changes, because "failed" alone is barely better than gone:**
+
+1. The filter, as above.
+2. `_task_failure_reason()` reads the task event stream Nomad already keeps and
+   surfaces `Exit Code: 1, Exit Message: "…"`. Upstream set `error_msg` only for
+   *placement* failures, so a container that started and then died arrived as a
+   bare `failed` with an empty message.
+3. A dead job whose allocations have been garbage collected reported **`queued`**
+   — which tells the user it is about to start when in fact it is over. It now
+   reports `failed` and says the reason is no longer recoverable.
+
+Same principle as D-39 and D-50, applied to the other end of a deployment's
+life: *deleted*, *crashed* and *queued* are three different words, and showing
+the wrong one is worse than showing none.
+
+**What was actually killing them** is not a PAPI bug and is fixed in
+configuration instead: every module image ships a `deep-start` that launches
+JupyterLab as root *without* `--allow-root`, so Jupyter refuses to start and the
+container exits 1. Reproduced directly with
+`docker run ai4oshub/posenet-tf:latest deep-start --jupyter`, and confirmed
+across the catalogue. `configs/papi/modules-user.yaml` therefore offers modules
+as `deepaas` only; the interactive workspace is the dev-env **tool**, whose
+image is newer and whose JupyterLab was verified in a browser.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

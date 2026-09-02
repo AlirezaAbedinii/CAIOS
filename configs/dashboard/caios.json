@@ -1,25 +1,20 @@
 {
     "_comment": "CAIOS tenant. Merged over _base.json at image build time: jq -s '.[0] * .[1]' _base.json caios.json > config.json. Copy this file to vendor build ctx as src/assets/config/caios.json and build with --build-arg TENANT=caios.",
-
     "title": "CAIOS - Canadian Artificial Intelligence Operating System",
     "voName": "vo.caios.ca",
     "projectName": "CAIOS",
     "projectUrl": "https://github.com/AlirezaAbedinii/CAIOS",
     "_comment_acknowledgments": "Names the organisation in text, as well as in the logo added by patches/ai4-dashboard/0001. Rendered in the sidenav footer, followed by a link carrying projectName.",
     "acknowledgments": "CAIOS is a medical and neuroscience AI platform from PACS Lab, built on the open-source AI4OS stack.",
-
     "_comment_sidenav": "Overrides _base.json, which points all four of these at cloud.ai4eosc.eu. Storage and MLflow are V1; until they exist, listing them would give the demo two dead links. Add them back when they are real.",
     "sidenavMenu": [],
-
     "_comment_platform_status": "R-38. Upstream hardcodes AI4EOSC's GitHub issue tracker as the source of platform status notices, in three places, and reads it from the visitor's browser on every page load. Two of those become OUR popup and OUR red maintenance banner if AI4EOSC posts a notice marked for all VOs; and GitHub allows 60 unauthenticated requests an hour per IP address, after which the dashboard shows a red error toast instead. Patch 0005 makes the source configurable and OFF when unset. Blank deliberately - do not remove the key, its presence is what scripts/check-branding.sh asserts. Set it to a CAIOS status repository's issues URL if the feature is ever wanted.",
     "platformStatusUrl": "",
-
     "_comment_analytics": "_base.json loads https://stats.cloud.ai4eosc.eu/js/script.js, a third-party tracker that would report our demo traffic to somebody else's analytics. Blanked deliberately - do not remove these keys, the merge needs them present to override.",
     "analytics": {
         "src": "",
         "domain": ""
     },
-
     "_comment_footer": "Upstream links point at AI4EOSC's status page, terms and privacy policy. Ours point at the project repo until we have our own.",
     "footerLinks": [
         {
@@ -30,5 +25,11 @@
             "name": "SIDENAV.DOCUMENTATION",
             "url": "https://docs.ai4os.eu/"
         }
+    ],
+    "_comment_demo_unavailable": "T4. Profile tabs whose backing service this deployment does not run, shown with one honest sentence instead of a control that cannot work. apikeys was the urgent one: it proxies to AI4EOSC's LiteLLM, gets 401, and the error interceptor threw the user onto /forbidden carrying that error in the URL. storage needs a Nextcloud (D-15) and services needs an MLflow; neither is deployed. Remove an id here the day the service exists.",
+    "demoUnavailable": [
+        "apikeys",
+        "storage",
+        "services"
     ]
 }

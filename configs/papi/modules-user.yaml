@@ -43,8 +43,9 @@ general:
 
   # [CAIOS] JupyterLab is NOT offered for modules, because it does not work.
   #
-  # Measured 2026-09-02 across the catalogue: every module image ships a
-  # `deep-start` that launches JupyterLab as root WITHOUT `--allow-root`.
+  # Measured 2026-09-02 across the whole catalogue - 9 images of 9, none with
+  # the flag: every module image ships a `deep-start` that launches JupyterLab
+  # as root WITHOUT `--allow-root`.
   # Jupyter refuses to start, the container exits 1, Nomad retries twice and
   # marks the job dead — and before patch 0015 the deployment then vanished
   # from the dashboard with no error at all. Three abandoned `posenet-tf`

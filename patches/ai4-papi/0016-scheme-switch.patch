@@ -1,0 +1,252 @@
+--- a/ai4papi/conf.py
++++ b/ai4papi/conf.py
+@@ -56,11 +56,41 @@
+     MAIN_CONF = yaml.safe_load(f)
+ 
+ 
++# [CAIOS] T5. The scheme this platform serves on, and the Traefik router tag
++# that follows from it.
++#
++# One variable in configs/env/caios.env decides it; compose passes it in. Unset
++# means https, which is exactly what upstream hardcoded, so an image built
++# without it behaves as it always did.
++CAIOS_SCHEME = os.environ.get("CAIOS_SCHEME", "https") or "https"
++
++# https -> tls=true         a TLS router on every entrypoint. Upstream's literal.
++# http  -> entrypoints=web  a plain router on :80 only.
++#
++# Deliberately not "tls=false". That would depend on how Traefik's label parser
++# treats a false value for a struct-pointer field — true of this version, and
++# not a thing to bet a demo on when naming the entrypoint says the same thing
++# in a way that cannot be misread.
++CAIOS_ROUTER_TLS = "tls=true" if CAIOS_SCHEME == "https" else "entrypoints=web"
++
++
+ def load_nomad_job(fpath: Path) -> Template:
+     """
+     Load default Nomad job configuration
+     """
+-    return Template(fpath.read_text(encoding="utf-8"))
++    raw = fpath.read_text(encoding="utf-8")
++
++    # [CAIOS] Fill in the router tag before the Template is built.
++    #
++    # Here rather than at the call sites because this is the ONE place every job
++    # template is read, while the call sites each assemble their own
++    # substitution dict — five dicts, five chances to miss one. A missed one is
++    # not loud: safe_substitute leaves ${CAIOS_ROUTER_TLS} in place, Consul
++    # accepts it as a tag, Traefik ignores a tag it cannot parse, and the
++    # deployment comes up healthy with no route to it at all.
++    raw = raw.replace("${CAIOS_ROUTER_TLS}", CAIOS_ROUTER_TLS)
++
++    return Template(raw)
+ 
+ 
+ def load_yaml_conf(fpath: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+--- a/ai4papi/nomad_utils.py
++++ b/ai4papi/nomad_utils.py
+@@ -277,7 +277,10 @@
+         if label == "deepaas":
+             label = "api"
+ 
+-        info["endpoints"][label] = f"https://{url}"
++        # [CAIOS] T5. Every endpoint the dashboard shows and every link a
++        # user clicks is built here. Hardcoding https would hand out URLs
++        # that no longer answer once the platform serves http.
++        info["endpoints"][label] = f"{papiconf.CAIOS_SCHEME}://{url}"
+ 
+     # Add '/ui' to deepaas endpoint
+     # If in the future we support other APIs, this will have to be removed.
+--- a/ai4papi/routers/v1/deployments/tools.py
++++ b/ai4papi/routers/v1/deployments/tools.py
+@@ -615,8 +615,17 @@
+                     credentials=authorization.credentials,
+                 ),
+             )
++            # [CAIOS] T5. The OpenAI-compatible base URL a researcher pastes
++            # into their own client (demo beat 7). It must be reachable on the
++            # scheme the platform actually serves.
++            #
++            # Note this is the value shown to the USER. Open WebUI's own copy is
++            # overwritten further down by patch 0010 with the allocation address,
++            # which stays http:// regardless — it never leaves the node.
+             api_endpoint = (
+-                f"https://vllm-{job_uuid}" + ".${meta.domain}" + f"-{base_domain}/v1"
++                f"{papiconf.CAIOS_SCHEME}://vllm-{job_uuid}"
++                + ".${meta.domain}"
++                + f"-{base_domain}/v1"
+             )
+ 
+             # [CAIOS] Which GPU models this tool is allowed to deploy on.
+--- a/etc/modules/nomad.hcl
++++ b/etc/modules/nomad.hcl
+@@ -119,7 +119,7 @@
+       port = "api"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-api.tls=true",
++        "traefik.http.routers.${JOB_UUID}-api.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-api.rule=Host(`api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -129,7 +129,7 @@
+       port = "monitor"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-monitor.tls=true",
++        "traefik.http.routers.${JOB_UUID}-monitor.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-monitor.rule=Host(`monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -139,7 +139,7 @@
+       port = "ide"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ide.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ide.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ide.rule=Host(`ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -149,7 +149,7 @@
+       port = "ui"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ui.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ui.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -159,7 +159,7 @@
+       port = "custom"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-custom.tls=true",
++        "traefik.http.routers.${JOB_UUID}-custom.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-custom.rule=Host(`custom-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.custom-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+--- a/etc/tools/ai4os-dev-env/nomad.hcl
++++ b/etc/tools/ai4os-dev-env/nomad.hcl
+@@ -123,7 +123,7 @@
+       port = "api"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-api.tls=true",
++        "traefik.http.routers.${JOB_UUID}-api.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-api.rule=Host(`api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -133,7 +133,7 @@
+       port = "monitor"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-monitor.tls=true",
++        "traefik.http.routers.${JOB_UUID}-monitor.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-monitor.rule=Host(`monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -143,7 +143,7 @@
+       port = "ide"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ide.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ide.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ide.rule=Host(`ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -153,7 +153,7 @@
+       port = "custom"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-custom.tls=true",
++        "traefik.http.routers.${JOB_UUID}-custom.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-custom.rule=Host(`custom-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.custom-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+--- a/etc/tools/ai4os-federated-server/nomad.hcl
++++ b/etc/tools/ai4os-federated-server/nomad.hcl
+@@ -120,6 +120,15 @@
+       port = "fedserver"
+       tags = [
+         "traefik.enable=true",
++        # [CAIOS] T5. The ONE router that keeps TLS when the platform serves
++        # http, and it is deliberate — do not "fix" it to match the others.
++        #
++        # This is gRPC on :443. The clients are Flower processes inside
++        # cluster workspaces that already carry the CA in their bundle
++        # (D-43), so TLS here is a barrier to nobody: no browser ever
++        # reaches this hostname and no visitor has to install anything.
++        # The alternative is h2c from client to Traefik, which is not the
++        # thing to be discovering on demo day. D-67.
+         "traefik.http.routers.${JOB_UUID}-fedserver.tls=true",
+         "traefik.http.routers.${JOB_UUID}-fedserver.rule=Host(`fedserver-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.fedserver-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+         "traefik.http.services.${JOB_UUID}-fedserver.loadbalancer.server.scheme=h2c",  # grpc support
+@@ -131,7 +140,7 @@
+       port = "monitor"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-monitor.tls=true",
++        "traefik.http.routers.${JOB_UUID}-monitor.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-monitor.rule=Host(`monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.monitor-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -141,7 +150,7 @@
+       port = "ide"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ide.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ide.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ide.rule=Host(`ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ide-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+--- a/etc/tools/ai4os-ai4life-loader/nomad.hcl
++++ b/etc/tools/ai4os-ai4life-loader/nomad.hcl
+@@ -117,7 +117,7 @@
+       port = "api"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-api.tls=true",
++        "traefik.http.routers.${JOB_UUID}-api.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-api.rule=Host(`api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.api-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+@@ -127,7 +127,7 @@
+       port = "ui"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ui.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ui.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }
+--- a/etc/tools/ai4os-llm/nomad.hcl
++++ b/etc/tools/ai4os-llm/nomad.hcl
+@@ -117,7 +117,7 @@
+         port = "ui"
+       	tags = [
+             "traefik.enable=true",
+-            "traefik.http.routers.${JOB_UUID}-ui.tls=true",
++            "traefik.http.routers.${JOB_UUID}-ui.${CAIOS_ROUTER_TLS}",
+             "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+           ]
+     }
+@@ -127,7 +127,7 @@
+         port = "vllm"
+       	tags = [
+             "traefik.enable=true",
+-            "traefik.http.routers.${JOB_UUID}-vllm.tls=true",
++            "traefik.http.routers.${JOB_UUID}-vllm.${CAIOS_ROUTER_TLS}",
+             "traefik.http.routers.${JOB_UUID}-vllm.rule=Host(`vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.vllm-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+           ]
+     }
+--- a/etc/try_me/nomad.hcl
++++ b/etc/try_me/nomad.hcl
+@@ -71,7 +71,7 @@
+       port = "ui"
+       tags = [
+         "traefik.enable=true",
+-        "traefik.http.routers.${JOB_UUID}-ui.tls=true",
++        "traefik.http.routers.${JOB_UUID}-ui.${CAIOS_ROUTER_TLS}",
+         "traefik.http.routers.${JOB_UUID}-ui.rule=Host(`ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`, `www.ui-${HOSTNAME}.${meta.domain}-${BASE_DOMAIN}`)",
+       ]
+     }

@@ -27,7 +27,12 @@ services:
     restart: unless-stopped
     network_mode: host
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Rendered by scripts/render-configs.sh from caddy/Caddyfile.template.
+      # The scheme decides the file's STRUCTURE — which site block carries the
+      # certificate and which carries the 302 bounce — so it cannot be done
+      # with Caddy's own {$$ENV} substitution. Run render-configs.sh after any
+      # change to the template or to CAIOS_SCHEME.
+      - ./generated/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Issued from our own CA by scripts/make-control-plane-cert.sh.
       # Caddy's automatic HTTPS cannot work on a private subnet — see the
       # Caddyfile for why.
@@ -41,11 +46,10 @@ services:
       - ../catalog/mirror:/srv/catalog:ro
       - caddy_data:/data
       - caddy_config:/config
-    environment:
-      CAIOS_DASHBOARD_HOST: ${CAIOS_DASHBOARD_HOST}
-      CAIOS_API_HOST: ${CAIOS_API_HOST}
-      CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
-      CAIOS_VAULT_HOST: ${CAIOS_VAULT_HOST}
+    # No environment. The Caddyfile used to carry {$CAIOS_DASHBOARD_HOST} and
+    # friends for Caddy to expand at start; since T5 it is rendered ahead of
+    # time with the hostnames already in it, and passing them here again would
+    # only suggest they still do something.
     # Only Keycloak. Caddy must be able to run before PAPI and the dashboard
     # are built — a proxy to a missing upstream returns 502, which is a much
     # better failure mode than the whole ingress refusing to start.
@@ -90,7 +94,9 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      KC_HOSTNAME: https://${CAIOS_AUTH_HOST}
+      # The issuer, byte for byte. PAPI, Vault and the dashboard all compare
+      # against this exact string, so all four derive from CAIOS_SCHEME.
+      KC_HOSTNAME: ${CAIOS_SCHEME}://${CAIOS_AUTH_HOST}
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
@@ -155,6 +161,9 @@ services:
       VAULT_TOKEN: ${VAULT_ROOT_TOKEN}
       CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      # Vault validates tokens against the issuer it discovered. Same string
+      # as KC_HOSTNAME above, or every deployment that stores a secret 403s.
+      CAIOS_SCHEME: ${CAIOS_SCHEME:-https}
     volumes:
       - ./vault/bootstrap.sh:/bootstrap.sh:ro
       - ./certs/caios-ca.pem:/caios-ca.pem:ro
@@ -208,7 +217,7 @@ services:
       # that does not point at the cause. It has to be set to false explicitly.
       IS_PROD: "false"
       # Patched in — upstream hardcodes AI4EOSC's realm in auth.py.
-      KEYCLOAK_URL: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
+      KEYCLOAK_URL: ${CAIOS_SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
       # Patched in — upstream hardcodes secrets.services.ai4os.eu in secrets.py.
       VAULT_ADDR: http://127.0.0.1:8200
       # Also patched in. Upstream sends an empty role name, which Vault reads as
@@ -260,6 +269,11 @@ services:
       # Read-only, for the warm/cold badge only. Unset disables it.
       OSCAR_K8S_API: ${OSCAR_K8S_API:-}
       OSCAR_K8S_TOKEN_PATH: ${OSCAR_K8S_TOKEN_PATH:-}
+      # T5. PAPI stamps this on every endpoint it advertises to the dashboard
+      # (nomad_utils) and on the vLLM base URL it hands Open WebUI (tools.py),
+      # and it decides whether the Traefik router tags it renders ask for TLS.
+      # Unset behaves as https, which is what upstream hardcoded.
+      CAIOS_SCHEME: ${CAIOS_SCHEME:-https}
       CAIOS_CTRL_IP: ${CAIOS_CTRL_IP}
       CAIOS_EDGE_IP: ${CAIOS_EDGE_IP}
       CAIOS_PUBLIC_IP: ${CAIOS_PUBLIC_IP}
@@ -330,8 +344,8 @@ services:
       # https://api.cloud.ai4eosc.eu/v1 — so dropping the suffix makes every
       # call land one level too high and return 404, surfacing in the UI as
       # "Error calling the API, please retry later Error: Not Found".
-      API_SERVER: https://${CAIOS_API_HOST}/v1
-      ISSUER: https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
+      API_SERVER: ${CAIOS_SCHEME}://${CAIOS_API_HOST}/v1
+      ISSUER: ${CAIOS_SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}
       CLIENT_ID: caios-dashboard
       DUMMY_CLIENT_SECRET: ""
     ports:

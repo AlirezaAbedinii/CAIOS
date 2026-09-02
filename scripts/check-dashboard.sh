@@ -19,7 +19,11 @@ ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 
-DASH="https://${CAIOS_DASHBOARD_HOST}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+DASH="${SCHEME}://${CAIOS_DASHBOARD_HOST}"
 fail=0
 ok()  { printf '  [ ok ] %s\n' "$1"; }
 bad() { printf '  [FAIL] %s\n' "$1"; fail=1; }
@@ -103,10 +107,21 @@ API_BASE=$(python3 -c "import json;print(json.load(open('/tmp/caios-cfg.json'))[
 BROWSER_ACCEPT='Accept: application/json, text/plain, */*'
 TOKEN=$(bash scripts/get-token.sh researcher "${CAIOS_PW_RESEARCHER:-}" 2>/dev/null)
 
+# The metadata module is taken from the LIVE catalogue rather than named here.
+# It used to be `ai4os-demo-app`, which T1 curated out of the marketplace — so
+# this check had been reporting a 404 ever since, for a module that is
+# correctly absent. A check that always fails is a check nobody reads.
+FIRST_MODULE="$(curl -sS --max-time 40 -H "$BROWSER_ACCEPT" "$API_BASE/catalog/modules" \
+    | python3 -c 'import json,sys; print((json.load(sys.stdin) or [""])[0])' 2>/dev/null)"
+if [[ -z "$FIRST_MODULE" ]]; then
+    bad "the module catalogue is empty — nothing to check metadata against"
+    FIRST_MODULE="ai4os-demo-app"
+fi
+
 for ep in \
     "catalog/modules/detail|module catalogue" \
     "catalog/tools/detail|tool catalogue" \
-    "catalog/modules/ai4os-demo-app/metadata|module metadata"
+    "catalog/modules/$FIRST_MODULE/metadata|module metadata ($FIRST_MODULE)"
 do
     path="${ep%%|*}"; label="${ep##*|}"
     c=$(curl -sS --max-time 40 -H "$BROWSER_ACCEPT" -o /dev/null -w '%{http_code}' "$API_BASE/$path")
@@ -165,7 +180,7 @@ else
 fi
 
 c=$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' \
-    "https://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration")
+    "${SCHEME}://${CAIOS_AUTH_HOST}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration")
 [[ "$c" == "200" ]] && ok "login server discovery reachable ($c)" || bad "discovery returned $c"
 
 echo

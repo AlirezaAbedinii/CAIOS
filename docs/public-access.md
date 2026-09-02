@@ -2,8 +2,11 @@
 
 How CAIOS is reached from outside the VPN, with exactly **one** floating IP.
 
-**Status: built 2026-08-25.** The control plane is public and working. Deployments
-are one Caddy site block short — see [The remaining gap](#the-remaining-gap-deployments).
+**Status: built 2026-08-25; corrected 2026-09-02.** The control plane and the
+deployments are both public and working, through a **separate nginx proxy VM**
+that the first version of this document said did not exist. Read
+[What was actually built](#what-was-actually-built) before trusting anything
+here about the topology.
 
 Read with `docs/infrastructure.md` (what each node is) and `docs/runbook.md`
 (operational triage).
@@ -12,41 +15,84 @@ Read with `docs/infrastructure.md` (what each node is) and `docs/runbook.md`
 
 ## What was actually built
 
-The original plan for this document assumed a separate VM running nginx. That
-turned out to be unnecessary, and the reason is worth stating because it is the
-single most useful fact here:
+> **Corrected 2026-09-02.** Everything between here and "The change that made
+> it work" said there was no nginx and no proxy VM. **That is wrong, and it was
+> wrong when it was written.** The correction is below; the rest of this
+> document is accurate.
 
-> **An OpenStack floating IP is DNAT, not an interface address.** `134.87.8.230`
-> is mapped to `192.168.104.181` by the network layer. `ip addr` on
-> `caios_server` shows only its private address — the public one never appears
-> there — and Caddy, already listening on `*:443`, serves the public hostnames
-> without knowing anything changed.
-
-So there is **no nginx and no proxy VM**. The floating IP lands on
-`caios_server`, and Caddy is the reverse proxy that was already there.
+There **is** a separate proxy VM. `134.87.8.230` is a machine of its own
+running Ubuntu's nginx 1.18.0, and it is the public front door for both tiers.
 
 ```
                     Internet
                        │
-                134.87.8.230            ← OpenStack floating IP (DNAT)
+                134.87.8.230        ← a SEPARATE VM. nginx 1.18.0 (Ubuntu).
+                       │              Not caios_server, not caios_edge, and
+                       │              not configured from this repository.
                        │
-                       ▼
-        ┌──────────────────────────────┐
-        │ caios_server  192.168.104.181│
-        │ Caddy  :80 :443              │
-        │   dashboard.134.87.8.230…    │
-        │   api.134.87.8.230…          │
-        │   auth.134.87.8.230…         │
-        │   vault.134.87.8.230…        │
-        └──────────────┬───────────────┘
-                       │  private subnet
-                       ▼
-        ┌──────────────────────────────┐
-        │ caios_edge  192.168.104.105  │
-        │ Traefik :443                 │
-        │  *.pacs-deployments.…        │   ← nothing routes here yet
-        └──────────────────────────────┘
+                       │   :80  -> 301 to https, unconditionally
+                       │   :443 -> terminates TLS with the CAIOS CA cert,
+                       │           then routes on the Host header:
+                       │
+        ┌──────────────┴───────────────┐
+        ▼                              ▼
+┌──────────────────────────┐  ┌──────────────────────────────┐
+│ caios_server  ...104.181 │  │ caios_edge      ...104.105   │
+│ Caddy :80 :443           │  │ Traefik :80 :443             │
+│   dashboard.…            │  │  *.pacs-deployments.…        │
+│   api.… auth.… vault.…   │  │                              │
+└──────────────────────────┘  └──────────────────────────────┘
 ```
+
+### How this was missed for a week, and how to avoid missing it again
+
+`/etc/hosts` on `caios_server` maps the four control-plane hostnames straight
+to `192.168.104.181`:
+
+```
+192.168.104.181  dashboard.134.87.8.230.sslip.io api.134.87.8.230.sslip.io \
+                 auth.134.87.8.230.sslip.io vault.134.87.8.230.sslip.io
+```
+
+So **every curl run from that node bypasses the proxy entirely** and talks to
+Caddy directly. Both answer, both look right, and the two paths are not the
+same path. The deployment hostnames have no such override, which is the only
+reason the proxy showed up at all — a `301` from `nginx/1.18.0 (Ubuntu)` where
+Caddy was expected.
+
+To test what a visitor actually gets, force the resolution:
+
+```bash
+curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
+     https://dashboard.134.87.8.230.sslip.io/ -o /dev/null
+```
+
+`Server: nginx/1.18.0 (Ubuntu)` means you reached the proxy. `Server: Caddy` or
+`nginx/1.31.4` means `/etc/hosts` sent you straight to `caios_server` and you
+have measured nothing about the public path.
+
+The two machines are different — confirmed by SSH host key, which is the check
+that does not depend on any of the above:
+
+```bash
+ssh-keyscan -t ed25519 134.87.8.230      # ...INamBkLeUhrl/t77MJv6kMi3A3U9…
+ssh-keyscan -t ed25519 192.168.104.181   # ...IJWscFqCFhjQ2iXlTTx0SSN6omT1…
+```
+
+### What this costs
+
+Two things, and the second is the one that matters.
+
+**The certificate is still ours.** The proxy serves the CAIOS CA's certificate,
+not a publicly trusted one, so a visitor still has to install `caios-ca.pem`.
+Moving the platform to HTTP inside the cluster does not change that on its own.
+
+**The proxy's `:80` → `:443` redirect defeats the HTTP switch, and worse.** With
+`CAIOS_SCHEME=http` the platform serves HTTP and Caddy answers HTTPS with a 302
+to HTTP; the proxy answers HTTP with a 301 to HTTPS. That is a redirect loop,
+and the platform becomes unreachable publicly — strictly worse than today. See
+`docs/nginx-proxy.md` for the exact change the proxy needs, and **do not flip
+`CAIOS_SCHEME` until it is applied.**
 
 ### The change that made it work
 
@@ -143,6 +189,16 @@ nmap -Pn -p 22,80,443,4646,8500,8200 134.87.8.230
 ---
 
 ## The remaining gap: deployments
+
+> **Closed, and not the way this section says — corrected 2026-09-02.**
+> Deployments *are* reachable publicly. The proxy VM routes
+> `*.pacs-deployments.…` to Traefik on `caios_edge` directly, so the Caddy
+> wildcard block described below was never added and is not needed. Verified:
+> the certificate served for a deployment hostname through the floating IP is
+> Traefik's own wildcard, byte-identical to the one `caios_edge` presents.
+>
+> Kept because the reasoning about Host headers and SNI is still correct, and
+> because it is the fallback if the proxy VM ever goes away.
 
 **The control plane is public and working. Deployments are not, and the reason
 is one missing site block.**

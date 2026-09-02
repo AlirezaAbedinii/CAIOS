@@ -24,6 +24,34 @@ If these addresses look wrong, read that file rather than trusting this table.
 | Deployments | `https://<service>-<uuid>.pacs-deployments.192.168.104.105.sslip.io` |
 | Nomad UI | `https://192.168.104.181:4646` (subnet only) |
 
+**The scheme is `CAIOS_SCHEME` in `configs/env/caios.env`** (T5, D-68). Every
+URL above follows it. Both schemes answer on every control-plane hostname; the
+inactive one returns a 302 to the active one. To change it:
+
+```bash
+sed -i 's/^CAIOS_SCHEME=.*/CAIOS_SCHEME=http/' configs/env/caios.env
+bash scripts/render-configs.sh
+bash scripts/keycloak-bootstrap.sh     # sslRequired on the LIVE realm
+cd compose && docker compose --env-file ../configs/env/caios.env up -d
+```
+
+> **It is `https` and must stay `https`** until the nginx proxy VM at
+> `134.87.8.230` stops redirecting `:80` to `:443`. Its redirect and Caddy's
+> bounce would form a loop on the hostname the demo opens on.
+> `docs/nginx-proxy.md` has the change and the flip procedure.
+
+**Testing anything "public" from `caios_server` measures nothing.**
+`/etc/hosts` on that node points the four control-plane hostnames at
+`192.168.104.181`, so curl reaches Caddy and never the proxy. Force it:
+
+```bash
+curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
+     https://dashboard.134.87.8.230.sslip.io/ -o /dev/null | head -1
+```
+
+`Server: nginx/1.18.0 (Ubuntu)` is the proxy. `Server: Caddy` means you never
+left the box.
+
 ---
 
 ## Everyday commands

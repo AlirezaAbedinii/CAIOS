@@ -41,8 +41,12 @@ set -a; source "$ENV_FILE"; set +a
 # sourced with `set -a` a few lines above — so an override by that name is
 # silently overwritten and the check quietly tests the deployed dashboard while
 # reporting success for a candidate. Found by trying it.
-DASH="${CHECK_DASHBOARD_URL:-https://${CAIOS_DASHBOARD_HOST}}"
-API="https://${CAIOS_API_HOST}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+DASH="${CHECK_DASHBOARD_URL:-${SCHEME}://${CAIOS_DASHBOARD_HOST}}"
+API="${SCHEME}://${CAIOS_API_HOST}"
 VO="${CAIOS_VO:-vo.caios.ca}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

@@ -35,7 +35,11 @@ ENV_FILE="configs/env/caios.env"
 set -a; source "$ENV_FILE"; set +a
 
 VO="${CAIOS_VO:-vo.caios.ca}"
-API="https://${CAIOS_API_HOST}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+API="${SCHEME}://${CAIOS_API_HOST}"
 USER_NAME="${CAIOS_FL_USER:-researcher}"
 PW_VAR="CAIOS_PW_$(echo "$USER_NAME" | tr 'a-z-' 'A-Z_')"
 PASSWORD="${!PW_VAR:-}"

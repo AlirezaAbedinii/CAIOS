@@ -26,8 +26,12 @@ ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 
-API="${CHECK_API_URL:-https://${CAIOS_API_HOST}}"
-DASH="${CHECK_DASHBOARD_URL:-https://${CAIOS_DASHBOARD_HOST}}"
+# T5. The scheme the platform serves on, from configs/env/caios.env.
+# Defaults to https so this script behaves as it always did against an
+# env file written before the switch existed.
+SCHEME="${CAIOS_SCHEME:-https}"
+API="${CHECK_API_URL:-${SCHEME}://${CAIOS_API_HOST}}"
+DASH="${CHECK_DASHBOARD_URL:-${SCHEME}://${CAIOS_DASHBOARD_HOST}}"
 USER_NAME="${CHECK_USER:-researcher}"
 PASS_VAR="CAIOS_PW_$(echo "$USER_NAME" | tr '[:lower:]-' '[:upper:]_')"
 PASSWORD="${!PASS_VAR:-}"

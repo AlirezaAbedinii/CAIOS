@@ -2,8 +2,11 @@
 # Set one hospital's workspace up for federated learning. Run inside the
 # JupyterLab (or VS Code) terminal of a dev environment deployed from CAIOS.
 #
-#   curl -k -sSL https://<dashboard>/fl/bootstrap.sh | bash -s site_a
-#   curl -k -sSL https://<dashboard>/fl/bootstrap.sh | bash -s site_a fedserver-<uuid>.<domain>
+#   curl -k -sSL <dashboard>/fl/bootstrap.sh | bash -s site_a
+#   curl -k -sSL <dashboard>/fl/bootstrap.sh | bash -s site_a fedserver-<uuid>.<domain>
+#
+# The scheme follows CAIOS_SCHEME; scripts/build-fl-bundles.sh prints the exact
+# line, and the bundle carries it baked in.
 #
 # Fetches that site's bundle — its own data, the shared test set, the client,
 # the model, and the CAIOS CA — installs the pinned Flower release, and writes a
@@ -12,12 +15,18 @@
 #
 # WHY curl -k HERE
 #
-# The workspace container does not trust the CAIOS CA, and this is the request
-# that fetches it, so there is nothing to verify against yet. The exposure is
-# one download inside a private subnet reachable only over the VPN. It says
-# nothing about the federated connection itself, which is verified properly:
-# client.py passes this CA to gRPC explicitly and a wrong certificate fails the
-# handshake.
+# Under CAIOS_SCHEME=https: the workspace container does not trust the CAIOS CA,
+# and this is the request that fetches it, so there is nothing to verify against
+# yet. The exposure is one download inside a private subnet reachable only over
+# the VPN.
+#
+# Under CAIOS_SCHEME=http it does nothing at all — there is no certificate to
+# skip. It is kept so the same bundle works either way.
+#
+# Either way it says nothing about the federated connection itself, which is
+# verified properly: client.py passes this CA to gRPC explicitly and a wrong
+# certificate fails the handshake. The federated server keeps TLS under both
+# schemes (D-67), so that check is real in both.
 #
 # WHY THE FLOWER VERSION IS PINNED
 #
@@ -33,11 +42,11 @@
 # a chat window. Installing it takes five seconds and belongs at bootstrap
 # rather than on camera.
 #
-# It needs the CA in the bundle to reach the endpoint at all: the deployment is
-# served by Traefik under our own certificate, which this container does not
-# trust (docs/llm-risks.md R-05). The notebook points SSL_CERT_FILE at
-# caios-ca.pem and verifies properly — the `curl -k` above is the only
-# unverified request in the whole flow.
+# Under https it needs the CA in the bundle to reach the endpoint at all: the
+# deployment is served by Traefik under our own certificate, which this
+# container does not trust (docs/llm-risks.md R-05). The notebook points
+# SSL_CERT_FILE at caios-ca.pem and verifies properly. Under http the vLLM
+# endpoint needs no certificate and SSL_CERT_FILE is simply unused.
 #
 # Checked against the federated path: flwr 1.16.0, TensorFlow 2.14 and numpy
 # 1.26 are unchanged by it, and `pip check` reports nothing new.

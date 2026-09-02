@@ -18,7 +18,7 @@ finishing.
 | 2 | Two use cases, one low code and one high code | Both work; both sit behind the catalogue | T1 |
 | 3 | "Not included in the Demo Version" for other services | **Unbuilt.** The phrase is nowhere in the repository | T4 |
 | 4 | Registration service: form and admin console | **Unbuilt.** Deferred by decision — demo accounts instead | T6 (optional) |
-| 5 | HTTP instead of HTTPS | Not started; assessed below | T5 |
+| 5 | HTTP instead of HTTPS | **Platform ready; switch held on the proxy VM** | T5 |
 | 6 | No licensing problem re: Europe and AI4OS | Upstream is clean. **Two problems are ours** | T3 |
 | 7 | Identify potential improvements | Written up; no implementation | — |
 | 8 | Demo video performable by test users | Script exists and has drifted | T8 |
@@ -339,6 +339,60 @@ zero error toasts, zero unresolved spinners, zero ejections.
 
 ### T5 — HTTP instead of HTTPS
 
+**Status 2026-09-02: the platform is ready and the switch is HELD.** Every
+scheme now derives from `CAIOS_SCHEME` in `configs/env/caios.env`, still set to
+`https`, so the platform is unchanged and working. It is not flipped because of
+something the assessment below did not know about — see
+[the proxy VM](#the-blocker-the-assessment-missed).
+
+Landed: the rendered Caddyfile serving both schemes, Keycloak's issuer and
+realm settings, PAPI patch `0016` (advertised endpoints, the vLLM base URL, and
+sixteen Traefik router tags across six job templates), dashboard patch `0010`
+(`requireHttps`), the Traefik job without its `web → websecure` redirect, Vault,
+the FL bundles, twelve scripts and `tests/test_scheme_switch.py`.
+
+Verified end to end at both settings: a real dev-env deployment submitted
+`tls=true` under `https`, and the same template renders `entrypoints=web` under
+`http` with the federated-learning router keeping TLS (D-67).
+
+Found on the way, and **fixed**: patch `0015` had made deployment creation
+impossible for any user with a failed deployment in their history — HTTP 500 on
+every POST. Patch `0017`. See [T4's aftermath](#t4s-aftermath).
+
+#### The blocker the assessment missed
+
+`134.87.8.230` is **a separate VM running nginx 1.18.0**, and it is the public
+front door for both tiers. `docs/public-access.md` said there was no such
+machine; that is corrected there and in D-69.
+
+It redirects `:80` to `:443` unconditionally. Against a platform serving HTTP —
+where Caddy answers `:443` with a 302 back to HTTP — that is a **redirect
+loop**, not a degradation, on the hostname the demo opens on. And its
+certificate is the CAIOS CA's, so a visitor would still have to install
+`caios-ca.pem`, which is the entire point of the requirement.
+
+`docs/nginx-proxy.md` holds the exact nginx change and the flip procedure that
+follows it. **Do not set `CAIOS_SCHEME=http` before it is applied.**
+
+The reason this went unnoticed for a week is worth more than the fact:
+`/etc/hosts` on `caios_server` maps the four control-plane hostnames straight to
+`192.168.104.181`, so every curl run from that node bypasses the proxy. Use
+`--resolve` and read the `Server:` header.
+
+#### T4's aftermath
+
+Making a crashed deployment visible (`0015`) put it in front of
+`quotas.check_userwise`, which indexed `d["resources"]["gpu_num"]`. A failed
+deployment has no allocation and therefore no resources, so three abandoned
+`posenet-tf` jobs were enough to make the platform unable to create anything at
+all. Patch `0017`, plus two tests that fail without it.
+
+Found by deploying a workspace during the T5 smoke test, for an unrelated
+reason. That is the argument for smoke-testing by using the platform rather
+than by reading it.
+
+#### The original assessment, for reference
+
 **Assessment: feasible, one real blocker, roughly a day.**
 
 | Layer | Dependency |
@@ -456,8 +510,8 @@ part that mattered.
 3. T2 — clear the stale deployments — **done**
 4. T3 — licensing, LICENSE/NOTICE, AI4OS references — **done**
 5. T4 — every control tested; unavailable ones disabled or removed — **done**
-6. **T5 — HTTP switch** ← next
-7. T7 — availability and preflight
+6. T5 — HTTP switch — **plumbing done; flip held on `docs/nginx-proxy.md`**
+7. **T7 — availability and preflight** ← next
 8. T8 — demo script, read-throughs, record
 
 Phase R runs alongside, whenever the above is blocked on someone else.

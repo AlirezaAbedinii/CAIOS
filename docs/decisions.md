@@ -996,3 +996,64 @@ D-56 (supersedes D-51) and D-57. Two findings worth more than the feature: the
 dashboard had been advertising a working-looking endpoint for an uninstalled
 backend, and PAPI cannot serialise an OSCAR error so every OSCAR failure
 reaches the user as a bare 500.
+
+**D-67 — The federated-learning router keeps TLS when everything else drops it.**
+T5 moves the platform to HTTP so a visitor needs no certificate authority
+installed. The `fedserver-` router is the one exception, and it is marked in
+the job template so nobody tidies it away.
+
+Three reasons, in order of weight. It is **gRPC on :443**, and Traefik
+accepting h2c from a client is not a property to be discovering on demo day —
+this is the headline feature. Its clients are Flower processes inside cluster
+workspaces that **already carry the CA** in their bundle (D-43), so TLS costs
+them nothing. And **no browser ever reaches that hostname**, so it is not a
+barrier to any visitor — which is the entire purpose of the switch.
+
+The general rule this is an instance of: drop TLS where it stands between a
+person and the platform, keep it where it stands between two machines that
+already trust each other.
+
+**D-68 — The scheme is one variable, and both schemes always answer.**
+`CAIOS_SCHEME` in `configs/env/caios.env` is the only place the platform's
+scheme is written down. Caddy's site blocks, Keycloak's issuer, PAPI's
+advertised endpoints, the dashboard's `apiURL`, the Traefik router tags, the
+federated bundles and every check script derive from it. Rollback is the
+variable, a render and a restart — no rebuild, because the dashboard image
+derives `requireHttps` from the issuer at runtime rather than being compiled
+for one scheme.
+
+Both schemes answer on every control-plane hostname. The active one serves; the
+inactive one returns a 302 to the active one. That is not symmetry for its own
+sake: **Chrome upgrades `http://` navigations to `https://` on its own** and
+only falls back if the upgrade fails — and ours would succeed. Without the
+bounce, a visitor typing the dashboard hostname lands on a valid TLS page whose
+calls to the `http://` API are blocked as mixed content: a dead dashboard that
+reads as our bug rather than the browser's helpfulness.
+
+The certificates and every certificate script stay in the tree for the same
+reason.
+
+**D-69 — There is a proxy VM, and `/etc/hosts` on `caios_server` hid it.**
+Found on 2026-09-02. `134.87.8.230` is a separate machine running nginx 1.18.0
+and is the public front door for both tiers. `docs/public-access.md` had said
+for a week that no such machine existed and that the floating IP DNATs straight
+to `caios_server`.
+
+The reason it survived that long is worth more than the fact. `/etc/hosts` on
+`caios_server` maps the four control-plane hostnames to `192.168.104.181`, so
+**every curl run from that node bypasses the proxy and talks to Caddy
+directly**. Both answer, both look right, and they are not the same path. The
+deployment hostnames have no override, which is the only reason it surfaced at
+all — a `301` from `nginx/1.18.0 (Ubuntu)` where Caddy was expected.
+
+Two consequences. Verifying anything public from `caios_server` requires
+`--resolve`, and the `Server:` header is the tell. And T5 cannot be completed
+from this repository alone: the proxy redirects `:80` to `:443`
+unconditionally, which against a platform serving HTTP is a **redirect loop**,
+not a degradation. `docs/nginx-proxy.md` holds the exact change and
+`CAIOS_SCHEME` stays `https` until it is applied.
+
+**2026-09-02** — T5 plumbing landed; the switch itself is held. Recorded D-67
+to D-69. Every scheme on the platform now derives from `CAIOS_SCHEME`, still
+set to `https`, so the platform is unchanged and working. The finding that
+matters is D-69: the public path was never the path anyone had been measuring.

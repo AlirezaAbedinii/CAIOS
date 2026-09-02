@@ -10,13 +10,21 @@
 
 self:  # info about the API endpoint
 
-  domain: https://api.${CAIOS_PUBLIC_IP}.sslip.io
+  # T5. ${CAIOS_SCHEME} comes from compose and is expanded by the envsubst the
+  # PAPI image runs at start, like the IPs above it.
+  domain: ${CAIOS_SCHEME}://api.${CAIOS_PUBLIC_IP}.sslip.io
 
 auth:
 
   CORS_origins:  # allows requests to the API from these domains
 
+    # Both schemes, deliberately. An origin is scheme-exact — a browser on
+    # http://dashboard... is a different origin from https://dashboard..., and a
+    # missing one produces a CORS wall, which reaches the user as "Error calling
+    # the API" on every page with nothing in PAPI's log to explain it. Listing
+    # both costs nothing and removes the whole failure mode from the switch.
     - https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io
+    - http://dashboard.${CAIOS_PUBLIC_IP}.sslip.io
     - http://localhost:8080          # local dashboard development
     - ${DASHBOARD_URL}               # expanded by PAPI from the environment
 

@@ -44,3 +44,19 @@ network, and restores in seconds — but it lives only on this host and a
 to a file rather than left as a tag alone.
 
 On demo day you want the tarball. Six months from now you want the tag.
+
+## `dashboard-t4-demo-unavailable.tar` — saved 2026-09-02
+
+The image deployed for T3/T4: the demo-unavailable notice on the three profile
+tabs, the EU Node and Infrastructure Manager deploy targets removed, and the
+AI4EOSC strings a visitor reads replaced.
+
+The image it replaced is `dashboard-f3-home.tar`, so that is the undo for this
+deploy. Git tag `t4-demo-unavailable` records what it was built from.
+
+```bash
+sudo docker load -i rollback/dashboard-f3-home.tar
+sudo docker tag caios/dashboard:f3-home caios/dashboard:latest
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env up -d --force-recreate dashboard
+```

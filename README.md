@@ -95,3 +95,15 @@ constrained on `meta.status=ready`, `meta.type=compute`, a matching `meta.namesp
 `region = "global"`. A node failing any of them looks healthy and silently never receives
 work. `scripts/verify-cluster.sh` checks all four in one go, and is the right first move
 whenever a job is stuck pending.
+
+---
+
+## Licence
+
+CAIOS is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE).
+
+It deploys the [AI4OS](https://github.com/ai4os) stack, which is Apache-2.0 as
+well; [`NOTICE`](NOTICE) carries the required attribution and names `patches/` as
+this project's statement of changes. `docs/licensing.md` explains what is
+inherited, what is required, and what the catalogue's models are licensed under
+— which is **not** this licence, and varies per model.

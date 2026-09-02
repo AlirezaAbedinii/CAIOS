@@ -1,0 +1,56 @@
+metadata_version: 2.0.0
+title:  AI4life model loader
+summary: "Support for inference of the AI4LIFE model on the marketplace."
+description: |-
+  The [BioImage Model Zoo](https://bioimage.io/#/) is a community-driven platform that
+  provides standardized deep learning models for bioimage analysis.
+
+  This module integrates models from the **BioImage.IO** package into the **AI4EOSC** Marketplace
+  dashboard, specifically those using PyTorch weights and following the v0.5 format.
+  The module allows users to seamlessly explore, deploy, and utilize these models within
+  the AI4EOSC ecosystem, providing a user-friendly interface for advanced bioimage analysis.
+
+  **Key Features**
+  - Model Discovery: Automatically fetch and list models available in BioImage.IO that meet the criteria (PyTorch weights, v0.5 format).
+
+  - Metadata Visualization: Display essential information about each model,
+   such as input/output specifications, authors, license details, and documentation.
+
+  - Seamless Deployment: Enable one-click deployment of models to AI4EOSC compute resources.
+
+  - Model Preview: Provide an interactive preview to test models on sample data directly in the dashboard.
+
+  **References**:
+  - BioImage.Io github repository: https://github.com/bioimage-io/core-bioimage-io-python
+  - Documentation: https://bioimage-io.github.io/core-bioimage-io-python
+dates:
+  created: '2024-11-11'
+  updated: '2024-11-11'
+links:
+  ai4_template: ai4-template-adv/2.0.1
+  source_code: https://github.com/ai4os/ai4os-ai4life-loader
+  docker_image: ai4oshub/ai4os-ai4life-loader
+  # documentation: http://add-some-documentation.com
+  # dataset: http://add-some-url-pointing-to-your-dataset.com
+  # weights: http://add-some-weights-url.com
+  # citation: http://add-some-DOI-url.com
+  # base_model: http://add-some-link-to-another-model.com
+tags:        # required property, add user-defined tags that you consider relevant
+   - deep learning
+   - segmentation
+   - 2D input
+   - 3D input
+   - UNet
+   - Segment Anything
+   - cellpose
+tasks:       # required property, uncomment together with relevant items
+   - Computer Vision
+   - Classification
+categories:  # required property, uncomment together with relevant items
+   - AI4 inference
+   - AI4 tools
+libraries:   # required property, uncomment together with relevant items
+   - PyTorch
+   - Scikit-learn
+data-type:   # optional, uncomment together with relevant items
+   - Image

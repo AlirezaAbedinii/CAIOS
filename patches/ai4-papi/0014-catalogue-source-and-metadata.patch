@@ -1,0 +1,205 @@
+diff --git a/ai4papi/routers/v1/catalog/common.py b/ai4papi/routers/v1/catalog/common.py
+index 0fa8218..11c60ea 100644
+--- a/ai4papi/routers/v1/catalog/common.py
++++ b/ai4papi/routers/v1/catalog/common.py
+@@ -25,6 +25,7 @@ This means you cannot name your modules like those names (eg. tags, detail, etc)
+ import configparser
+ import importlib
+ import json
++import os
+ import re
+ from typing import Annotated
+ import warnings
+@@ -44,6 +45,30 @@ import ai4papi.conf as papiconf
+ 
+ session = requests.Session()
+ 
++# [CAIOS] Where the catalogue is read from, and how long we wait for it.
++#
++# Upstream hardcodes raw.githubusercontent.com and builds the marketplace from
++# it on every cold request: one fetch for the catalogue's .gitmodules, then one
++# per entry for its ai4-metadata.yml. That host is Fastly-fronted and went
++# unreachable from every CAIOS node for about three hours on 2026-09-01 while
++# api.github.com, github.com and Docker Hub all kept working.
++#
++# CATALOGUE_BASE_URL points at a local mirror with the same path layout
++# (<owner>/<repo>/<branch>/<file>), built by scripts/mirror-catalogue.sh. Left
++# unset this behaves exactly as upstream does.
++# `or` rather than a get() default: an unset variable and one set to the empty
++# string must behave the same, or a blank line in an env file silently points the
++# marketplace at nothing.
++CATALOGUE_BASE_URL = (
++    os.environ.get("CATALOGUE_BASE_URL") or "https://raw.githubusercontent.com"
++).rstrip("/")
++
++# (connect, read). Upstream passes no timeout at all, so an unreachable source
++# does not fail — it hangs the worker thread, and the dashboard shows a spinner
++# that never resolves. A page that errors can be understood; a page that spins
++# cannot.
++CATALOGUE_TIMEOUT = (5, 15)
++
+ security = HTTPBearer()
+ 
+ # Jenkins token is mandatory in production
+@@ -96,10 +121,22 @@ class Catalog:
+         This is implemented in a separate function as many functions from this router
+         are using this function, so we need to avoid infinite recursions.
+         """
+-        gitmodules_url = (
+-            f"https://raw.githubusercontent.com/{self.repo}/master/.gitmodules"
+-        )
+-        r = session.get(gitmodules_url)
++        gitmodules_url = f"{CATALOGUE_BASE_URL}/{self.repo}/master/.gitmodules"
++        try:
++            r = session.get(gitmodules_url, timeout=CATALOGUE_TIMEOUT)
++            r.raise_for_status()
++        except requests.RequestException as e:
++            # [CAIOS] D-50: an unreachable source is a state, not a hang. Say
++            # which source, because the address is configuration now and a
++            # misconfigured one looks identical to an outage.
++            raise HTTPException(
++                status_code=503,
++                detail=(
++                    f"The {self.item_type} catalogue could not be read from "
++                    f"{CATALOGUE_BASE_URL}. This is a source problem, not a "
++                    f"problem with your request. ({e.__class__.__name__})"
++                ),
++            )
+ 
+         cfg = configparser.ConfigParser()
+         cfg.read_string(r.text)
+@@ -279,12 +316,21 @@ class Catalog:
+         # Use try/except to avoid that a single module formatting error could take down
+         # all the Dashboard
+         branch = items[item_name].get("branch", "master")
+-        url = items[item_name]["url"].replace("github.com", "raw.githubusercontent.com")
++        # [CAIOS] Same base URL as the catalogue itself. Upstream swaps the
++        # host inside the module's own URL; we replace the whole scheme+host so
++        # that a mirror served under a path (…/catalog) works too.
++        url = re.sub(r"^https?://github\.com", CATALOGUE_BASE_URL, items[item_name]["url"])
+         metadata_url = f"{url}/{branch}/ai4-metadata.yml"
+ 
+         error = None
+         # Try to retrieve the metadata from Github
+-        r = session.get(metadata_url)
++        try:
++            r = session.get(metadata_url, timeout=CATALOGUE_TIMEOUT)
++        except requests.RequestException:
++            # Upstream's own fall-through: `error` becomes the description and
++            # the item still renders, rather than taking the whole page down.
++            r = requests.Response()
++            r.status_code = 504
+         if not r.ok:
+             if r.status_code == 429:
+                 error = (
+@@ -385,10 +431,31 @@ class Catalog:
+                     utils.get_github_info.cache.pop((owner, repo), None)
+                 gh_info = utils.get_github_info(owner, repo)
+ 
++                # [CAIOS] Only let GitHub's answer win when it is a real one.
++                #
++                # IS_PROD must be false here (gotcha 1: the official image sets
++                # IS_PROD=True and PAPI then refuses to start over missing
++                # Harbor/Jenkins/provenance/LiteLLM tokens). conf.py derives
++                # IS_DEV = not IS_PROD, and utils.get_github_info() short-circuits
++                # on IS_DEV to return {"created": "1970-01-01", "updated":
++                # "1970-01-01", "license": "MIT"}.
++                #
++                # Written through unconditionally, as upstream does, that makes
++                # EVERY module in the marketplace report MIT and 1970-01-01.
++                # ai4os-yolo-torch wraps Ultralytics YOLO, which is AGPL-3.0 —
++                # so the platform states a third party's licence incorrectly to
++                # its own users. See docs/licensing.md.
++                #
++                # A module's ai4-metadata.yml already carries its licence, so
++                # the fix is to prefer what the module says about itself and let
++                # GitHub fill only what is missing.
+                 metadata.setdefault("dates", {})
+-                metadata["dates"]["created"] = gh_info.get("created", "")
+-                metadata["dates"]["updated"] = gh_info.get("updated", "")
+-                metadata["license"] = gh_info.get("license", "")
++                for field in ("created", "updated"):
++                    value = gh_info.get(field, "")
++                    if value and not metadata["dates"].get(field):
++                        metadata["dates"][field] = value
++                if gh_info.get("license") and not metadata.get("license"):
++                    metadata["license"] = gh_info["license"]
+                 metadata["links"]["source_code"] = f"https://github.com/{owner}/{repo}"
+ 
+             # Map license to EU vocabularies
+diff --git a/ai4papi/utils.py b/ai4papi/utils.py
+index b0e4f02..37a2d96 100644
+--- a/ai4papi/utils.py
++++ b/ai4papi/utils.py
+@@ -92,6 +92,29 @@ def validate_conf(conf):
+ 
+ 
+ @cached(cache=TTLCache(maxsize=1024, ttl=30 * 7 * 24 * 60 * 60))
++@cached(cache=TTLCache(maxsize=1, ttl=60 * 60))
++def mirrored_repo_info():
++    """
++    [CAIOS] Licences and dates for every catalogue entry, from the local mirror.
++
++    Built by scripts/mirror-catalogue.sh from api.github.com and served
++    alongside the rest of the mirror. Empty dict when no mirror is configured,
++    which restores upstream behaviour exactly.
++    """
++    base = (os.environ.get("CATALOGUE_BASE_URL") or "").rstrip("/")
++    if not base:
++        return {}
++    try:
++        r = session.get(f"{base}/repo-info.json", timeout=(5, 15))
++        r.raise_for_status()
++        return r.json()
++    except Exception as e:
++        # Not fatal. Falling through leaves the licence absent, which D-50 says
++        # is the right shape for a value we do not have.
++        print(f"[warn] Could not read {base}/repo-info.json: {e.__class__.__name__}")
++        return {}
++
++
+ def get_github_info(owner, repo):
+     """
+     Retrieve information from a Github repo
+@@ -99,6 +122,23 @@ def get_github_info(owner, repo):
+     We cache for a long period (1 month) because this cache will be manually expired by
+     _get_metadata() each time the metadata needs to be recomputed.
+     """
++    # [CAIOS] Prefer the mirror, for correctness rather than for speed.
++    #
++    # ai4-metadata.yml (schema 2.0.0) has no `license` key, so a module's licence
++    # is only ever known from its repository — and the branch below returns a
++    # mock one. IS_PROD must be false here (gotcha 1), so IS_DEV is always true,
++    # so every module in the marketplace reported "MIT" and "1970-01-01".
++    #
++    # That is not cosmetic: ai4os-yolo-torch wraps Ultralytics YOLO and is
++    # AGPL-3.0, posenet-tf is Apache-2.0. Stating either as MIT misrepresents a
++    # third party's terms to our own users. See docs/licensing.md.
++    #
++    # The mirror carries the real values, fetched once at mirror time rather
++    # than per request — which also keeps the platform off GitHub during a demo.
++    mirrored = mirrored_repo_info().get(f"{owner}/{repo}")
++    if mirrored:
++        return dict(mirrored)
++
+     # Avoid running this function if were are doing local development, because
+     # repeatedly calling the Github API will otherwise get you blocked. Return mock data
+     if papiconf.IS_DEV:
+@@ -191,8 +231,15 @@ def ai4life_catalog():
+     """
+     Load the AI4Life catalog, after filtering the models that AI4EOSC can support.
+     """
+-    url = "https://raw.githubusercontent.com/ai4os/ai4os-ai4life-loader/refs/heads/main/models/filtered_models.json"
+-    response = session.get(url)
++    # [CAIOS] Same mirror as the module and tool catalogues. This one feeds the
++    # AI4Life loader's model dropdown, which is beat 2 of the demo; its cache is
++    # seven days, so an outage during that window is invisible until it isn't.
++    base = (
++        os.environ.get("CATALOGUE_BASE_URL") or "https://raw.githubusercontent.com"
++    ).rstrip("/")
++    url = f"{base}/ai4os/ai4os-ai4life-loader/refs/heads/main/models/filtered_models.json"
++    response = session.get(url, timeout=(5, 15))
++    response.raise_for_status()
+     return response.json()
+ 
+ 

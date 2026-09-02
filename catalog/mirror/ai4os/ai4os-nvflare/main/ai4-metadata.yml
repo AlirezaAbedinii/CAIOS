@@ -1,0 +1,28 @@
+metadata_version: 2.0.0
+title: Federated learning with NVFlare
+summary: NVFlare Dashboard and Federated learning server
+description: |-
+  NVIDIA FLARE (NVIDIA Federated Learning Application Runtime Environment) is a
+  domain-agnostic, open-source, extensible SDK that allows researchers and data
+  scientists to adapt existing ML/DL workflows to a federated paradigm.
+
+  It enables platform developers to build a secure, privacy-preserving offering for a distributed multi-party collaboration.
+
+  <img class='fit', src='https://raw.githubusercontent.com/ai4os/ai4os-nvflare/refs/heads/main/nvflare-diagram.jpg'/>
+dates:
+  created: '2024-05-07'
+  updated: '2025-07-22'
+links:
+  source_code: https://github.com/ai4os/ai4os-nvflare
+  docker_image: registry.services.ai4os.eu/ai4os/ai4os-nvflare-dashboard
+  ai4_template: ai4-template/1.9.9
+tags:
+  - federated learning
+tasks:
+  - Other
+categories:
+  - AI4 tools
+libraries:
+  - Other
+data-type:
+  - Other

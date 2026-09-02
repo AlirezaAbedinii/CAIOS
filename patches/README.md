@@ -362,6 +362,64 @@ of truth.
 
 D-57. Full plan: `docs/oscar-plan.md`.
 
+### `ai4-papi/0014-catalogue-source-and-metadata.patch` — pinned to `e80a2b7`
+
+**T1.** Three changes to the same code path, all about where the marketplace
+comes from and whether it can be trusted.
+
+**Where the catalogue is read from.** `catalog/common.py` hardcodes
+`raw.githubusercontent.com` and builds the marketplace from it *at request
+time*: one fetch for the catalogue's `.gitmodules`, then one per entry for its
+`ai4-metadata.yml` — about fifteen for a full page. That host is Fastly-fronted
+and was unreachable from **every** CAIOS node for roughly three hours on
+2026-09-01, while `api.github.com`, `github.com`, Docker Hub and Hugging Face
+all kept working.
+
+`CATALOGUE_BASE_URL` points at a local mirror with the same path layout
+(`<owner>/<repo>/<branch>/<file>`), built by `scripts/mirror-catalogue.sh` and
+served by Caddy at `/mirror/`. Unset **or empty** behaves exactly as upstream —
+`or` rather than a `get()` default, because a blank line in an env file must not
+silently point the marketplace at nothing. Same treatment in
+`utils.ai4life_catalog()`, which feeds the AI4Life dropdown from the same host.
+
+**A timeout.** `session = requests.Session()` passes none anywhere, so an
+unreachable source does not fail — it holds the worker thread until TCP gives
+up. That is why the outage presented as a dashboard spinner that never resolved
+rather than as an error. `(5, 15)` connect/read, and an unreachable catalogue
+now raises **503 naming the source**, because the address is configuration now
+and a misconfigured one looks identical to an outage. D-50 again: an absent
+source is a state, not a hang. Measured: 90 s+ hang becomes 503 in 2 s.
+
+**The licence.** This one is not a performance problem.
+
+`ai4-metadata.yml` schema 2.0.0 has **no `license` key**, so a module's licence
+is only ever known from its repository. Upstream reads it from `api.github.com`
+in `utils.get_github_info()` — which short-circuits on `IS_DEV` and returns a
+mock, `{"created": "1970-01-01", "updated": "1970-01-01", "license": "MIT"}`.
+`IS_PROD` **must** be false for CAIOS (gotcha 1), so `IS_DEV` is always true.
+And `common.py` assigned it unconditionally:
+
+```python
+metadata["license"] = gh_info.get("license", "")
+```
+
+So **every module in the marketplace reported MIT and 1970-01-01.**
+`ai4os-yolo-torch` wraps Ultralytics YOLO and is **AGPL-3.0**; `posenet-tf` is
+Apache-2.0. Stating either as MIT misrepresents a third party's terms to our own
+users — the one real licensing problem this project has, and ours rather than
+inherited. See `docs/licensing.md`.
+
+The fix has two halves. `mirrored_repo_info()` reads `repo-info.json` from the
+same mirror, built once from `api.github.com` at mirror time rather than per
+request — correct *and* offline, and comfortably inside GitHub's 60-per-hour
+unauthenticated limit. And the assignments become conditional, so a real value
+is never overwritten by a mock one.
+
+Verified live: nine modules, three distinct licences, no 1970 date, and no
+GitHub host in PAPI's log for the whole run. `scripts/check-catalogue.sh`
+section 4 asserts the 503 by pointing a throwaway container at an unroutable
+address.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

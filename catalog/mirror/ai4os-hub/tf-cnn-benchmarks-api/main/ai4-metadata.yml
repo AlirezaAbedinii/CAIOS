@@ -1,0 +1,39 @@
+metadata_version: 2.0.0
+title: TF Benchmarks
+summary: Benchmarks for Convolutional Neural Networks
+description: |-
+  [tf_cnn_benchmarks](https://github.com/tensorflow/benchmarks/tree/master/scripts/tf_cnn_benchmarks) from TensorFlow team accessed via [DEEPaaS API](https://github.com/ai4os/DEEPaaS)
+
+  `tf_cnn_benchmarks` contains implementations of several popular convolutional models (e.g. Googlenet, Inception, Overfeat, Resnet, VGG), and is designed to be as fast as possible. `tf_cnn_benchmarks` supports running on a single machine, on a single GPU and multiple GPUs (please, note that running in distributed mode across multiple hosts is not supported by these Docker images). See the [High-Performance models guide](https://web.archive.org/web/20171114184945/https://www.tensorflow.org/performance/performance_models) for more information.
+  The application has several _flavors_ implemented:
+  * `synthetic`: generated in-memory data mimicking ImageNet dataset, avoids storage I/O
+  * `dataset`: ca. 5GB subset of real ImageNet data is used (downloaded automatically but may take time!), therefore involves I/O. Useful in comparison with `synthetic` flavor.
+  * `pro`: possible to customize various inputs: neural network, batch_size, dataset, etc
+  
+  `synthetic` and `dataset` have as an input the number of GPUs only, the rest is defined inside the application: Both flavors run sequentially 100 batches of googlenet, inception3, resnet50, vgg16, and sum `average_examples_per_sec` to derive the final `score`. The optimizer is set to `sgd`. The batch size is defined per GPU and scaled with the GPU memory. Initial batch_sizes are set for 4GB GPU memory as:
+  * googlenet: 96
+  * inception3: 24
+  * resnet50: 24
+  * vgg16: 16
+
+  It is also possible to run both flavors on CPU but the batch_size is fixed to 16 for all neural networks independent of the memory available.
+
+  **References**
+  1. [TF CNN Benchmarks](https://github.com/tensorflow/benchmarks/tree/master/scripts/tf_cnn_benchmarks)
+dates:
+  created: '2019-12-19'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os-hub/tf-cnn-benchmarks-api
+  docker_image: ai4oshub/tf-cnn-benchmarks
+tags:
+  - deep learning
+  - demo
+tasks:
+  - Other
+categories:
+  - AI4 trainable
+libraries:
+  - TensorFlow
+data-type:
+  - Image

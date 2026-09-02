@@ -1,0 +1,56 @@
+metadata_version: 2.0.0
+title: Object Detection and Classification with Pytorch
+summary: A trained Region Convolutional Neural Network (Faster RCNN) for object detection and classification.
+description: |-
+  This is a plug-and-play tool for object detection and classification using deep neural 
+  networks (Faster R-CNN ResNet-50 FPN Architecture [1]) that were already pretrained on the [COCO Dataset](http://cocodataset.org/#home). 
+  The code uses the Pytorch Library, more information can be found at [Pytorch-Object-Detection](https://docs.pytorch.org/vision/stable/models.html#object-detection-instance-segmentation-and-person-keypoint-detection).
+
+  The PREDICT method expects an image as input and will return a JSON with the predictions that are greater than the probability threshold.
+  Let's say you have an image of a cat and a dog together and the probability output was 50% a dog and 80% a cat, if you set the threshold 
+  to 70%, the only detected object will be the cat, because its probability is grater than 70%.
+
+  This module works on uploaded images and gives as output the rectangle coordinates x1,y1 and x2,y2 were the classified object is located.
+  It also provides you the probability of the classified detected object.
+  
+  <img class='fit' width='30%', src='https://raw.githubusercontent.com/ai4os-hub/obj-detection-torch/main/reports/figures/dog_broccoli.png'/>
+
+  The TRAINING method uses transfer learning and expects different parameters like learning rate, name of the clases, etc.
+  Transfer learning focuses on storing knowledge gained while solving one problem and applying it to a different but related problem.
+  To achieve it, the output layer of the pre-trained model is removed and a new one with the new number of outputs is added. Only that new layer will be trained [1]. 
+  An example of transferred learning is provided and implemented in this module. 
+
+  The model requires a new dataset with the classes that are going to be classified and detected.
+  In this case the Penn-Fudan Database for Pedestrian Detection and Segmentation was used to detect pedestrians.
+
+  <img class='fit' width='70%', src='https://raw.githubusercontent.com/ai4os-hub/obj-detection-torch/main/reports/figures/pytorchobj.png'/>
+
+  To try this in the module, the two dataset folders (Images and Masks) must be placed in the `obj_detect_pytorch/dataset/` folder.
+
+  More information about the code, the Penn Fudan Dataset and the structuring of a custom dataset can be found at [Torchvision Object Detection Finetuning](https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html).
+
+  **References**
+  1. Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun. [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](https://arxiv.org/abs/1506.01497) arXiv preprint (2016): 1506-01497.
+  2. West Jeremy, Ventura Dan, Warnick Sean. Spring Research Presentation: A Theoretical Foundation for Inductive Transfer, Brigham Young University, College of Physical and Mathematical Sciences. (2007).
+dates:
+  created: '2019-10-17'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os-hub/obj-detection-torch
+  docker_image: ai4oshub/obj-detection-torch
+  ai4_template: ai4-template/1.9.9
+  dataset: https://cocodataset.org/
+tags:
+  - deep learning
+  - object detection
+  - vo.imagine-ai.eu
+tasks:
+  - Computer Vision
+categories:
+  - AI4 trainable
+  - AI4 pre trained
+  - AI4 inference
+libraries:
+  - PyTorch
+data-type:
+  - Image

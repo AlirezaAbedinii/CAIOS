@@ -1,0 +1,43 @@
+metadata_version: 2.0.0
+title: Train an audio classifier
+summary: Train your own audio classifier with your custom dataset. It comes also pretrained on the 527 AudioSet classes.
+description: |- 
+  This is a plug-and-play tool to perform audio classification with Deep Learning. 
+  It allows the user to classify their samples of audio as well as training their own classifier for a custom problem.
+  
+  The classifier is currently pretrained on the 527 high-level classes from the [AudioSet](https://research.google.com/audioset/) dataset.
+  The PREDICT method expects an audio file as input (or the url of a audio file) and will return a JSON with the top 5 predictions. 
+  Most audio file formats are supported (see [FFMPEG](https://www.ffmpeg.org/) compatible formats).
+  
+  <img class='fit', src='https://raw.githubusercontent.com/ai4os-hub/ai4os-audio-classification-tf/main/docs/images/demo.png'/>
+  
+  **References**
+  * Jort F. Gemmeke, Daniel P. W. Ellis, Dylan Freedman, Aren Jansen, Wade Lawrence, R. Channing Moore, Manoj Plakal, Marvin Ritter, [Audio set: An ontology and human-labeled dataset for audio events](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/45857.pdf), IEEE ICASSP, 2017.
+  * Qiuqiang Kong, Yong Xu, Wenwu Wang, Mark D. Plumbley,[Audio Set classification with attention model: A probabilistic perspective.](https://arxiv.org/pdf/1711.00927.pdf) arXiv preprint arXiv:1711.00927 (2017).
+  * Changsong Yu, Karim Said Barsim, Qiuqiang Kong, Bin Yang , [Multi-level Attention Model for Weakly Supervised Audio Classification.](https://arxiv.org/pdf/1803.02353.pdf) arXiv preprint arXiv:1803.02353 (2018).
+  * S. Hershey, S. Chaudhuri, D. P. W. Ellis, J. F. Gemmeke, A. Jansen, R. C. Moore, M. Plakal, D. Platt, R. A. Saurous, B. Seybold et  al., [CNN architectures for large-scale audio classification,](https://arxiv.org/pdf/1609.09430.pdf) arXiv preprint arXiv:1609.09430, 2016.
+dates:
+  created: '2019-09-01'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os-hub/ai4os-audio-classification-tf
+  docker_image: ai4oshub/ai4os-audio-classification-tf
+  ai4_template: ai4-template/1.9.9
+  dataset: https://research.google.com/audioset
+  training_data: null
+  citation: https://arxiv.org/pdf/1803.02353.pdf
+tags:
+  - deep learning
+  - vo.imagine-ai.eu
+  - general purpose
+tasks:
+  - Classification
+categories:
+  - AI4 pre trained
+  - AI4 trainable
+  - AI4 inference
+libraries:
+  - TensorFlow
+  - Keras
+data-type: 
+  - Audio

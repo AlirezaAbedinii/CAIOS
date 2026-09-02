@@ -1,0 +1,37 @@
+metadata_version: 2.0.0
+title: AI4OS Development Environment
+summary: This is a Docker image for developing new modules
+description: |-
+  This is a Docker image for developing new modules. It comes preinstalled
+  with DEEPaaS API, JupyterLab or VSCode, OpenCode, Tensorflow or PyTorch, and a number 
+  of other tools (see [here](https://github.com/ai4os/ai4os-dev-env)). As you have access to
+  the terminal of JupyterLab or VSCode, you can develop and debug your application,
+  add your preferred tools.
+
+  Currently supported deployments:
+  * ubuntu-based, i.e. without any deep learning framework
+  * nvidia-cuda based but without a deep leaning framework
+  * Tensorflow version is included
+  * PyTorch version is included
+
+  <img class='fit', src='https://docs.ai4eosc.eu/en/latest/_images/vscode1.png'/>
+
+dates:
+  created: '2019-03-01'
+  updated: '2026-08-13'
+links:
+  source_code: https://github.com/ai4os/ai4os-dev-env
+  docker_image: ai4oshub/ai4os-dev-env
+tags:
+  - general purpose
+  - jupyterlab
+  - vscode
+  - opencode
+tasks:
+  - Other
+categories:
+  - AI4 tools
+libraries:
+  - TensorFlow
+  - PyTorch
+data-type: []

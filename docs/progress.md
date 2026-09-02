@@ -71,9 +71,9 @@ docker run ai4oshub/posenet-tf:latest deep-start --jupyter
 ```
 
 Every module image ships a `deep-start` that launches JupyterLab as root
-**without `--allow-root`**. Checked across the catalogue: five of nine confirmed
-so far, none with it. So the `jupyter` service has never worked on any module,
-and the option was offered on every one of them.
+**without `--allow-root`**. Checked across the whole catalogue: **nine of nine,
+none with it.** So the `jupyter` service has never worked on any module, and the
+option was offered on every one of them.
 
 `configs/papi/modules-user.yaml` now offers `deepaas` only, with the measurement
 written next to the line so nobody adds it back. A module *is* an inference API;

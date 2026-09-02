@@ -456,7 +456,7 @@ configuration instead: every module image ships a `deep-start` that launches
 JupyterLab as root *without* `--allow-root`, so Jupyter refuses to start and the
 container exits 1. Reproduced directly with
 `docker run ai4oshub/posenet-tf:latest deep-start --jupyter`, and confirmed
-across the catalogue. `configs/papi/modules-user.yaml` therefore offers modules
+across the whole catalogue: nine images of nine, none carrying the flag. `configs/papi/modules-user.yaml` therefore offers modules
 as `deepaas` only; the interactive workspace is the dev-env **tool**, whose
 image is newer and whose JupyterLab was verified in a browser.
 

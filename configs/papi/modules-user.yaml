@@ -41,11 +41,25 @@ general:
     description: Docker tag to use. Tags are module dependent. You should choose the appropriate tag for your selected hardware (eg. use a `gpu`-like tag if you plan to run on GPUs).
     options: ['latest']
 
+  # [CAIOS] JupyterLab is NOT offered for modules, because it does not work.
+  #
+  # Measured 2026-09-02 across the catalogue: every module image ships a
+  # `deep-start` that launches JupyterLab as root WITHOUT `--allow-root`.
+  # Jupyter refuses to start, the container exits 1, Nomad retries twice and
+  # marks the job dead — and before patch 0015 the deployment then vanished
+  # from the dashboard with no error at all. Three abandoned `posenet-tf`
+  # deployments accumulated that way before anyone knew why.
+  #
+  # Offering an option that always crashes is worse than not offering it. The
+  # high-code path is the dev-env TOOL, whose image is newer and whose
+  # JupyterLab works — verified in a browser, logged in, terminal running.
+  #
+  # DEEPaaS is what a module is for anyway: the module IS an inference API.
   service:
     name: Service to run
     value: 'deepaas'
-    description: When selecting DEEPaaS you won't be able to use JupyterLab, and vice versa. If you want to have access to both services at the same time your best option is to deploy with JupyterLab, then open a terminal window and run DEEPaaS yourself typing `deep-start --deepaas`. In some container, you will also be able to deploy VS Code.
-    options: ['deepaas', 'jupyter']
+    description: Modules run as a DEEPaaS inference API. For an interactive JupyterLab or VS Code workspace, deploy the AI4OS Development Environment from Tools instead.
+    options: ['deepaas']
 
   jupyter_password:
     name: IDE password

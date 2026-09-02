@@ -1,0 +1,30 @@
+metadata_version: 2.0.0
+title: Body pose detection
+summary: Detect body poses in images.
+description: |-
+  This is a plug-and-play tool for real-time pose estimation using deep  neural networks. The original model, weights, code, etc. was created by Google  and can be found at https://github.com/tensorflow/tfjs-models/tree/master/posenet.
+  
+  PoseNet can be used to estimate either a single pose or multiple poses, meaning  there is a version of the algorithm that can detect only one person in an image/video and another version that can detect multiple persons in an image/video.
+
+  The  PREDICT method expects an RGB image as input (or the url of an image) and returns  as output the different body keypoints with the corresponding coordinates and the associated key score 
+
+  <img class='fit', src='https://raw.githubusercontent.com/ai4os-hub/posenet-tf/refs/heads/main/reports/figures/posenet.png'/>
+
+dates:
+  created: '2019-07-31'
+  updated: '2024-10-09'
+links:
+  source_code: https://github.com/ai4os-hub/posenet-tf.git
+  docker_image: ai4oshub/posenet-tf
+tags:
+  - deep learning
+tasks:
+  - Computer Vision
+categories:
+  - AI4 inference
+  - AI4 pre trained
+libraries:
+  - TensorFlow
+data-type:
+  - Image
+  - Video

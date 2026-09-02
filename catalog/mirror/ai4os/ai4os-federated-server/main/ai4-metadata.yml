@@ -1,0 +1,31 @@
+metadata_version: 2.0.0
+title: Federated learning with Flower
+summary: Run federated learning trainings using the Flower framework.
+description: |-
+  Federated Learning server deployed using [Flower](https://flower.ai/).
+  
+  Run your federated learning (FL) application from scratch with the server running on AI4EOSC.
+  The FL clients can be deployed in external cloud machines, locally in their own workstations, or on the AI4EOSC platform (accessing to GPUs and other computing resources).
+  With this tool you can train global machine/deep learning model on different clients in a distributed way following a federated learning architecture.
+  
+  Customize the number of rounds the FL training is performed, the aggregation strategy used, the minimum number of clients, and the error metric to be used among other settings.
+
+  <img class='fit', src='https://www.researchgate.net/publication/362088869/figure/fig2/AS:1179390767575052@1658200079112/Scheme-of-a-federated-learning-approach.png'/>
+  
+dates:
+  created: '2023-06-28'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os/ai4os-federated-server
+  docker_image: ai4oshub/ai4os-federated-server
+  ai4_template: ai4-template/1.9.9
+tags:
+  - federated learning
+tasks:
+  - Other
+categories:
+  - AI4 tools
+libraries:
+  - Other
+data-type:
+  - Other

@@ -1,0 +1,57 @@
+metadata_version: 2.0.0
+title: ai4os-demo-app
+summary: A toy application for demo and testing purposes. We just implement dummy inference/training, ie. we return the same inputs we are fed. The module does not contain any AI code.
+description: |-
+  It can serve as a reference implementation of current best practices in the project (mirroring the [DEEP template](https://github.com/ai4os/ai4-template)).
+
+  This demo module implements:
+  * **dummy inference**, ie. we return the same inputs we are fed. If some input is not fed we generate a default one.
+  * **dummy training**, ie. we sleep for some time and output some random monitoring metrics.
+
+  The two branches in this repo cover the two main usecases:
+  * `master`: this is a reference implementation on how to return a JSON response for predict().
+  * `return-files`: this is a reference implementation on how to return non-JSON responses for predict().
+
+  This is particularly useful when returning:
+  - long responses (that could better fit better in a txt file),
+  - media files (eg. returning an image),
+  - multiple files (for example returning an image and a text file at the same time, packing them into a zip file).
+doi: https://doi.org/10.5281/zenodo.13343448
+dates:
+  created: '2024-03-26'
+  updated: '2024-08-12'
+provenance:
+  nomad_job: f4b9c17a-1077-11f0-9e04-0242ac120002
+  mlflow_run: 5e96fe940dca470aa7d6c16620e82c35
+links:
+  documentation: http://add-some-documentation.com
+  source_code: https://github.com/ai4os-hub/ai4os-demo-app
+  docker_image: ai4oshub/ai4os-demo-app
+  ai4_template: ai4-template/2.0.0
+  dataset: http://add-some-url-pointing-to-your-dataset.com
+  weights: http://add-some-weights-url.com
+  citation: https://doi.org/10.5281/zenodo.13343448
+  base_model: http://add-some-link-to-another-model.com
+tags:
+  - demo
+  - general purpose
+  - vo.imagine-ai.eu
+tasks:
+  - Other
+categories:
+  - AI4 trainable
+  - AI4 pre trained
+  - AI4 inference
+libraries:
+  - Other
+data-type:
+  - Other
+resources:
+  inference:
+    cpu: 2
+    gpu: 1
+    memory_MB: 1000
+    gpu_memory_MB: 1000
+    gpu_compute_capability: 100.0
+    #  we use on purpose a unreasonable compute capability so that we can test the warning system
+    storage_MB: 1000

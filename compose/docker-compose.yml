@@ -36,6 +36,9 @@ services:
       # Built by scripts/build-fl-bundles.sh; absent until it has been run,
       # which Caddy tolerates — the route 404s rather than failing to start.
       - ../demo/fl/dist:/srv/fl:ro
+      # Marketplace catalogue mirror, served at /mirror/ on the dashboard host
+      # and read by PAPI. See CATALOGUE_BASE_URL below.
+      - ../catalog/mirror:/srv/catalog:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:
@@ -219,6 +222,15 @@ services:
       # hours, so after changing the fork either restart PAPI or PUT
       # /v1/catalog/modules/refresh.
       MODULES_CATALOGUE_REPO: ${MODULES_CATALOGUE_REPO:-ai4os-hub/modules-catalog}
+      # Patched in (0014). Upstream builds the marketplace from
+      # raw.githubusercontent.com on every cold request — one fetch for the
+      # catalogue, then one per entry — with no timeout, so when that host is
+      # unreachable the dashboard shows a spinner that never resolves. It was
+      # unreachable from every CAIOS node for about three hours on 2026-09-01.
+      #
+      # Points at the mirror Caddy serves. Unset or empty behaves as upstream.
+      # Refresh the mirror with scripts/mirror-catalogue.sh.
+      CATALOGUE_BASE_URL: ${CATALOGUE_BASE_URL:-}
       # Patched in — upstream offers all 68 bioimage.io models the loader
       # supports, two dozen of which are near-duplicates, with whatever is
       # first in the file as the default. Ours is a curated twelve, ordered so

@@ -1,0 +1,36 @@
+[submodule "tf-cnn-benchmarks-api"]
+	path = tf-cnn-benchmarks-api
+	url = https://github.com/ai4os-hub/tf-cnn-benchmarks-api
+	branch = main
+[submodule "ai4os-image-classification-tf"]
+	path = ai4os-image-classification-tf
+	url = https://github.com/ai4os-hub/ai4os-image-classification-tf
+	branch = main
+[submodule "ai4os-audio-classification-tf"]
+	path = ai4os-audio-classification-tf
+	url = https://github.com/ai4os-hub/ai4os-audio-classification-tf
+	branch = main
+[submodule "obj-detection-torch"]
+	path = obj-detection-torch
+	url = https://github.com/ai4os-hub/obj-detection-torch
+	branch = main
+[submodule "retinopathy-test"]
+	path = retinopathy-test
+	url = https://github.com/ai4os-hub/retinopathy-test
+	branch = main
+[submodule "ai4os-fasterrcnn-torch"]
+	path = ai4os-fasterrcnn-torch
+	url = https://github.com/ai4os-hub/ai4os-fasterrcnn-torch
+	branch = main
+[submodule "ai4os-demo-app"]
+	path = ai4os-demo-app
+	url = https://github.com/ai4os-hub/ai4os-demo-app
+	branch = main
+[submodule "posenet-tf"]
+	path = posenet-tf
+	url = https://github.com/ai4os-hub/posenet-tf
+	branch = main
+[submodule "ai4os-yolo-torch"]
+	path = ai4os-yolo-torch
+	url = https://github.com/ai4os-hub/ai4os-yolo-torch.git
+	branch = main

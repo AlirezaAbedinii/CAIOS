@@ -67,6 +67,19 @@ https://{$CAIOS_DASHBOARD_HOST} {
 		file_server browse
 	}
 
+	# The marketplace catalogue mirror, read by PAPI.
+	#
+	# NOT at /catalog/*, which is an Angular route — /catalog/modules is the
+	# marketplace page itself, and intercepting it here would take the
+	# dashboard's own navigation with it.
+	#
+	# Built by scripts/mirror-catalogue.sh. Absent until it has been run, which
+	# Caddy tolerates: the route 404s rather than the ingress failing to start.
+	handle_path /mirror/* {
+		root * /srv/catalog
+		file_server
+	}
+
 	handle {
 		reverse_proxy 127.0.0.1:8081
 	}

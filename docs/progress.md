@@ -51,6 +51,75 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-02 — T1: the marketplace is served by this cluster
+
+The catalogue no longer reads GitHub at request time. `scripts/mirror-catalogue.sh`
+mirrors it into `catalog/mirror/`, Caddy serves it at `/mirror/`, and patch
+`0014` makes the source configuration. Measured after: **9 modules in 0.016 s,
+6 tools in 0.019 s, and no GitHub host in PAPI's log for the whole run.**
+
+Committed, not gitignored — 19 files, 356 KB — so a fresh clone can serve the
+marketplace with no internet at all.
+
+### It fixed a licensing bug on the way past
+
+`ai4-metadata.yml` schema 2.0.0 has no `license` key, so a module's licence is
+only ever known from its repository. Upstream reads it from `api.github.com` in
+`utils.get_github_info()`, which short-circuits on `IS_DEV` and returns
+`{"created": "1970-01-01", "updated": "1970-01-01", "license": "MIT"}`. `IS_PROD`
+must be false here (gotcha 1), so that branch is always taken — and
+`common.py` assigned it unconditionally over the real metadata.
+
+Every module in the marketplace reported **MIT** and **1970-01-01**. Verified in
+a browser: `ai4os-yolo-torch` now reads **AGPL_3_0**, which is what Ultralytics
+YOLO actually is, and `posenet-tf` reads Apache-2.0. Three distinct licences
+across nine modules where there had been one.
+
+`repo-info.json` carries them, built once at mirror time from `api.github.com`
+rather than per request — correct *and* offline, and fifteen calls per refresh
+sits comfortably inside GitHub's 60-per-hour unauthenticated limit where fifteen
+per page load would not. That asymmetry is the whole argument for the mirror.
+
+### And a timeout, which is the half that matters most
+
+`requests.Session()` passed none anywhere, so an unreachable source held the
+worker thread until TCP gave up. That is why the outage presented as a spinner
+that never resolved rather than as an error. Now `(5, 15)` and a **503 naming
+the source**, because the address is configuration now and a misconfigured one
+looks identical to an outage.
+
+Measured, by pointing a throwaway container at an unroutable address:
+**90 s+ hang becomes 503 in 2 s.**
+
+### D-44, met for the second time, and it cost half an hour
+
+`mirror-catalogue.sh` did `rm -rf "$OUT"` then `mkdir`, which is the exact
+mistake `build-fl-bundles.sh` was fixed for on 2026-08-22 — and the warning was
+already written in this script's own header. compose bind-mounts
+`catalog/mirror` into Caddy, a bind mount follows the **inode**, so Caddy went
+on serving the deleted directory: every `/mirror/` URL 404ing while the freshly
+built files sat on the host looking perfect. PAPI answered 503 naming the
+source, which is at least how it was found in seconds rather than minutes.
+
+Emptying in place now, with a test that fails if `rm -rf` comes back.
+
+### T2 as well
+
+The four stale federated-learning deployments from 2026-08-15 are stopped —
+three workspaces and the FL server, all registered under the old private
+hostname `pacs-deployments.192.168.104.105.sslip.io` and unreachable publicly,
+so a test user clicking them got nothing. The `ai4os-llm` "test meeting" is
+still running, pending a decision.
+
+### Verified
+
+`pytest tests/` is **139 green** including 18 new ones;
+`scripts/check-catalogue.sh` passes all four sections;
+`scripts/check-branding.sh` passes again — its marketplace section had been
+failing since the outage.
+
+---
+
 ## 2026-09-02 — The finalization browser pass, and three faults no API probe could see
 
 `docs/finalization-plan.md` is the plan for the last stage, against the

@@ -1,0 +1,77 @@
+{
+ "ai4os-hub/ai4os-audio-classification-tf": {
+  "created": "2024-04-26",
+  "license": "MIT",
+  "updated": "2025-10-17"
+ },
+ "ai4os-hub/ai4os-demo-app": {
+  "created": "2024-04-18",
+  "license": "MIT",
+  "updated": "2025-07-23"
+ },
+ "ai4os-hub/ai4os-fasterrcnn-torch": {
+  "created": "2024-05-07",
+  "license": "MIT",
+  "updated": "2024-11-28"
+ },
+ "ai4os-hub/ai4os-image-classification-tf": {
+  "created": "2024-04-25",
+  "license": "Apache-2.0",
+  "updated": "2025-05-22"
+ },
+ "ai4os-hub/ai4os-yolo-torch": {
+  "created": "2024-05-15",
+  "license": "AGPL-3.0",
+  "updated": "2025-07-31"
+ },
+ "ai4os-hub/obj-detection-torch": {
+  "created": "2024-04-30",
+  "license": "MIT",
+  "updated": "2026-07-14"
+ },
+ "ai4os-hub/posenet-tf": {
+  "created": "2025-06-26",
+  "license": "Apache-2.0",
+  "updated": "2025-10-07"
+ },
+ "ai4os-hub/retinopathy-test": {
+  "created": "2024-05-02",
+  "license": "MIT",
+  "updated": "2024-11-29"
+ },
+ "ai4os-hub/tf-cnn-benchmarks-api": {
+  "created": "2024-03-13",
+  "license": "MIT",
+  "updated": "2026-07-13"
+ },
+ "ai4os/ai4os-ai4life-loader": {
+  "created": "2024-12-16",
+  "license": "MIT",
+  "updated": "2026-09-01"
+ },
+ "ai4os/ai4os-cvat": {
+  "created": "2024-05-31",
+  "license": "MIT",
+  "updated": "2026-02-25"
+ },
+ "ai4os/ai4os-dev-env": {
+  "created": "2024-06-25",
+  "license": "MIT",
+  "updated": "2026-08-18"
+ },
+ "ai4os/ai4os-federated-server": {
+  "created": "2024-07-24",
+  "license": "Apache-2.0",
+  "updated": "2026-06-18"
+ },
+ "ai4os/ai4os-llm": {
+  "created": "2024-12-11",
+  "license": "Apache-2.0",
+  "updated": "2026-07-13"
+ },
+ "ai4os/ai4os-nvflare": {
+  "created": "2024-05-07",
+  "license": "Apache-2.0",
+  "updated": "2026-07-23"
+ }
+}

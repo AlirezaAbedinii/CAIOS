@@ -1,0 +1,55 @@
+metadata_version: 2.0.0
+title: Object detection with FasterRCNN
+summary: Object detection using FasterRCNN model(s)
+description: |-
+  The module, ai4os-fasterrcnn-torch, provides API access to the pipeline [1] for training FasterRCNN [2] models on custom datasets. 
+  The pipeline is implemented in [PyTorch](https://pytorch.org/).
+
+  The Predict function accept either images or videos and outputs:
+
+  - For images:
+
+    - An annotated image highlighting the object of interest with a bounding box.
+    - A JSON string providing the coordinates of the bounding box, the object's name within the box, and the confidence score of the object detection.
+
+  - For videos:
+
+    - A video with bounding boxes delineating objects of interest throughout.
+    - A JSON string accompanying each frame, supplying bounding box coordinates, object names within the boxes, and confidence scores for the detected objects. 
+  Here, you can see an example of the output image:
+
+  <img class='fit', src='https://raw.githubusercontent.com/ai4os-hub/ai4os-fasterrcnn-torch/main/data/test_data/validation/catin_faster.png'/>
+
+
+  To train the model, you have the flexibility to choose between official PyTorch models trained on the COCO dataset [3], use any backbone from Torchvision classification models, or even define your own custom backbones. Your annotations should be saved as Pascal VOC XML formats. Please refer to the README to learn how to structure your data for training.
+  The trained models can be used for object detection tasks on your specific datasets.  
+
+  The original pipeline is developed in the external repository [1].
+  
+  **References**
+  1. https://github.com/sovit-123/fasterrcnn-pytorch-training-pipeline
+  2. Ren, S., et al, Faster R-CNN: Towards real-time object detection with region proposal networks, 2015, https://arxiv.org/abs/1506.01497 [cs.CV]
+  3. Lin, T.Y., et al., Microsoft COCO: Common Objects in Context, 2014, http://arxiv.org/abs/1405.0312 [cs.CV]
+dates:
+  created: '2023-05-04'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os-hub/ai4os-fasterrcnn-torch
+  docker_image: ai4oshub/ai4os-fasterrcnn-torch
+  ai4_template: ai4-template/1.9.9
+tags:
+  - deep learning
+  - object detection
+  - vo.imagine-ai.eu
+  - general purpose
+tasks:
+  - Computer Vision
+categories:
+  - AI4 trainable
+  - AI4 pre trained
+  - AI4 inference
+libraries:
+  - PyTorch
+data-type:
+  - Image
+  - Video

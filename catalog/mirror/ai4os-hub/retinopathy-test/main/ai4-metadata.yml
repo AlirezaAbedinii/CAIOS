@@ -1,0 +1,35 @@
+metadata_version: 2.0.0
+title: Retinopathy classification
+summary: A Tensorflow model to classify retinopathy.
+description: |-
+  This use case is concerned with the classification of biomedical images (of the retina) into five disease categories or stages (from healthy to severe) using a deep learning approach.
+
+  Retinopathy is a fast-growing cause of blindness worldwide, over 400 million people at risk from diabetic retinopathy alone.
+  The disease can be successfully treated if it is detected early. 
+
+  Colour fundus retinal photography uses a fundus camera (a specialized low power microscope with an attached camera) to record color images of the condition of the interior surface of the eye, in order to document the presence of disorders and monitor their change over time. 
+  Specialized medical experts interpret such images and are able to detect the presence and stage of retinal eye disease such as diabetic retinopathy. 
+  However, due to a lack of suitably qualified medical specialists in many parts of the world a comprehensive detection and treatment of the disease is difficult. 
+  
+  This use case focuses on a deep learning approach to automated classification of retinopathy based on color fundus retinal photography images.
+dates:
+  created: '2018-10-02'
+  updated: '2024-08-12'
+links:
+  source_code: https://github.com/ai4os-hub/retinopathy-test
+  docker_image: ai4oshub/retinopathy-test
+  ai4_template: ai4-template/1.9.9
+  citation: https://gitlab.com/niklaskoehler/retinopathy_model
+tags:
+  - deep learning
+  - image classification
+tasks:
+  - Computer Vision
+  - Classification
+categories:
+  - AI4 pre trained
+  - AI4 inference
+libraries:
+  - TensorFlow
+data-type:
+  - Image

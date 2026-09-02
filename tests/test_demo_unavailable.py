@@ -33,8 +33,26 @@ PATCH = "patches/ai4-dashboard/0007-demo-unavailable.patch"
 TENANT = "configs/dashboard/caios.json"
 STRINGS = "configs/dashboard/i18n/en.caios.json"
 
-# The three whose backing service is genuinely not deployed.
-EXPECTED_UNAVAILABLE = {"apikeys", "storage", "services"}
+# Every one of these was MEASURED, not assumed — see the comment in caios.json.
+#
+#   apikeys        proxies to AI4EOSC's LiteLLM, 401s, used to eject the user
+#   storage        needs a Nextcloud (D-15)
+#   services       needs an MLflow
+#   tryme          needs a node tagged meta.type=tryme; PAPI 503s without one
+#   batch          needs a storage backend; PAPI refuses without one
+#   snapshots      push an image to a Harbor registry we do not run
+#   ai4os-cvat     ~71 GB of RAM on a single node (gotcha 9)
+#   ai4os-nvflare  needs TCP 8002-8003 open (gotcha 8); we demo Flower instead
+EXPECTED_UNAVAILABLE = {
+    "apikeys",
+    "storage",
+    "services",
+    "tryme",
+    "batch",
+    "snapshots",
+    "ai4os-cvat",
+    "ai4os-nvflare",
+}
 
 
 def _strip_comments(o):
@@ -170,3 +188,80 @@ def test_ai4life_is_deliberately_not_renamed(strings):
     assert "AI4LIFE" not in catalog, (
         "AI4Life should keep its own name — it is a real external project"
     )
+
+
+# --- the controls that cannot work are disabled, not merely decorated -------
+
+
+def test_the_short_tooltip_exists(strings):
+    """Buttons and sidenav entries get the phrase as a tooltip; there is no
+    room for the full sentence on a chip."""
+    assert strings["DEMO"]["UNAVAILABLE-SHORT"] == "Not included in the Demo Version"
+
+
+def test_try_and_batch_buttons_are_disabled_not_hidden(root):
+    """Both are real platform features that infrastructure would switch on, so
+    they stay visible. Measured: try-me 503s (no meta.type=tryme node) and
+    batch is refused (no storage backend)."""
+    p = (root / "patches/ai4-dashboard/0008-out-of-scope-controls.patch").read_text(
+        encoding="utf-8"
+    )
+    assert "isDemoUnavailable('tryme')" in p
+    assert "isDemoUnavailable('batch')" in p
+    assert "isDemoUnavailable(\n                                        'snapshots'\n                                    )" in p or "'snapshots'" in p
+
+
+def test_codespaces_is_removed_because_it_bypassed_the_service_list(root):
+    """It navigated to the deploy form with state.service='jupyter', which
+    nomad-train assigns onto the form value without checking it against the
+    offered options — bypassing the fix that stopped modules offering
+    JupyterLab at all."""
+    p = (root / "patches/ai4-dashboard/0008-out-of-scope-controls.patch").read_text(
+        encoding="utf-8"
+    )
+    removed = "\n".join(l[1:] for l in p.splitlines() if l.startswith("-"))
+    assert "codespacesMenu" in removed
+    assert "trainModuleCodespaces('jupyter')" in removed
+
+
+def test_provenance_is_removed_but_metadata_downloads_survive(root):
+    """Both provenance controls pointed at provenance.cloud.ai4eosc.eu — one of
+    them in an IFRAME inside our own dashboard. The metadata downloads beside
+    them are served by our PAPI and all three formats answer 200."""
+    p = (root / "patches/ai4-dashboard/0008-out-of-scope-controls.patch").read_text(
+        encoding="utf-8"
+    )
+    removed = "\n".join(l[1:] for l in p.splitlines() if l.startswith("-"))
+    assert "openProvenanceIframeDialog" in removed
+    assert "provenance.cloud.ai4eosc.eu/rdf" in removed
+    assert "downloadMetadataMenu" not in removed
+    assert "METADATA.DOWNLOAD" not in removed
+
+
+def test_unhostable_catalogue_entries_are_dimmed_and_inert(root):
+    """pointer-events is what actually stops the card's routerLink firing; the
+    opacity is only what says so."""
+    p = (root / "patches/ai4-dashboard/0009-unavailable-catalogue-entries.patch").read_text(
+        encoding="utf-8"
+    )
+    assert "demo-unavailable-card" in p
+    assert "pointer-events: none" in p
+    assert "isDemoUnavailable(element.id)" in p
+
+
+def test_the_toy_module_is_off_the_marketplace(root):
+    """ai4os-demo-app's own summary says it "does not contain any AI code".
+    On a marketplace a clinician scans to decide whether the platform is for
+    them, a module announcing it does nothing is worse than one fewer."""
+    keep = (root / "catalog/keep.txt").read_text(encoding="utf-8")
+    active = [
+        line.split("#")[0].strip()
+        for line in keep.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert "ai4os-demo-app" not in active
+    gm = (
+        root
+        / "catalog/mirror/AlirezaAbedinii/caios-modules-catalog/master/.gitmodules"
+    ).read_text(encoding="utf-8")
+    assert "ai4os-demo-app" not in gm, "the mirror still serves it"

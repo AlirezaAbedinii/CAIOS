@@ -51,6 +51,66 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-02 — Every control clicked, and the ones that cannot work say so
+
+The stage is finished. Every actionable control on the platform was exercised —
+not read about, clicked — and each one that could not work was measured before
+being disabled or removed.
+
+### Measured, then acted on
+
+| Control | What actually happens | Action |
+|---|---|---|
+| **Try ▾** (Gradio) | PAPI 503 every time: `try_me/nomad.py` counts only nodes with `meta.type=tryme`, ours are all `compute`, so the total is zero | disabled |
+| **Batch** (button + sidenav) | PAPI: *"You must provide a storage when running batch jobs"* — no Nextcloud (D-15) | disabled |
+| **Snapshots** | pushes an image to a Harbor registry we do not run | disabled |
+| **CVAT** card | 22 containers, ~71 GB on one node (gotcha 9) | dimmed, inert |
+| **NVFLARE** card | needs TCP 8002-8003 (gotcha 8); we demo Flower | dimmed, inert |
+| **Codespaces ▾** | bypassed the service option list entirely | **removed** |
+| **Provenance → View / Download RDF** | both point at `provenance.cloud.ai4eosc.eu`, the first in an **iframe inside our dashboard** | **removed** |
+| Deploy → serverless / dedicated | work | kept |
+| Download metadata (3 formats) | all 200 from our own PAPI | kept |
+| GitHub / Report issue / Docker | the module's own links | kept |
+
+**The Codespaces one mattered more than it looks.** It navigated to the deploy
+form with `state.service = 'jupyter'`, and `nomad-train.component` assigns that
+onto the form value *without checking it against the offered options* — so it
+bypassed the fix that stopped modules offering JupyterLab at all. Observed with
+that fix in place: the form opened with **no service selected**, because the
+value was `jupyter` and the only chip was Deepaas.
+
+Disabled where hardware or a service would switch the feature on; removed where
+the control is wrong here rather than merely unresourced. That is the rule, and
+`demoUnavailable` in the tenant config is the whole implementation — remove an
+id the day the service exists.
+
+### `ai4os-demo-app` is off the marketplace
+
+Its own summary: *"A toy application for demo and testing purposes... The module
+does not contain any AI code."* It was kept for the try-me path, and try-me is
+now disabled, so the justification is gone. On a marketplace a clinician scans
+to decide whether the platform is for them, a module announcing it does nothing
+is worse than one fewer module. Eight now.
+
+`catalog/keep.txt` is authoritative for this, not just advisory:
+`scripts/lib/prune-gitmodules.py` prunes the mirrored `.gitmodules` to it, so
+dropping a module is a one-line edit plus a mirror refresh rather than a push to
+the fork. It only ever removes, and refuses to leave the marketplace empty.
+
+### One thing deliberately not touched
+
+`TRY.OSCAR-SWAGGER` is literally the string `"// TODO"`, but its button already
+carries `style="display: none"` upstream, so no user ever sees it. An earlier
+note in this log claiming it needed removing was wrong.
+
+### Verified
+
+168 tests green; `check-branding.sh`, `check-catalogue.sh` and
+`check-home-page.sh` all pass; browser pass over the module detail page, the
+Tools grid, the sidenav, the deployments table and every profile tab.
+
+---
+
 ## 2026-09-02 — T3 and T4: what the platform does not run, said once and honestly
 
 Deployed. The dashboard image is rebuilt and serving.

@@ -1,0 +1,96 @@
+diff --git a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html
+index abf3638..7e01857 100644
+--- a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html
++++ b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html
+@@ -112,9 +112,35 @@
+                                 : '',
+                     }"
+                 >
+-                    <app-ai4eosc-module-card
+-                        [module]="element"
+-                    ></app-ai4eosc-module-card>
++                    <!--
++                      [CAIOS] A tool this cluster cannot host is dimmed and made
++                      unclickable rather than hidden. It is a real capability of
++                      the platform that hardware would switch on, and a
++                      marketplace that silently omits things reads as a smaller
++                      platform than it is.
++
++                        ai4os-cvat     22 containers in one Nomad group needing
++                                       ~71 GB of RAM on a single node. No node
++                                       in this layout can host it (gotcha 9).
++                        ai4os-nvflare  needs TCP 8002-8003 open on the Traefik
++                                       security group (gotcha 8), and we
++                                       demonstrate federated learning with
++                                       Flower instead.
++                    -->
++                    <div
++                        [class.demo-unavailable-card]="
++                            isDemoUnavailable(element.id)
++                        "
++                        [matTooltip]="
++                            isDemoUnavailable(element.id)
++                                ? ('DEMO.UNAVAILABLE-SHORT' | translate)
++                                : ''
++                        "
++                    >
++                        <app-ai4eosc-module-card
++                            [module]="element"
++                        ></app-ai4eosc-module-card>
++                    </div>
+                 </span>
+             }
+         </div>
+diff --git a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss
+index c73d9f4..af70648 100644
+--- a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss
++++ b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss
+@@ -84,3 +84,14 @@
+     grid-gap: 0.5rem;
+     grid-template-columns: repeat(auto-fill, minmax(20em, 1fr));
+ }
++
++/* [CAIOS] A catalogue entry this cluster cannot host. Dimmed and inert, not
++   hidden — the capability exists, the hardware does not. pointer-events:none
++   is what actually stops the card's routerLink firing; the opacity is only
++   what says so. */
++.demo-unavailable-card {
++    opacity: 0.45;
++    filter: grayscale(1);
++    pointer-events: none;
++    cursor: not-allowed;
++}
+diff --git a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.ts b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.ts
+index 6a39f4b..f836fe8 100644
+--- a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.ts
++++ b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.ts
+@@ -1,4 +1,5 @@
+ import { MediaMatcher } from '@angular/cdk/layout';
++import { MatTooltip } from '@angular/material/tooltip';
+ import {
+     ChangeDetectorRef,
+     Component,
+@@ -49,6 +50,7 @@ import { SearchAi4eoscPipe } from '../../../pipes/search-card-pipe';
+     styleUrl: './catalog-list.component.scss',
+     changeDetection: ChangeDetectionStrategy.Eager,
+     imports: [
++        MatTooltip,
+         MatToolbar,
+         FormsModule,
+         ReactiveFormsModule,
+@@ -112,6 +114,15 @@ export class CatalogListComponent implements OnInit, OnDestroy {
+     selectedDatatypes: string[] = [];
+     selectedTags: string[] = [];
+ 
++    /** [CAIOS] Whether this catalogue entry can run on this cluster. */
++
++    isDemoUnavailable(id: string): boolean {
++
++        return this.appConfigService.demoUnavailable.includes(id);
++
++    }
++
++
+     ngOnInit(): void {
+         this.initializeForm();
+ 

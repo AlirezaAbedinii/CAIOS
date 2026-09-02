@@ -512,6 +512,57 @@ the card type labels — are ordinary i18n overrides and need no patch. `AI4Life
 is deliberately left alone: it is the real name of the bioimage.io model zoo
 project, so it is attribution rather than residue.
 
+### `ai4-dashboard/0008-out-of-scope-controls.patch`
+
+**Every actionable control on the platform was clicked on 2026-09-02, and these
+are the ones that could not work.** Each was measured, not assumed.
+
+**Disabled, not removed** — real features that infrastructure would switch on:
+
+| Control | What happens | Why |
+|---|---|---|
+| **Try ▾** (Gradio) | PAPI 503 "no resources available", always | `try_me/nomad.py` counts only nodes whose `meta.type` is `tryme`; ours are all `compute`, so the total is zero |
+| **Batch** (button and sidenav) | PAPI: "You must provide a storage when running batch jobs" | No Nextcloud (D-15) |
+| **Snapshots** (deployments table) | Pushes an image to a Harbor registry | We run no Harbor |
+
+**Removed** — not features this platform lacks, but controls that are wrong here:
+
+- **Codespaces.** It navigated to the deploy form with `state.service = 'jupyter'`,
+  and `nomad-train.component` assigns that straight onto the form value *without
+  checking it against the offered options*. So it bypassed the very fix that
+  stopped modules offering JupyterLab — and JupyterLab works on **no** module
+  image: all nine ship a `deep-start` that launches it as root without
+  `--allow-root`. Observed with the fix in place: the form opened with **no
+  service selected**, because the value was `jupyter` and the only chip was
+  Deepaas.
+- **Provenance → View** and **Download RDF.** Both point at
+  `provenance.cloud.ai4eosc.eu` — the first opens it in an **iframe inside our
+  own dashboard**. It is AI4EOSC's provenance database, and embedding another
+  project's interface while sending it our module ids is not a feature this
+  platform has. The box is retitled *Metadata*; the **Download metadata** menu
+  beside it is untouched, because it is served by our own PAPI and all three
+  formats answer 200.
+
+One thing deliberately **not** touched: `TRY.OSCAR-SWAGGER` is the string
+`"// TODO"`, but its button already carries `style="display: none"` upstream,
+so no user ever sees it.
+
+### `ai4-dashboard/0009-unavailable-catalogue-entries.patch`
+
+A catalogue entry this cluster cannot host is **dimmed and made inert** rather
+than hidden — the capability is real, the hardware is not, and a marketplace
+that silently omits things reads as a smaller platform than it is.
+
+- `ai4os-cvat` — 22 containers in one Nomad group needing ~71 GB of RAM on a
+  single node. No node in this layout can host it (gotcha 9).
+- `ai4os-nvflare` — needs TCP 8002-8003 open on the Traefik security group
+  (gotcha 8), and we demonstrate federated learning with Flower instead.
+
+`pointer-events: none` is what actually stops the card's `routerLink` firing;
+the opacity is only what says so. Upstream already had a precedent for
+per-id treatment of a card — it hides `ai4os-llm` for the imagine VO with an
+`ngStyle` — so this is the same idea with a state instead of a disappearance.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

@@ -39,8 +39,20 @@ ai4os-audio-classification-tf     # train your own audio classifier — respirat
 posenet-tf                        # body pose: gait, movement disorders, rehabilitation
 
 # --- Platform utilities ------------------------------------------------------
-ai4os-demo-app                    # the try-me path; the demo needs it
 tf-cnn-benchmarks-api             # CNN benchmarks — "is this GPU actually working"
+
+# ai4os-demo-app                  REMOVED 2026-09-02. Its own summary is "a toy
+#                                 application for demo and testing purposes...
+#                                 The module does not contain any AI code."
+#                                 On a marketplace a clinician is scanning to
+#                                 decide whether this platform is for them, a
+#                                 module that announces it does nothing is worse
+#                                 than one fewer module.
+#
+#                                 It was kept for the try-me path. That path is
+#                                 gone: try-me needs a node tagged
+#                                 meta.type=tryme and PAPI answers 503 without
+#                                 one, so it is disabled in the interface.
 
 # --- Deliberately NOT kept, despite looking like keeps ------------------------
 #

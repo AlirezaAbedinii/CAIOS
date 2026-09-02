@@ -85,7 +85,8 @@
     },
     "_comment_demo": "T4. The sentence shown in place of a feature this deployment does not run (patches/ai4-dashboard/0007). Which surfaces get it is configured in caios.json's demoUnavailable list, not here.",
     "DEMO": {
-        "UNAVAILABLE": "Not included in the Demo Version. This part of the platform is not running on this deployment."
+        "UNAVAILABLE": "Not included in the Demo Version. This part of the platform is not running on this deployment.",
+        "UNAVAILABLE-SHORT": "Not included in the Demo Version"
     },
     "_comment_upstream_strings": "T3. Upstream strings that name another project on our screen. These are overrides, not new keys - the originals live in vendor/ai4-dashboard's en.json and are deep-merged under these. AI4Life is deliberately NOT renamed: it is the real name of the bioimage.io model zoo project, so it is accurate attribution rather than residue.",
     "DASHBOARD": {
@@ -96,6 +97,11 @@
         "TOOL": "Tool",
         "TABS": {
             "PLATFORM": "CAIOS"
+        },
+        "MODULE-DETAIL": {
+            "METADATA": {
+                "TITLE": "Metadata"
+            }
         }
     }
 }

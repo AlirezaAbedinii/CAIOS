@@ -1,0 +1,406 @@
+diff --git a/src/app/layout/sidenav/sidenav.component.ts b/src/app/layout/sidenav/sidenav.component.ts
+index e78d4e7..2376269 100644
+--- a/src/app/layout/sidenav/sidenav.component.ts
++++ b/src/app/layout/sidenav/sidenav.component.ts
+@@ -114,6 +114,17 @@ export class SidenavComponent implements OnInit, AfterViewInit {
+         },
+     ];
+ 
++    // [CAIOS] Two of these cannot run on this deployment, and both are
++    // disabled rather than hidden — they are real features of the platform
++    // that infrastructure would switch on, and a menu that silently omits
++    // capabilities reads as a smaller platform than it is.
++    //
++    //   try-me  needs a node tagged meta.type=tryme. Ours are all 'compute',
++    //           so PAPI answers 503 "no resources available" every time.
++    //   batch   needs a storage backend. PAPI: "You must provide a storage
++    //           when running batch jobs." We run no Nextcloud (D-15).
++    //
++    // Both measured on 2026-09-02 by calling them.
+     runtimeLinks: ProjectLink[] = [
+         {
+             name: 'SIDENAV.TRY-ME',
+@@ -193,6 +204,18 @@ export class SidenavComponent implements OnInit, AfterViewInit {
+         return this.authService.isAuthenticated();
+     }
+ 
++    /** [CAIOS] Map a sidenav entry to its demoUnavailable id, or null. */
++    private demoIdFor(name: string): string | null {
++        switch (name) {
++            case 'SIDENAV.TRY-ME':
++                return 'tryme';
++            case 'SIDENAV.BATCH':
++                return 'batch';
++            default:
++                return null;
++        }
++    }
++
+     updateMainLinks() {
+         this.catalogLinks.map((link) => {
+             if (link.isRestricted) {
+@@ -208,6 +231,13 @@ export class SidenavComponent implements OnInit, AfterViewInit {
+                     link.isDisabled = !this.isProjectMember;
+                 }
+             }
++            // [CAIOS] and whatever this deployment does not run wins over
++            // whatever the user is allowed to do.
++            const id = this.demoIdFor(link.name);
++            if (id && this.appConfigService.demoUnavailable.includes(id)) {
++                link.isDisabled = true;
++                link.tooltip = 'DEMO.UNAVAILABLE-SHORT';
++            }
+         });
+     }
+ 
+diff --git a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
+index 0df4b79..94e23e5 100644
+--- a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
++++ b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
+@@ -35,11 +35,26 @@
+                         'action-buttons-container': !mobileQuery.matches,
+                     }"
+                 >
++                    <!--
++                      [CAIOS] "Try" builds a 10-minute Gradio deployment, and
++                      PAPI refuses it on this cluster every time:
++                      try_me/nomad.py only counts nodes whose meta.type is
++                      'tryme', ours are all 'compute', so the total is zero and
++                      it answers 503 "no resources available right now".
++
++                      Measured 2026-09-02. Disabled rather than removed: it is
++                      a real feature that a dedicated node would switch on.
++                    -->
+                     <div
+                         class="tooltip-container"
+-                        [matTooltipDisabled]="isAuthorized()"
++                        [matTooltipDisabled]="
++                            isAuthorized() && !isDemoUnavailable('tryme')
++                        "
+                         matTooltip=" {{
+-                            'CATALOG.MODULE-DETAIL.TRY.LOGOUT' | translate
++                            (isDemoUnavailable('tryme')
++                                ? 'DEMO.UNAVAILABLE-SHORT'
++                                : 'CATALOG.MODULE-DETAIL.TRY.LOGOUT'
++                            ) | translate
+                         }}"
+                     >
+                         <a
+@@ -47,7 +62,9 @@
+                             mat-raised-button
+                             color="accent"
+                             [matMenuTriggerFor]="tryMenu"
+-                            [disabled]="!isAuthorized()"
++                            [disabled]="
++                                !isAuthorized() || isDemoUnavailable('tryme')
++                            "
+                         >
+                             {{ 'CATALOG.MODULE-DETAIL.TRY.TITLE' | translate }}
+                             <mat-icon class="arrow-button">
+@@ -206,6 +223,30 @@
+                               A user clicking either leaves CAIOS entirely.
+                             -->
+                         </mat-menu>
++                        <!--
++                          [CAIOS] The Codespaces button is removed, not disabled.
++
++                          It navigated to the deploy form with
++                          state.service = 'jupyter', and nomad-train.component
++                          assigns that straight onto the form value WITHOUT
++                          checking it against the offered options. So it
++                          bypassed the very fix that stopped modules offering
++                          JupyterLab at all.
++
++                          Which matters because JupyterLab does not work on ANY
++                          module image: all nine ship a deep-start that launches
++                          it as root without --allow-root, so the container
++                          exits 1 and Nomad kills the job. Measured 2026-09-02;
++                          see configs/papi/modules-user.yaml.
++
++                          Observed with the fix in place: the form opened with
++                          NO service selected, because the value was 'jupyter'
++                          and the only chip was Deepaas.
++
++                          The interactive workspace is the dev-env tool, whose
++                          image is newer and whose JupyterLab was verified in a
++                          browser.
++                        -->
+                         <div
+                             class="tooltip-container"
+                             [matTooltipDisabled]="isProjectMember()"
+@@ -213,82 +254,36 @@
+                                 'ERRORS.UNAUTHORIZED' | translate
+                             }}"
+                         >
+-                            <a
+-                                class="action-button"
+-                                mat-raised-button
+-                                color="accent"
+-                                [matMenuTriggerFor]="codespacesMenu"
+-                                [disabled]="!isProjectMember()"
+-                            >
+-                                {{
+-                                    'CATALOG.MODULE-DETAIL.CODESPACES.TITLE'
+-                                        | translate
+-                                }}
+-                                <mat-icon class="arrow-button">
+-                                    keyboard_arrow_down
+-                                </mat-icon>
+-                            </a>
+-                        </div>
+-                        <mat-menu #codespacesMenu="matMenu" xPosition="before">
+-                            <button
+-                                mat-menu-item
+-                                (click)="trainModuleCodespaces('jupyter')"
+-                            >
+-                                <span class="button-with-icon">
+-                                    <img
+-                                        src="../../../../../assets/images/module-detail/jupyter-logo.png"
+-                                    />
+-                                    <div class="button-texts">
+-                                        <b>
+-                                            {{
+-                                                'CATALOG.MODULE-DETAIL.CODESPACES.JUPYTERLAB'
+-                                                    | translate
+-                                            }}</b
+-                                        >
+-                                    </div>
+-                                </span>
+-                            </button>
+-                            @if (
+-                                module.title === 'AI4OS Development Environment'
+-                            ) {
+-                                <button
+-                                    mat-menu-item
+-                                    (click)="trainModuleCodespaces('vscode')"
+-                                >
+-                                    <span class="button-with-icon">
+-                                        <img
+-                                            src="../../../../../assets/images/module-detail/vscode-logo.png"
+-                                        />
+-                                        <div class="button-texts">
+-                                            <b>
+-                                                {{
+-                                                    'CATALOG.MODULE-DETAIL.CODESPACES.VSCODE'
+-                                                        | translate
+-                                                }}</b
+-                                            >
+-                                        </div>
+-                                    </span>
+-                                </button>
+-                            }
+-                        </mat-menu>
+-                        <div
+-                            class="tooltip-container"
+-                            [matTooltipDisabled]="isProjectMember()"
+-                            matTooltip=" {{
+-                                'ERRORS.UNAUTHORIZED' | translate
+-                            }}"
+-                        >
++                            <!--
++                              [CAIOS] Batch mode needs a storage backend to
++                              write its outputs to, and PAPI refuses without
++                              one: "You must provide a storage when running
++                              batch jobs." We run no Nextcloud (D-15).
++
++                              Measured 2026-09-02 by submitting one. Disabled
++                              rather than removed: deploying a Nextcloud turns
++                              it on.
++                            -->
+                             <button
+                                 class="action-button"
+                                 mat-raised-button
+                                 color="accent"
+                                 (click)="deployBatch()"
+-                                [disabled]="!isProjectMember()"
++                                [disabled]="
++                                    !isProjectMember() ||
++                                    isDemoUnavailable('batch')
++                                "
+                                 matTooltip=" {{
+-                                    'ERRORS.UNAUTHORIZED' | translate
++                                    (isDemoUnavailable('batch')
++                                        ? 'DEMO.UNAVAILABLE-SHORT'
++                                        : 'ERRORS.UNAUTHORIZED'
++                                    ) | translate
+                                 }}"
+                                 [matTooltipPosition]="'left'"
+-                                [matTooltipDisabled]="isProjectMember()"
++                                [matTooltipDisabled]="
++                                    isProjectMember() &&
++                                    !isDemoUnavailable('batch')
++                                "
+                             >
+                                 {{
+                                     'CATALOG.MODULE-DETAIL.BATCH.TITLE'
+@@ -542,48 +537,29 @@
+                         <div class="box-container">
+                             <div class="box-title">
+                                 {{
+-                                    'CATALOG.MODULE-DETAIL.PROVENANCE.TITLE'
++                                    'CATALOG.MODULE-DETAIL.METADATA.TITLE'
+                                         | translate
+                                 }}
+                             </div>
+                             <div class="grid-resources">
+-                                <a
+-                                    role="button"
+-                                    class="action-button"
+-                                    mat-raised-button
+-                                    (keydown.enter)="
+-                                        openProvenanceIframeDialog()
+-                                    "
+-                                    (keydown.space)="
+-                                        openProvenanceIframeDialog()
+-                                    "
+-                                    (click)="openProvenanceIframeDialog()"
+-                                >
+-                                    <span class="aligned-with-icon">
+-                                        <mat-icon>conversion_path</mat-icon>
+-                                        {{
+-                                            'CATALOG.MODULE-DETAIL.PROVENANCE.VIEW'
+-                                                | translate
+-                                        }}
+-                                    </span>
+-                                </a>
+-                                <a
+-                                    class="action-button"
+-                                    mat-raised-button
+-                                    [href]="
+-                                        'https://provenance.cloud.ai4eosc.eu/rdf?applicationId=' +
+-                                        module.id
+-                                    "
+-                                    target="_blank"
+-                                >
+-                                    <span class="aligned-with-icon">
+-                                        <mat-icon>download</mat-icon>
+-                                        {{
+-                                            'CATALOG.MODULE-DETAIL.PROVENANCE.DOWNLOAD'
+-                                                | translate
+-                                        }}
+-                                    </span>
+-                                </a>
++                                <!--
++                                  [CAIOS] Two controls removed. Both pointed at
++                                  provenance.cloud.ai4eosc.eu:
++
++                                    View          opened that site in an
++                                                  IFRAME, inside our dashboard
++                                    Download RDF  linked to
++                                                  .../rdf?applicationId=<module>
++
++                                  It is AI4EOSC's provenance database, not
++                                  ours. Embedding another project's interface
++                                  inside CAIOS, and sending it our module ids,
++                                  is not a feature this platform has.
++
++                                  The Download metadata menu below is
++                                  untouched - it is served by our own PAPI and
++                                  all three formats answer 200.
++                                -->
+                                 <a
+                                     class="action-button download-metadata-button"
+                                     mat-raised-button
+diff --git a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.ts b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.ts
+index 8ebe3a9..50c2d1c 100644
+--- a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.ts
++++ b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.ts
+@@ -6,6 +6,8 @@ import {
+     inject,
+ } from '@angular/core';
+ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
++// [CAIOS] For demoUnavailable — which features this deployment runs.
++import { AppConfigService } from '@app/core/services/app-config/app-config.service';
+ import { AuthService, UserProfile } from '@app/core/services/auth/auth.service';
+ import { ModulesService } from '../../../services/modules-service/modules.service';
+ import { BreadcrumbService, BreadcrumbComponent } from 'xng-breadcrumb';
+@@ -62,6 +64,7 @@ import { ChipWithIconComponent } from '../../../../../shared/components/chip-wit
+     ],
+ })
+ export class Ai4eoscModuleDetailComponent implements OnInit {
++    private appConfigService = inject(AppConfigService);
+     private modulesService = inject(ModulesService);
+     private toolsService = inject(ToolsService);
+     private authService = inject(AuthService);
+@@ -194,6 +197,17 @@ export class Ai4eoscModuleDetailComponent implements OnInit {
+         });
+     }
+ 
++    /**
++     * [CAIOS] Whether a feature exists on this deployment.
++     *
++     * Same list as the profile tabs (patch 0007). Used here to disable
++     * controls rather than to replace a page body, because these are buttons
++     * in a row of buttons that do work.
++     */
++    isDemoUnavailable(id: string): boolean {
++        return this.appConfigService.demoUnavailable.includes(id);
++    }
++
+     trainModulePlatform(platform: string) {
+         this.router.navigate(['deploy'], {
+             relativeTo: this.route,
+diff --git a/src/app/shared/components/deployments-table/deployments-table.component.html b/src/app/shared/components/deployments-table/deployments-table.component.html
+index 708d4e2..8174e3f 100644
+--- a/src/app/shared/components/deployments-table/deployments-table.component.html
++++ b/src/app/shared/components/deployments-table/deployments-table.component.html
+@@ -124,7 +124,10 @@
+                                                 mat-button
+                                                 class="action-button-in-cell"
+                                                 [disabled]="
+-                                                    !isDeploymentRunning(row)
++                                                    !isDeploymentRunning(row) ||
++                                                    isDemoUnavailable(
++                                                        'snapshots'
++                                                    )
+                                                 "
+                                                 (click)="
+                                                     createSnapshot($event, row)
+@@ -145,6 +148,13 @@
+                                         </div>
+                                     }
+                                     @if (deploymentType === 'snapshot') {
++                                        <!--
++                                          [CAIOS] Snapshotting a deployment
++                                          pushes an image to a Harbor registry,
++                                          which we do not run. Disabled rather
++                                          than removed - deploying a Harbor
++                                          switches it on.
++                                        -->
+                                         <div matTooltip="Redeploy snapshot">
+                                             <a
+                                                 mat-button
+diff --git a/src/app/shared/components/deployments-table/deployments-table.component.ts b/src/app/shared/components/deployments-table/deployments-table.component.ts
+index 8976acd..8d6b775 100644
+--- a/src/app/shared/components/deployments-table/deployments-table.component.ts
++++ b/src/app/shared/components/deployments-table/deployments-table.component.ts
+@@ -1,4 +1,6 @@
+ import { SelectionModel } from '@angular/cdk/collections';
++// [CAIOS] For demoUnavailable — which features this deployment runs.
++import { AppConfigService } from '@app/core/services/app-config/app-config.service';
+ import {
+     ChangeDetectorRef,
+     Component,
+@@ -99,6 +101,7 @@ import { MatProgressSpinner } from '@angular/material/progress-spinner';
+     ],
+ })
+ export class DeploymentsTableComponent implements OnInit, OnDestroy {
++    private appConfigService = inject(AppConfigService);
+     dialog = inject(MatDialog);
+     private snackbarService = inject(SnackbarService);
+     private snapshotService = inject(SnapshotService);
+@@ -151,6 +154,14 @@ export class DeploymentsTableComponent implements OnInit, OnDestroy {
+     mobileQuery: MediaQueryList;
+     private _mobileQueryListener: () => void;
+ 
++    /**
++     * [CAIOS] Whether a feature exists on this deployment. Same list as the
++     * profile tabs and the module detail buttons (patches 0007, 0008).
++     */
++    isDemoUnavailable(id: string): boolean {
++        return this.appConfigService.demoUnavailable.includes(id);
++    }
++
+     ngOnInit(): void {
+         this.displayedColumns = this.displayedColumns.concat(
+             this.columns.filter((x) => !x.hidden).map((x) => x.columnDef)

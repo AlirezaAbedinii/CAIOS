@@ -1,0 +1,29 @@
+--- a/ai4papi/quotas.py
++++ b/ai4papi/quotas.py
+@@ -54,9 +54,25 @@
+     For example, a user cannot have more than two GPUs running/queued.
+     """
+     # Aggregate user resources
++    #
++    # [CAIOS] `.get()`, not `[...]`, and this is the other half of patch 0015.
++    #
++    # 0015 made a deployment that DIED visible instead of vanishing, which is
++    # right — a crash the user cannot see is worse than a crash. But a failed
++    # deployment has no allocation, so `nomad_utils` leaves its `resources`
++    # empty, and this loop indexed straight into it.
++    #
++    # The result was that any user with one failed deployment in their history
++    # could not create another one, ever: every POST to /deployments/modules
++    # or /deployments/tools answered HTTP 500 with a KeyError in the log and
++    # nothing in the dashboard beyond "Error". Found on 2026-09-02 by trying to
++    # deploy a workspace with three old failed jobs sitting in Nomad.
++    #
++    # Zero is also the correct answer, not merely a safe one: a deployment that
++    # is not running holds no GPU.
+     user = {"gpu_num": 0}
+     for d in deployments:
+-        user["gpu_num"] += d["resources"]["gpu_num"]
++        user["gpu_num"] += (d.get("resources") or {}).get("gpu_num", 0)
+ 
+     # Check if aggregate is within the limits
+     threshold = {"gpu_num": 2}

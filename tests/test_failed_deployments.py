@@ -22,6 +22,7 @@ Offline: they read the repository and the patch, never a running PAPI. The live
 half is `scripts/check-deployments.sh`.
 """
 
+from pathlib import Path
 import re
 
 import pytest
@@ -130,3 +131,107 @@ def test_the_reason_jupyter_was_removed_is_written_down(root):
     tail = text[text.index("service:") - 1200 : text.index("service:")]
     assert "allow-root" in tail, "no explanation of why jupyter is absent"
     assert block is not None
+
+
+# --- loading quotas.py without PAPI's dependency tree ----------------------
+#
+# These tests run offline, like the rest of this file. quotas.py imports
+# fastapi and ai4papi.conf, neither of which the test venv has and neither of
+# which the function under test uses for anything but raising. Stubbing them is
+# what keeps this a test of the real code rather than of a copy of it.
+
+
+def _load_quotas():
+    import importlib.util
+    import sys
+    import types
+
+    src = Path(__file__).resolve().parent.parent / "build" / "ai4-papi" / "ai4papi" / "quotas.py"
+    if not src.is_file():
+        return None
+
+    saved = {k: sys.modules.get(k) for k in ("fastapi", "ai4papi", "ai4papi.conf")}
+
+    fastapi = types.ModuleType("fastapi")
+
+    class HTTPException(Exception):
+        def __init__(self, status_code=400, detail=""):
+            super().__init__(detail)
+            self.status_code = status_code
+            self.detail = detail
+
+    fastapi.HTTPException = HTTPException
+    sys.modules["fastapi"] = fastapi
+
+    pkg = types.ModuleType("ai4papi")
+    pkg.__path__ = []
+    conf = types.ModuleType("ai4papi.conf")
+    pkg.conf = conf
+    sys.modules["ai4papi"] = pkg
+    sys.modules["ai4papi.conf"] = conf
+
+    try:
+        spec = importlib.util.spec_from_file_location("caios_quotas", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+# --- the other half of patch 0015 -----------------------------------------
+#
+# Making a failed deployment visible put it in front of code that assumed every
+# deployment has an allocation. A failed one does not, so its `resources` is
+# empty — and the GPU quota check indexed straight into it. Any user with one
+# failed deployment in their history could then create no new deployment at
+# all: HTTP 500 on every POST, with a KeyError in the log and nothing in the
+# dashboard beyond "Error".
+#
+# Found on 2026-09-02 by trying to deploy a workspace on a cluster with three
+# old failed jobs in it. Patch 0017.
+
+
+def test_quota_tolerates_a_deployment_with_no_resources():
+    """A deployment that is not running holds no GPU. Zero, not a crash."""
+    quotas = _load_quotas()
+    if quotas is None:
+        import pytest
+
+        pytest.skip("build/ai4-papi absent — run scripts/apply-patches.sh")
+
+    deployments = [
+        {"job_ID": "failed-one", "status": "error", "resources": {}},
+        {"job_ID": "no-key-at-all", "status": "error"},
+        {"job_ID": "running-cpu", "status": "running", "resources": {"gpu_num": 0}},
+        {"job_ID": "running-gpu", "status": "running", "resources": {"gpu_num": 1}},
+    ]
+    # One GPU in use, one requested, threshold of two: this must be allowed.
+    quotas.check_userwise(
+        conf={"hardware": {"gpu_num": 1}},
+        deployments=deployments,
+    )
+
+
+def test_quota_still_refuses_a_third_gpu():
+    """The guard the crash was hiding must still work."""
+    import pytest
+
+    quotas = _load_quotas()
+    if quotas is None:
+        pytest.skip("build/ai4-papi absent — run scripts/apply-patches.sh")
+
+    deployments = [
+        {"job_ID": "a", "status": "running", "resources": {"gpu_num": 1}},
+        {"job_ID": "b", "status": "running", "resources": {"gpu_num": 1}},
+        {"job_ID": "dead", "status": "error", "resources": {}},
+    ]
+    with pytest.raises(Exception) as excinfo:
+        quotas.check_userwise(
+            conf={"hardware": {"gpu_num": 1}},
+            deployments=deployments,
+        )
+    assert "2 GPUs" in str(excinfo.value)

@@ -60,6 +60,7 @@ AI4LIFE_REF="refs/heads/main"
 AI4LIFE_FILE="models/filtered_models.json"
 
 OUT="catalog/mirror"
+KEEP="catalog/keep.txt"
 MANIFEST="$OUT/MANIFEST.txt"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -107,6 +108,21 @@ mirror_catalogue() {
         bad "cannot fetch .gitmodules for $repo"
         return 1
     fi
+    # [CAIOS] Prune to catalog/keep.txt before serving it.
+    #
+    # The fork is curated by scripts/curate-catalogue.sh, which needs push
+    # access to it. Filtering here as well means keep.txt is authoritative
+    # whether or not the fork has caught up — and dropping an entry becomes a
+    # one-line change plus a mirror refresh, rather than a git push to another
+    # repository.
+    #
+    # Only for the modules catalogue: the tools list is fixed by what PAPI
+    # ships templates for.
+    if [[ "$label" == "Modules" && -f "$KEEP" ]]; then
+        python3 scripts/lib/prune-gitmodules.py "$gm_dest" "$KEEP" || \
+            bad "could not prune $gm_dest to keep.txt"
+    fi
+
     ok ".gitmodules ($(grep -c '^\[submodule' "$gm_dest") entries) @ ${sha:0:8}"
     echo "$repo/master/.gitmodules $sha" >> "$MANIFEST"
 

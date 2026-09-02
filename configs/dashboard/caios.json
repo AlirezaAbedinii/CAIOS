@@ -26,10 +26,15 @@
             "url": "https://docs.ai4os.eu/"
         }
     ],
-    "_comment_demo_unavailable": "T4. Profile tabs whose backing service this deployment does not run, shown with one honest sentence instead of a control that cannot work. apikeys was the urgent one: it proxies to AI4EOSC's LiteLLM, gets 401, and the error interceptor threw the user onto /forbidden carrying that error in the URL. storage needs a Nextcloud (D-15) and services needs an MLflow; neither is deployed. Remove an id here the day the service exists.",
+    "_comment_demo_unavailable": "T4. Features this deployment does not run. Profile tabs get a panel saying so; buttons and sidenav entries are disabled with the same sentence as a tooltip. Each was MEASURED on 2026-09-02, not assumed: apikeys proxies to AI4EOSC's LiteLLM and 401s (it used to eject the user to /forbidden); storage needs a Nextcloud and services an MLflow (D-15); tryme needs a node tagged meta.type=tryme and PAPI answers 503 without one; batch needs a storage backend and PAPI refuses without one; snapshots push an image to a Harbor registry; ai4os-cvat needs ~71 GB on one node (gotcha 9) and ai4os-nvflare needs TCP 8002-8003 open (gotcha 8), and we demonstrate federated learning with Flower instead. Catalogue ids dim their card and make it unclickable rather than hiding it. Remove an id the day the service exists - nothing else needs changing.",
     "demoUnavailable": [
         "apikeys",
         "storage",
-        "services"
+        "services",
+        "tryme",
+        "batch",
+        "snapshots",
+        "ai4os-cvat",
+        "ai4os-nvflare"
     ]
 }

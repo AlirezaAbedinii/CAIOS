@@ -51,6 +51,86 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-04 — T6: anybody can sign up, and nobody gets in by default
+
+Checklist item 4 is built. A stranger registers at Keycloak's own form, sees a
+waiting room in the dashboard, and an administrator approves them from `/admin`
+in one click. Three commits, each verified before the next.
+
+**The decision the whole thing rests on: "pending" is not stored anywhere.** A
+pending user *is* a realm user holding no `access:<vo>:<level>` role. Approval
+is one role assignment, denial is one disable, and Keycloak stays the only
+thing that knows anything. That removed every hard part — no record that can
+disagree with reality, nothing to migrate, no question about what happens when
+somebody is changed directly in Keycloak. D-70.
+
+| | What | Proof |
+|---|---|---|
+| T6.0 | Registration on; a service account; `platform-admin` holding `ap-d` | live realm, existing logins unaffected |
+| T6.1 | The approval service at `/registration/*` on the API hostname | `scripts/check-registration.sh` |
+| T6.2 | The `/admin` console, the sidenav entry, the waiting room | built, deployed, five check scripts green |
+
+### Two things found by using it rather than reading it
+
+**Every new signup would have hit an HTTP 500.** A token with no access role
+makes `get_highest_level()` return `None`, and upstream hands that straight to
+`AI4OS_LEVELS.index()` — `ValueError: None is not in list`. It had never fired
+because every account until now was created by the bootstrap script with a role
+already attached. Self-registration produces exactly that user, so **the person
+most likely to reach that code path was getting the least useful answer the
+platform can give**, and the dashboard could not tell it apart from a real
+outage — which is precisely what "pending approval" has to be distinguishable
+from. Patch `0018`.
+
+Access control was never bypassed. The deployment *list* returns `200 []`
+because it is scoped to the caller; everything that creates, reads or deletes
+called `check_authorization` and so crashed rather than allowing anything.
+
+**The first real approval returned 502, and the fix was to ask a different
+question.** Reading a realm role by name needs `view-realm`. The service
+account holds `view-users` and `manage-users` — the narrowest pair that can
+list accounts and change one role — and widening it would have been a step
+towards a registration console that can rewrite the realm login depends on. The
+available-role-mappings endpoint answers the same question inside the existing
+grant.
+
+### What it refuses to do
+
+Approval grants `ap-u` and the level is fixed in code, never taken from the
+request: an approval console that can mint administrators is a
+privilege-escalation path wearing a friendly name. You cannot deny your own
+account. You cannot deny an account holding `ap-d` without removing that role
+deliberately first. And denial disables rather than deletes, because an account
+that can be re-registered with the same address the next minute has not been
+denied. D-72.
+
+### What it does not do
+
+**No email, anywhere.** There is no SMTP server, so verification is off and
+nobody is notified of a signup — an approver has to look at the page. Requiring
+verification would have left every registration waiting on a mail that can
+never arrive, which is a form that silently never works. The human approval
+step is the check that verification would otherwise have been.
+
+Registration is open to anyone who can reach Keycloak. What that opens is
+account *creation*; a new account holds no role and can reach nothing. A test
+asserts the realm grants no default role, so that stays true.
+
+**Verified:** `scripts/check-registration.sh` green end to end — it registers
+through the real form, checks PAPI refuses, approves, deploys and deletes as
+the new account, checks both denial guards, denies, and deletes the account.
+252 offline tests pass. `check-dashboard`, `check-branding`, `check-home-page`,
+`check-catalogue` and `check-identity` all still pass.
+
+**Rollback:** `rollback/dashboard-t5a-scheme.tar` is the image that was serving
+until today. Rolling the dashboard back does not turn registration off — that
+is Keycloak and one container, and `rollback/README.md` has both commands.
+
+**Still open, unchanged:** T5's switch is held on the nginx proxy VM
+(`docs/nginx-proxy.md`), and T7 — availability, preflight, cold start — is next.
+
+---
+
 ## 2026-09-02 — Every control clicked, and the ones that cannot work say so
 
 The stage is finished. Every actionable control on the platform was exercised —

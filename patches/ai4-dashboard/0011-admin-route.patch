@@ -1,0 +1,30 @@
+--- a/src/app/app.routes.ts
++++ b/src/app/app.routes.ts
+@@ -89,6 +89,27 @@
+                 ],
+             },
+             {
++                // [CAIOS] The registration console (T6).
++                //
++                // Lazy-loaded, so a researcher who never opens it never
++                // downloads it. Staged into src/app/modules/admin/ from
++                // configs/dashboard/admin/ by scripts/build-dashboard.sh —
++                // this route and the sidenav entry (patch 0013) are the only
++                // upstream files it touches.
++                //
++                // Not route-guarded, deliberately. The page is a view over an
++                // API that requires access:<vo>:ap-d on every call, so a
++                // non-administrator who types the URL gets an empty page and
++                // an error rather than anything they should not see. A guard
++                // here would be a second place for "who may approve" to be
++                // decided, and the two could disagree.
++                path: 'admin',
++                loadChildren: () =>
++                    import('@app/modules/admin/admin.module').then(
++                        (m) => m.AdminModule
++                    ),
++            },
++            {
+                 path: 'forbidden',
+                 loadChildren: () =>
+                     import('@modules/forbidden/forbidden.module').then(

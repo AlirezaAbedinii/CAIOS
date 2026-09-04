@@ -23,6 +23,7 @@ If these addresses look wrong, read that file rather than trusting this table.
 | Vault | `https://vault.134.87.8.230.sslip.io` |
 | Deployments | `https://<service>-<uuid>.pacs-deployments.192.168.104.105.sslip.io` |
 | Nomad UI | `https://192.168.104.181:4646` (subnet only) |
+| Registration console | `<dashboard>/admin` — sign in as `platform-admin` |
 
 **The scheme is `CAIOS_SCHEME` in `configs/env/caios.env`** (T5, D-68). Every
 URL above follows it. Both schemes answer on every control-plane hostname; the
@@ -51,6 +52,41 @@ curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
 
 `Server: nginx/1.18.0 (Ubuntu)` is the proxy. `Server: Caddy` means you never
 left the box.
+
+
+---
+
+## Somebody registered and cannot use anything
+
+That is the design, not a fault. A new account holds no access role, so
+Keycloak lets them sign in and PAPI refuses everything with "Your account is
+not yet approved for this platform." They see a waiting-room page.
+
+**To let them in:** sign in as `platform-admin` (password in
+`configs/env/caios.env`), open `/admin`, press Approve. That grants
+`access:vo.caios.ca:ap-u` and nothing else.
+
+**Nothing is stored anywhere.** An account's state *is* the access it holds, so
+approving in the Keycloak admin console works exactly as well and the page will
+agree the moment it is refreshed.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `/admin` is not in the sidenav | the account does not hold `ap-d` | sign in as `platform-admin`, or grant the role |
+| The console says the service is not answering | the `registration` container | `docker compose logs registration`; approve in Keycloak meanwhile |
+| Approve returns 502 mentioning Keycloak | the service account's secret or its roles | `bash scripts/keycloak-bootstrap.sh` re-applies both |
+| The registration form 404s or refuses | `registrationAllowed` is false on the **live** realm — the import runs only once | `bash scripts/keycloak-bootstrap.sh` |
+| A new account gets HTTP 500 rather than a message | patch `0018` is not in the running image | `bash scripts/apply-patches.sh` then rebuild PAPI |
+
+Prove the whole path end to end, including cleanup:
+
+```bash
+bash scripts/check-registration.sh
+```
+
+It registers a throwaway account through Keycloak's real form, checks PAPI
+refuses it, approves it, deploys and deletes as that account, checks both
+denial guards, denies it, and deletes it.
 
 ---
 

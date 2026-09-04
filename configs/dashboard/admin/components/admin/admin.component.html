@@ -1,0 +1,146 @@
+<!--
+  [CAIOS] The registration console.
+
+  Deliberately two lists rather than a filter control. "Who is waiting" is the
+  question this page exists to answer, and it should be answered before anyone
+  touches anything.
+-->
+<div class="admin-page">
+    <header class="admin-header">
+        <h1>{{ 'ADMIN.TITLE' | translate }}</h1>
+        <p class="admin-lede">{{ 'ADMIN.LEDE' | translate }}</p>
+        <button
+            mat-stroked-button
+            class="admin-refresh"
+            (click)="reload()"
+            [disabled]="loading"
+        >
+            <mat-icon>refresh</mat-icon>
+            {{ 'ADMIN.REFRESH' | translate }}
+        </button>
+    </header>
+
+    @if (loading) {
+        <div class="admin-centred">
+            <mat-spinner diameter="36"></mat-spinner>
+        </div>
+    } @else if (unreachable) {
+        <mat-card class="admin-notice admin-notice--problem">
+            <mat-card-content>
+                <mat-icon>cloud_off</mat-icon>
+                <div>
+                    <strong>{{ 'ADMIN.UNREACHABLE-TITLE' | translate }}</strong>
+                    <p>{{ 'ADMIN.UNREACHABLE-BODY' | translate }}</p>
+                </div>
+            </mat-card-content>
+        </mat-card>
+    } @else {
+        <section class="admin-section">
+            <h2>
+                {{ 'ADMIN.PENDING-TITLE' | translate }}
+                <span class="admin-count">{{ pending.length }}</span>
+            </h2>
+
+            @if (pending.length === 0) {
+                <p class="admin-empty">{{ 'ADMIN.PENDING-EMPTY' | translate }}</p>
+            } @else {
+                <div class="admin-rows">
+                    @for (a of pending; track a.id) {
+                        <mat-card class="admin-row">
+                            <mat-card-content>
+                                <div class="admin-who">
+                                    <strong>{{ a.username }}</strong>
+                                    <span class="admin-name">{{ fullName(a) }}</span>
+                                    <span class="admin-meta">{{ a.email }}</span>
+                                    @if (a.created) {
+                                        <span class="admin-meta">
+                                            {{ 'ADMIN.SIGNED-UP' | translate }}
+                                            {{ a.created | date: 'd MMM y, HH:mm' }}
+                                        </span>
+                                    }
+                                </div>
+                                <div class="admin-actions">
+                                    <button
+                                        mat-flat-button
+                                        color="primary"
+                                        [disabled]="busy.has(a.id)"
+                                        (click)="approve(a)"
+                                    >
+                                        {{ 'ADMIN.APPROVE' | translate }}
+                                    </button>
+                                    <button
+                                        mat-stroked-button
+                                        [disabled]="busy.has(a.id)"
+                                        (click)="deny(a)"
+                                    >
+                                        {{ 'ADMIN.DENY' | translate }}
+                                    </button>
+                                </div>
+                            </mat-card-content>
+                        </mat-card>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="admin-section">
+            <h2>
+                {{ 'ADMIN.DECIDED-TITLE' | translate }}
+                <span class="admin-count">{{ decided.length }}</span>
+            </h2>
+            <div class="admin-rows">
+                @for (a of decided; track a.id) {
+                    <mat-card class="admin-row">
+                        <mat-card-content>
+                            <div class="admin-who">
+                                <strong>{{ a.username }}</strong>
+                                <span class="admin-name">{{ fullName(a) }}</span>
+                                <span class="admin-meta">{{ a.email }}</span>
+                            </div>
+                            <div class="admin-state">
+                                <span
+                                    class="admin-badge"
+                                    [class.admin-badge--approved]="a.state === 'approved'"
+                                    [class.admin-badge--denied]="a.state === 'denied'"
+                                >
+                                    {{
+                                        (a.state === 'approved'
+                                            ? 'ADMIN.STATE-APPROVED'
+                                            : 'ADMIN.STATE-DENIED'
+                                        ) | translate
+                                    }}
+                                </span>
+                                <!--
+                                  The levels are shown because they are the
+                                  whole mechanism: approval is this list
+                                  gaining an entry, nothing more.
+                                -->
+                                <span class="admin-levels">{{ a.levels.join(', ') }}</span>
+                            </div>
+                            <div class="admin-actions">
+                                @if (a.state === 'denied') {
+                                    <button
+                                        mat-stroked-button
+                                        [disabled]="busy.has(a.id)"
+                                        (click)="approve(a)"
+                                    >
+                                        {{ 'ADMIN.REINSTATE' | translate }}
+                                    </button>
+                                } @else {
+                                    <button
+                                        mat-stroked-button
+                                        [disabled]="busy.has(a.id)"
+                                        (click)="deny(a)"
+                                        [matTooltip]="'ADMIN.DENY-TOOLTIP' | translate"
+                                    >
+                                        {{ 'ADMIN.DENY' | translate }}
+                                    </button>
+                                }
+                            </div>
+                        </mat-card-content>
+                    </mat-card>
+                }
+            </div>
+        </section>
+    }
+</div>

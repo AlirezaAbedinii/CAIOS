@@ -1,0 +1,92 @@
+--- a/src/app/modules/forbidden/components/forbidden/forbidden.component.ts
++++ b/src/app/modules/forbidden/components/forbidden/forbidden.component.ts
+@@ -6,21 +6,44 @@
+ } from '@angular/core';
+ import { ActivatedRoute } from '@angular/router';
+ import { MatCard, MatCardContent } from '@angular/material/card';
++import { TranslatePipe } from '@ngx-translate/core';
++import { AuthService } from '@app/core/services/auth/auth.service';
+ 
+ @Component({
+     selector: 'app-forbidden',
+     templateUrl: './forbidden.component.html',
+     styleUrls: ['./forbidden.component.scss'],
+     changeDetection: ChangeDetectionStrategy.Eager,
+-    imports: [MatCard, MatCardContent],
++    imports: [MatCard, MatCardContent, TranslatePipe],
+ })
+ export class ForbiddenComponent implements OnInit {
+     route = inject(ActivatedRoute);
++    private authService = inject(AuthService);
+ 
+     errorMessage = '';
+ 
++    /**
++     * [CAIOS] Signed in, and holding no access level at all.
++     *
++     * That is not the same thing as being refused, and it should not read like
++     * it. Since T6 anybody can register, so the most common visitor to this
++     * page is now someone who has just signed up and is waiting to be let in —
++     * and "You don't have the rights to do that!" tells them nothing they can
++     * act on.
++     *
++     * Read from the token the browser already holds: `isAuthenticated` is set
++     * by AuthService only when the token carries an access:<vo>:<level> role,
++     * so false-while-signed-in is exactly the pending state. No extra request,
++     * and no second opinion about who somebody is.
++     */
++    isPendingApproval = false;
++
+     ngOnInit(): void {
+         this.errorMessage =
+             this.route.snapshot.paramMap.get('errorMessage') || '';
++
++        const profile = this.authService.userProfileSubject.getValue();
++        this.isPendingApproval =
++            !!profile && profile.isAuthenticated === false;
+     }
+ }
+--- a/src/app/modules/forbidden/components/forbidden/forbidden.component.html
++++ b/src/app/modules/forbidden/components/forbidden/forbidden.component.html
+@@ -1,13 +1,30 @@
+-<mat-card>
+-    <div class="forbidden-title">
+-        <h1>You don't have the rights to do that!</h1>
+-    </div>
+-    <mat-card-content>
+-        <div class="forbidden-img-container mt-3 mb-3">
+-            <img src="../../../assets/images/forbidden.png" width="250" />
++@if (isPendingApproval) {
++    <!--
++      [CAIOS] The account exists and is signed in, but has been granted no
++      access level. Since T6 this is the likeliest way to arrive here, and it
++      is a waiting room rather than a refusal.
++    -->
++    <mat-card class="pending-card">
++        <div class="forbidden-title">
++            <h1>{{ 'PENDING.TITLE' | translate }}</h1>
+         </div>
+-        <div class="forbidden-img-container mt-3 mb-3">
+-            <p>{{ errorMessage }}</p>
++        <mat-card-content>
++            <p>{{ 'PENDING.BODY' | translate }}</p>
++            <p>{{ 'PENDING.NEXT' | translate }}</p>
++        </mat-card-content>
++    </mat-card>
++} @else {
++    <mat-card>
++        <div class="forbidden-title">
++            <h1>You don't have the rights to do that!</h1>
+         </div>
+-    </mat-card-content>
+-</mat-card>
++        <mat-card-content>
++            <div class="forbidden-img-container mt-3 mb-3">
++                <img src="../../../assets/images/forbidden.png" width="250" />
++            </div>
++            <div class="forbidden-img-container mt-3 mb-3">
++                <p>{{ errorMessage }}</p>
++            </div>
++        </mat-card-content>
++    </mat-card>
++}

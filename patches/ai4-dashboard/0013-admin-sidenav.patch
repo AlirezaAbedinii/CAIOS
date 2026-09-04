@@ -1,0 +1,78 @@
+--- a/src/app/layout/sidenav/sidenav.component.ts
++++ b/src/app/layout/sidenav/sidenav.component.ts
+@@ -81,6 +81,8 @@
+     public isAuthorized = false;
+     public isAuthenticated = false;
+     public isProjectMember = false;
++    /** [CAIOS] access:<vo>:ap-d — may approve registrations. */
++    public isDeveloper = false;
+     protected environment = environment;
+     protected gitInfo = gitInfo;
+     protected userProfile?: UserProfile;
+@@ -153,6 +155,21 @@
+         },
+     ];
+ 
++    // [CAIOS] The registration console (T6). Shown only to an account holding
++    // access:<vo>:ap-d, which is the same role the approval API requires — so
++    // the menu and the service agree by construction rather than by two
++    // separate lists that can drift.
++    //
++    // Hidden rather than disabled, which is the opposite of the choice made
++    // for try-me and batch above. Those are platform capabilities this
++    // deployment cannot run, and saying so is honest. This one is a capability
++    // the VIEWER does not have, and advertising it to every researcher would
++    // only invite a click that goes nowhere.
++    adminLink: ProjectLink = {
++        name: 'SIDENAV.ADMIN',
++        url: '/admin',
++    };
++
+     otherLinks: ProjectLink[] = [];
+ 
+     acknowledgments = '';
+@@ -184,6 +201,7 @@
+             this.isAuthorized = currentProfile.isAuthorized;
+             this.isAuthenticated = currentProfile.isAuthenticated;
+             this.isProjectMember = currentProfile.isProjectMember;
++            this.isDeveloper = currentProfile.isDeveloper;
+             this.updateMainLinks();
+         }
+ 
+@@ -194,6 +212,7 @@
+                 this.isAuthorized = profile.isAuthorized;
+                 this.isAuthenticated = profile.isAuthenticated;
+                 this.isProjectMember = profile.isProjectMember;
++                this.isDeveloper = profile.isDeveloper;
+                 this.updateMainLinks();
+                 this.changeDetectorRef.detectChanges();
+             }
+--- a/src/app/layout/sidenav/sidenav.component.html
++++ b/src/app/layout/sidenav/sidenav.component.html
+@@ -142,6 +142,26 @@
+                         }
+                     }
+ 
++                    <!--
++                      [CAIOS] Registration console. Only for ap-d; see the
++                      comment on adminLink in sidenav.component.ts for why this
++                      one is hidden rather than disabled.
++                    -->
++                    @if (isLoggedIn() && isDeveloper) {
++                        <h4 class="sidenav-title">
++                            {{ 'SIDENAV.ADMINISTRATION' | translate }}
++                        </h4>
++                        <mat-list-item class="sidenav-item">
++                            <a
++                                mat-list-item
++                                routerLinkActive="active"
++                                [routerLink]="adminLink.url"
++                                class="sidenav-link"
++                                >{{ adminLink.name | translate }}</a
++                            >
++                        </mat-list-item>
++                    }
++
+                     <h4 class="sidenav-title">
+                         {{ 'SIDENAV.PLATFORM-SERVICES' | translate }}
+                         <mat-icon>open_in_new</mat-icon>

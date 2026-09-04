@@ -81,17 +81,85 @@ kc update "clients/${CLIENT_UUID}" -r "$REALM" \
 
 echo
 
-# username : first : last : email
+# ---------------------------------------------------------------------------
+# T6 — self-registration, and the service account that approves it.
+#
+# "Pending" is not a state we store anywhere. It is simply a realm user who
+# holds no access:<vo>:<level> role: Keycloak lets them log in, PAPI refuses
+# every request, and the dashboard shows them a waiting message. Approval is
+# one role assignment and denial is one disable. No database, nothing to keep
+# in step with Keycloak, and nothing to migrate.
+# ---------------------------------------------------------------------------
+
+echo "==> realm ${REALM}: self-registration on"
+# What this opens: anyone who can reach Keycloak can CREATE an account. What it
+# does not open: any access at all. A new account has no role, so PAPI answers
+# 401 on everything until somebody with ap-d approves it. The exposure is
+# unwanted rows in the user list, not unwanted use of the cluster.
+kc update "realms/${REALM}" \
+    -s "registrationAllowed=true" \
+    -s "registrationEmailAsUsername=false" \
+    -s "loginWithEmailAllowed=true" \
+    -s "verifyEmail=false"
+# verifyEmail stays false deliberately: there is no SMTP server on this
+# platform, so requiring verification would leave every registration stuck at a
+# mail that can never arrive — a registration form that silently never works.
+# The approval step is the human check that verification would otherwise be.
+
+echo "==> client caios-registration (service account for approvals)"
+: "${KEYCLOAK_REGISTRATION_SECRET:?set it in configs/env/caios.env — see the template}"
+REG_UUID="$(kc get clients -r "$REALM" -q "clientId=caios-registration" \
+    --fields id --format csv --noquotes 2>/dev/null | tail -n1 || true)"
+if [[ -z "$REG_UUID" ]]; then
+    kc create clients -r "$REALM" \
+        -s "clientId=caios-registration" \
+        -s "enabled=true" \
+        -s "publicClient=false" \
+        -s "standardFlowEnabled=false" \
+        -s "directAccessGrantsEnabled=false" \
+        -s "serviceAccountsEnabled=true" \
+        -s "secret=${KEYCLOAK_REGISTRATION_SECRET}" >/dev/null
+    REG_UUID="$(kc get clients -r "$REALM" -q "clientId=caios-registration" \
+        --fields id --format csv --noquotes | tail -n1)"
+    echo "     created"
+else
+    # Re-runnable: the secret in caios.env is the source of truth, so push it
+    # again rather than reading Keycloak's. A rotated secret is then one edit
+    # and one re-run.
+    kc update "clients/${REG_UUID}" -r "$REALM" \
+        -s "serviceAccountsEnabled=true" \
+        -s "secret=${KEYCLOAK_REGISTRATION_SECRET}" >/dev/null
+    echo "     exists (secret re-applied)"
+fi
+
+# The service account needs to read the user list and assign one realm role.
+# view-users and manage-users are the narrowest pair that allows both; NOT
+# realm-admin, which would let this service rewrite the realm login depends on.
+echo "==> granting the service account view-users and manage-users"
+SA_USER="service-account-caios-registration"
+for r in view-users manage-users; do
+    kc add-roles -r "$REALM" --uusername "$SA_USER" \
+        --cclientid realm-management --rolename "$r" >/dev/null 2>&1 || true
+done
+
+echo
+
+# username : first : last : email : access level
+#
+# The level is the last field of the realm role PAPI parses. ap-u is the
+# minimum that can deploy; ap-d outranks it and is what the approval service
+# requires, so platform-admin can both approve and deploy.
 USERS=(
-  "researcher:Dana:Okafor:researcher@caios.local"
-  "site-a:Site:A:site-a@caios.local"
-  "site-b:Site:B:site-b@caios.local"
-  "site-c:Site:C:site-c@caios.local"
+  "researcher:Dana:Okafor:researcher@caios.local:ap-u"
+  "site-a:Site:A:site-a@caios.local:ap-u"
+  "site-b:Site:B:site-b@caios.local:ap-u"
+  "site-c:Site:C:site-c@caios.local:ap-u"
+  "platform-admin:Platform:Administrator:admin@caios.local:ap-d"
 )
 
 echo
 for entry in "${USERS[@]}"; do
-    IFS=: read -r username first last email <<<"$entry"
+    IFS=: read -r username first last email level <<<"$entry"
 
     # Passwords may be pinned per user in caios.env, e.g. CAIOS_PW_RESEARCHER.
     var="CAIOS_PW_$(echo "$username" | tr 'a-z-' 'A-Z_')"
@@ -127,14 +195,15 @@ for entry in "${USERS[@]}"; do
     # access:<vo>:<level> and ignores everything else, so a role called
     # "user" or a Keycloak group conveys nothing to it. ap-u is the minimum
     # level that can deploy.
-    kc add-roles -r "$REALM" --uusername "$username" --rolename "$ROLE" >/dev/null 2>&1 || true
+    kc add-roles -r "$REALM" --uusername "$username" \
+        --rolename "access:${VO}:${level}" >/dev/null 2>&1 || true
 
-    printf '  %s  %-12s  %s%s\n' "$action" "$username" "$password" "$generated"
+    printf '  %s  %-15s  %-6s  %s%s\n' "$action" "$username" "$level" "$password" "$generated"
 done
 
 cat <<EOF
 
-All users hold the realm role: ${ROLE}
+Every account holds access:${VO}:<level> as listed above.
 
 Verify a token carries it:
   bash scripts/get-token.sh researcher '<password>' | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool

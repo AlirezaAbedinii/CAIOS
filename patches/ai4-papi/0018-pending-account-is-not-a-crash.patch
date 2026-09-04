@@ -1,0 +1,38 @@
+--- a/ai4papi/auth.py
++++ b/ai4papi/auth.py
+@@ -106,6 +106,35 @@
+ 
+     # Check if the user highest level is at least equal to the requested level
+     highest = get_highest_level(user_levels)
++
++    # [CAIOS] A user with NO access role at all is not an error, it is a state.
++    #
++    # get_highest_level returns None when the token carries no
++    # access:<vo>:<level> role, and upstream passes that straight to
++    # AI4OS_LEVELS.index() — "ValueError: None is not in list", surfacing as a
++    # bare HTTP 500 with a traceback in the log and "Internal Server Error" in
++    # the browser.
++    #
++    # It never fired before T6 because every account was created by
++    # scripts/keycloak-bootstrap.sh with a role already attached. Self-
++    # registration is the whole point of T6 and it produces exactly this user:
++    # someone who signed up, can log in, and is waiting for approval. The
++    # single most likely person to meet this code path now gets the least
++    # helpful answer the platform can give.
++    #
++    # 401, matching the insufficient-level case immediately below, so nothing
++    # that already handles that has to learn a second status code.
++    if highest is None:
++        raise HTTPException(
++            status_code=401,
++            detail=(
++                "Your account is not yet approved for this platform.\n"
++                "It exists and you are signed in, but it has been granted no "
++                "access level yet. A platform administrator has to approve it "
++                "before you can deploy anything."
++            ),
++        )
++
+     if AI4OS_LEVELS.index(highest) < AI4OS_LEVELS.index(access_level):
+         msg = (
+             "Your user has not the required access level to use this resource:\n"

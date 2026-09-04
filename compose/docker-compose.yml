@@ -328,6 +328,58 @@ services:
       - vault
 
   # --------------------------------------------------------------------------
+  # Registration approvals — T6.
+  #
+  # Turns a self-registered Keycloak account into one that can use the
+  # platform, by granting the single realm role PAPI authorises on. "Pending"
+  # is not stored anywhere: it is a user holding no access:<vo>:<level> role.
+  #
+  # Its own container rather than a PAPI router, deliberately. PAPI is what the
+  # whole platform runs through; a fault in an admin console used by one person
+  # a week must not be able to stop a demo. If this service is down, nothing
+  # else notices and the demo accounts still work.
+  #
+  # Reached at /registration/* on the API hostname, so it adds no DNS name, no
+  # certificate SAN, and no new browser origin.
+  # --------------------------------------------------------------------------
+  registration:
+    build:
+      context: ./registration
+    image: caios/registration:latest
+    container_name: caios_registration
+    restart: unless-stopped
+    environment:
+      # The issuer this service validates callers against. Must be the same
+      # string Keycloak mints and PAPI checks — all three follow CAIOS_SCHEME.
+      CAIOS_SCHEME: ${CAIOS_SCHEME:-https}
+      CAIOS_AUTH_HOST: ${CAIOS_AUTH_HOST}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      CAIOS_VO: vo.caios.ca
+      # The service account. The only thing on the platform holding
+      # realm-management rights, and it holds the narrowest pair that works:
+      # view-users and manage-users, never realm-admin.
+      KEYCLOAK_REGISTRATION_CLIENT: caios-registration
+      KEYCLOAK_REGISTRATION_SECRET: ${KEYCLOAK_REGISTRATION_SECRET}
+      # Both schemes, for the same reason PAPI lists both: an origin is
+      # scheme-exact and a missing one is a CORS wall the browser reports as a
+      # generic failure with nothing in our log to explain it.
+      CAIOS_CORS_ORIGINS: https://${CAIOS_DASHBOARD_HOST},http://${CAIOS_DASHBOARD_HOST},http://localhost:8080
+      # httpx uses certifi, not the system store, so point it at the bundle
+      # update-ca-certificates refreshes at start.
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      # Our CA, so the service can verify Keycloak over HTTPS. Repo-relative
+      # and NOT ${HOME}: docker needs sudo here, sudo resets HOME to /root, and
+      # docker answers a missing bind-mount source by silently creating an
+      # empty DIRECTORY rather than failing (D-29).
+      - ./certs/caios-ca.pem:/usr/local/share/ca-certificates/caios-ca.crt:ro
+    ports:
+      # Loopback. Caddy is the only thing that may reach it.
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      - keycloak
+
+  # --------------------------------------------------------------------------
   # Dashboard — Angular SPA. Talks only to PAPI, never to Nomad.
   #
   # Built by scripts/build-dashboard.sh, which stages the caios tenant. The four

@@ -172,3 +172,153 @@ def test_no_secret_is_committed(root):
             assert value in ("", "admin", "caios"), (
                 f"{key} carries a value in the committed template: {value!r}"
             )
+
+
+# --- the approval service (T6.1) -------------------------------------------
+#
+# Read as source. What the service does against a live Keycloak is
+# scripts/check-registration.sh, which registers a throwaway account through
+# the real form and deletes it again.
+
+SERVICE = "compose/registration/app.py"
+
+
+def _service(root):
+    return (root / SERVICE).read_text()
+
+
+def test_approval_can_never_grant_more_than_ap_u(root):
+    """An approval console that can mint administrators is a
+    privilege-escalation path wearing a friendly name.
+
+    The granted level is fixed in the code, never taken from the request.
+    """
+    t = _service(root)
+    assert 'ROLE_USER = f"access:{VO}:ap-u"' in t
+    approve = t[t.index("def approve("):t.index("def deny(")]
+    assert "ROLE_USER" in approve
+    assert "ROLE_ADMIN" not in approve, (
+        "approve() references the administrator role. It must only ever grant "
+        "ap-u, whatever the caller asks for."
+    )
+
+
+def test_every_endpoint_requires_the_admin_role(root):
+    """Not merely a valid token — the ap-d role."""
+    t = _service(root)
+    for name in ("accounts", "pending", "approve", "deny"):
+        fn = re.search(rf"def {name}\((.*?)\)\s*(->|:)", t, re.S)
+        assert fn, f"{name}() is gone"
+        assert "Depends(require_admin)" in fn.group(1), (
+            f"{name}() does not require an administrator"
+        )
+    assert "if ROLE_ADMIN not in roles:" in t
+
+
+def test_the_caller_token_is_verified_like_papi_verifies_it(root):
+    """A token this service accepts but PAPI would not is a way for the two to
+    disagree about who somebody is."""
+    t = _service(root)
+    for claim in ("verify_exp", "verify_iss", "verify_aud"):
+        assert f'"{claim}": True' in t
+    assert 'audience="account"' in t
+    assert "issuer=ISSUER" in t
+    assert 'algorithms=["RS256"]' in t
+
+
+def test_denial_disables_rather_than_deletes(root):
+    """A deleted account can be re-registered with the same address, so a
+    denial that deletes is not a denial."""
+    t = _service(root)
+    deny = t[t.index("def deny("):]
+    assert '"enabled": False' in deny
+    # The only thing deny() may DELETE is a role mapping. Deleting the user
+    # would let the same address sign up again the next minute.
+    deletes = re.findall(r'_kc\(\s*"DELETE",\s*f?"([^"]+)"', deny)
+    assert deletes, "deny() removes no roles at all"
+    for target in deletes:
+        assert target.endswith("/role-mappings/realm"), (
+            f"deny() issues DELETE {target}, which is not a role mapping"
+        )
+
+
+def test_denial_cannot_lock_everyone_out(root):
+    """Two ways to remove the last administrator with one click, both refused."""
+    t = _service(root)
+    deny = t[t.index("def deny("):]
+    assert 'user_id == caller.get("sub")' in deny, "self-denial is not refused"
+    assert '"ap-d" in levels' in deny, "denying an administrator is not refused"
+
+
+def test_the_service_never_reads_a_role_definition_directly(root):
+    """GET /roles/{name} needs view-realm, which the service account does not
+    have — and should not, because it is a step towards realm-admin.
+
+    The available-role-mappings endpoint answers the same question within
+    view-users and manage-users. This was found by the service returning 502
+    on the first real approval.
+    """
+    t = _service(root)
+    assert 'f"/roles/' not in t, (
+        "the service reads a realm role by name, which needs view-realm"
+    )
+    assert "role-mappings/realm/available" in t
+
+
+def test_state_is_derived_never_stored(root):
+    """The design property the whole feature rests on: pending is the absence
+    of a role, read from Keycloak, not a row we keep."""
+    t = _service(root)
+    assert "role-mappings/realm" in t
+    for word in ("sqlite", "psycopg", "sqlalchemy", "CREATE TABLE", "redis"):
+        assert word.lower() not in t.lower(), f"the service grew a store: {word}"
+
+
+def test_health_does_not_depend_on_keycloak(root):
+    """A health check that fails when a dependency is down turns one outage
+    into two."""
+    t = _service(root)
+    health = t[t.index("def health("):t.index("def accounts(")]
+    assert "_kc(" not in health and "_service_token" not in health
+
+
+def test_the_service_binds_where_only_caddy_can_reach_it(root):
+    compose = (root / "compose" / "docker-compose.yml").read_text()
+    block = compose[compose.index("  registration:"):compose.index("  dashboard:")]
+    assert '"127.0.0.1:8090:8090"' in block, (
+        "the approval console must not be published on the public IP"
+    )
+    assert "${KEYCLOAK_REGISTRATION_SECRET}" in block
+    assert "${CAIOS_SCHEME:-https}" in block, "the issuer must follow the scheme"
+
+
+def test_dependencies_are_pinned(root):
+    """The platform must build with no surprises and demo with the internet
+    unplugged."""
+    reqs = (root / "compose" / "registration" / "requirements.txt").read_text()
+    lines = [l.strip() for l in reqs.splitlines() if l.strip() and not l.startswith("#")]
+    assert lines
+    for line in lines:
+        assert "==" in line, f"{line} is not pinned"
+
+
+def test_caddy_routes_it_on_the_api_hostname(root):
+    """Same hostname means same origin: no second CORS entry, no fifth SAN."""
+    t = (root / "compose" / "caddy" / "Caddyfile.template").read_text()
+    assert "handle /registration/* {" in t
+    assert "reverse_proxy 127.0.0.1:8090" in t
+    assert "handle_path /registration" not in t, (
+        "the prefix must be kept so the route is the same string here, in the "
+        "code and in a log line"
+    )
+
+
+def test_a_pending_account_gets_an_answer_not_a_crash(root):
+    """get_highest_level returns None for a user with no access role, and
+    upstream hands that to AI4OS_LEVELS.index(): ValueError, surfacing as a
+    bare 500. Self-registration produces exactly that user."""
+    patch = (root / "patches" / "ai4-papi"
+             / "0018-pending-account-is-not-a-crash.patch").read_text()
+    assert "if highest is None:" in patch
+    assert "status_code=401" in patch
+    assert "not yet approved" in patch

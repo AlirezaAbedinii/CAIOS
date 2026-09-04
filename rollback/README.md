@@ -60,3 +60,36 @@ sudo docker tag caios/dashboard:f3-home caios/dashboard:latest
 sudo docker compose -f compose/docker-compose.yml \
      --env-file configs/env/caios.env up -d --force-recreate dashboard
 ```
+
+## `dashboard-t5a-scheme.tar` — saved 2026-09-04
+
+The image deployed through T5 and up to T6: the scheme switch (`requireHttps`
+derived from the issuer, patch `0010`) and everything before it. **This is the
+undo for the T6 deploy** — it has no registration console, no `/admin` route
+and no waiting-room page.
+
+Note it is also the image that makes `CAIOS_SCHEME` work in both directions, so
+rolling back to it does not undo T5.
+
+```bash
+sudo docker load -i rollback/dashboard-t5a-scheme.tar
+sudo docker tag caios/dashboard:t5a-scheme caios/dashboard:latest
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env up -d --force-recreate dashboard
+```
+
+Rolling the dashboard back does **not** turn registration off. That is Keycloak
+and the approval service, and it is a separate decision:
+
+```bash
+# stop accepting new signups (the live realm, not the template)
+docker exec -i caios_keycloak /opt/keycloak/bin/kcadm.sh update realms/caios \
+    -s registrationAllowed=false
+
+# and/or stop the approval service
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env stop registration
+```
+
+Accounts already approved keep working either way: their access is a realm
+role, and nothing in T6 is required to honour it.

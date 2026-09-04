@@ -1,0 +1,159 @@
+// [CAIOS] Registration console.
+//
+// Deliberately plain. It is an internal tool used by one person, and every
+// minute spent styling it is a minute not spent on the pages a reviewer sees.
+// It does follow the platform's type and spacing so it does not read as
+// bolted on.
+
+.admin-page {
+    padding: 1.5rem 2rem 3rem;
+    max-width: 60rem;
+}
+
+.admin-header {
+    margin-bottom: 2rem;
+
+    h1 {
+        margin: 0 0 0.25rem;
+        font-size: 1.6rem;
+        font-weight: 600;
+    }
+}
+
+.admin-lede {
+    margin: 0 0 1rem;
+    max-width: 44rem;
+    opacity: 0.75;
+}
+
+.admin-refresh mat-icon {
+    margin-right: 0.35rem;
+}
+
+.admin-centred {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.admin-section {
+    margin-bottom: 2.5rem;
+
+    h2 {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin: 0 0 0.9rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        opacity: 0.7;
+    }
+}
+
+.admin-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6rem;
+    height: 1.6rem;
+    padding: 0 0.4rem;
+    border-radius: 0.8rem;
+    background: rgba(0, 0, 0, 0.08);
+    font-size: 0.8rem;
+    letter-spacing: 0;
+}
+
+.admin-empty {
+    margin: 0;
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.admin-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.admin-row mat-card-content {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    padding: 0.9rem 1rem;
+}
+
+.admin-who {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    flex: 1 1 16rem;
+    min-width: 0;
+}
+
+.admin-name {
+    font-size: 0.9rem;
+}
+
+.admin-meta {
+    // Machine values in a monospace face, as everywhere else on the platform.
+    font-family: var(--caios-font-mono, ui-monospace, monospace);
+    font-size: 0.8rem;
+    opacity: 0.65;
+    overflow-wrap: anywhere;
+}
+
+.admin-state {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    align-items: flex-start;
+}
+
+.admin-badge {
+    padding: 0.15rem 0.55rem;
+    border-radius: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.08);
+
+    &--approved {
+        background: rgba(46, 125, 50, 0.14);
+        color: #2e7d32;
+    }
+
+    &--denied {
+        background: rgba(198, 40, 40, 0.12);
+        color: #c62828;
+    }
+}
+
+.admin-levels {
+    font-family: var(--caios-font-mono, ui-monospace, monospace);
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+.admin-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.admin-notice mat-card-content {
+    display: flex;
+    gap: 0.9rem;
+    align-items: flex-start;
+    padding: 1.1rem;
+
+    p {
+        margin: 0.3rem 0 0;
+        opacity: 0.8;
+    }
+}
+
+.admin-notice--problem mat-icon {
+    color: #c62828;
+}

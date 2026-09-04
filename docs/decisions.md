@@ -1057,3 +1057,62 @@ not a degradation. `docs/nginx-proxy.md` holds the exact change and
 to D-69. Every scheme on the platform now derives from `CAIOS_SCHEME`, still
 set to `https`, so the platform is unchanged and working. The finding that
 matters is D-69: the public path was never the path anyone had been measuring.
+
+**D-70 — A pending account is the absence of a role, not a row.**
+T6. Registration could have been a service with a database of applications,
+each with a status, kept in step with Keycloak. Instead a pending user *is* a
+realm user holding no `access:<vo>:<level>` role, and approval *is* the role
+assignment.
+
+Everything hard about the first design disappears with the second. There is no
+record that can disagree with reality, nothing to migrate, no way for an
+approval to be written in one place and not the other, and no question about
+what happens if somebody is changed directly in Keycloak. The console is a view
+over an API that is a view over Keycloak, and Keycloak remains the only thing
+that knows anything.
+
+The cost is that "when did they apply" is Keycloak's `createdTimestamp` and
+"why" is not recorded at all. Both are acceptable for a platform whose approver
+is one person who also reads the email.
+
+**D-71 — The approval service is its own container, not a PAPI router.**
+PAPI is what the entire platform runs through; every page of the dashboard and
+every deployment passes through it. An admin console used by one person a week
+must not be able to stop a demo, and a ~300-line FastAPI app in its own
+container cannot.
+
+It is reached at `/registration/*` on the **API hostname** rather than one of
+its own, which is what keeps the cost to nearly nothing: no DNS name, no fifth
+SAN on the control-plane certificate, and no second origin for the browser to
+be told about.
+
+The trade accepted knowingly: one more container to start, and one more thing
+that can be down. Down, it takes nothing with it — accounts can still be
+approved in Keycloak directly, which is what the console's own error state
+says.
+
+**D-72 — An approval console may never grant more than it is approving.**
+`approve` assigns `ap-u` and the level is fixed in the code, never taken from
+the request. An approval console that can mint administrators is a
+privilege-escalation path wearing a friendly name.
+
+Three more refusals for the same reason. You cannot deny your own account. You
+cannot deny an account holding `ap-d` without first removing that role
+deliberately in Keycloak. And denial disables rather than deletes, because an
+account that can be re-registered with the same address the next minute has not
+been denied.
+
+The service account behind all of it holds `view-users` and `manage-users` —
+the narrowest pair that can list accounts and change one role. Not
+`realm-admin`: a registration console must not be able to rewrite the realm
+that login itself depends on. That constraint was tested by the first real
+approval failing, because reading a role definition by name needs `view-realm`;
+the fix was to ask a different question, not to widen the grant.
+
+**2026-09-04** — T6 built: self-registration, an approval service, and a
+console. Recorded D-70 to D-72. Found on the way: a user holding no access role
+made PAPI answer HTTP 500 (`ValueError: None is not in list`), which had never
+fired because every account until now was created with a role already attached.
+Self-registration produces exactly that user, so the most likely person to meet
+that code path was getting the least useful answer the platform can give. Patch
+`0018`.

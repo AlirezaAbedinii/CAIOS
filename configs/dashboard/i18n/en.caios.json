@@ -103,5 +103,34 @@
                 "TITLE": "Metadata"
             }
         }
+    },
+    "_comment_admin": "T6. The registration console at /admin, and the waiting room a newly-registered account sees. SIDENAV.ADMINISTRATION and SIDENAV.ADMIN extend upstream's SIDENAV block; PENDING and ADMIN are ours. Written for the same audience as everything else here: a researcher who has just signed up and wants to know what happens next, and an administrator who wants to know who is waiting.",
+    "ADMIN": {
+        "TITLE": "Registration requests",
+        "LEDE": "People who have signed up for CAIOS. Approving an account gives it access to the platform; denying one disables it. Nothing is stored here \u2014 an account's state is simply the access it holds.",
+        "REFRESH": "Refresh",
+        "PENDING-TITLE": "Waiting for a decision",
+        "PENDING-EMPTY": "Nobody is waiting.",
+        "DECIDED-TITLE": "Decided",
+        "SIGNED-UP": "signed up",
+        "APPROVE": "Approve",
+        "DENY": "Deny",
+        "REINSTATE": "Reinstate",
+        "DENY-TOOLTIP": "Removes this account's access and disables it.",
+        "APPROVED": "Approved",
+        "DENIED": "Denied",
+        "STATE-APPROVED": "Approved",
+        "STATE-DENIED": "Denied",
+        "UNREACHABLE-TITLE": "The registration service is not answering.",
+        "UNREACHABLE-BODY": "Accounts can still be approved directly in Keycloak. If this persists, check the registration container on the control-plane node."
+    },
+    "PENDING": {
+        "TITLE": "Your account is waiting for approval",
+        "BODY": "You are signed in, and your account exists. It has not yet been given access to the platform, so there is nothing here for you to use yet.",
+        "NEXT": "A CAIOS administrator reviews new accounts by hand. Once yours is approved, sign in again and the platform will be open to you."
+    },
+    "SIDENAV": {
+        "ADMINISTRATION": "Administration",
+        "ADMIN": "Registration requests"
     }
 }

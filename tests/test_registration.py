@@ -322,3 +322,100 @@ def test_a_pending_account_gets_an_answer_not_a_crash(root):
     assert "if highest is None:" in patch
     assert "status_code=401" in patch
     assert "not yet approved" in patch
+
+
+# --- the dashboard (T6.2) --------------------------------------------------
+
+ADMIN_DIR = "configs/dashboard/admin"
+
+
+def test_the_console_is_staged_not_patched(root):
+    """CAIOS-owned Angular, staged verbatim. It creates only new files, so
+    there is nothing upstream can move underneath it (D-46)."""
+    build = (root / "scripts" / "build-dashboard.sh").read_text()
+    assert 'cp -r "$CFG"/admin/. "$DST/src/app/modules/admin/"' in build
+    assert 'ERROR: $CFG/admin is missing' in build, (
+        "a missing directory must fail loudly here, not as a TypeScript error "
+        "a hundred lines into ng build"
+    )
+    assert (root / ADMIN_DIR / "admin.module.ts").is_file()
+    assert (root / ADMIN_DIR / "components" / "admin" / "admin.component.html").is_file()
+
+
+def test_the_console_derives_its_api_url(root):
+    """Two addresses that must agree are two addresses that can disagree."""
+    t = (root / ADMIN_DIR / "services" / "registration.service.ts").read_text()
+    assert "environment.api.base.replace(/\\/v1\\/?$/, '')" in t
+    assert "'/registration'" in t
+    for scheme in ("http://", "https://"):
+        assert scheme not in t, "the service hardcodes a scheme or a host"
+
+
+def test_the_console_has_no_route_guard(root):
+    """A guard would be a second place where 'who may approve' is decided.
+
+    Every call the page makes requires ap-d at the service; two opinions about
+    that can drift apart, and the one that matters is the server's.
+    """
+    patch = (root / "patches" / "ai4-dashboard" / "0011-admin-route.patch").read_text()
+    assert "path: 'admin'" in patch
+    assert "canActivate" not in patch
+    assert "Not route-guarded, deliberately" in patch
+
+
+def test_the_sidenav_entry_is_gated_on_the_same_role_the_service_requires(root):
+    t = (root / "patches" / "ai4-dashboard" / "0013-admin-sidenav.patch").read_text()
+    assert "isDeveloper" in t, "the entry is not gated on ap-d"
+    assert "isLoggedIn() && isDeveloper" in t
+    # Hidden, not disabled — the opposite of the try-me/batch choice, because
+    # this is a capability the viewer lacks rather than one the cluster lacks.
+    assert "isDisabled" not in t.split("adminLink: ProjectLink")[1][:400]
+
+
+def test_pending_is_read_from_the_token_not_from_a_request(root):
+    """isAuthenticated is set by AuthService only when the token carries an
+    access:<vo>:<level> role, so false-while-signed-in is exactly pending.
+
+    No extra request, and no second opinion about who somebody is.
+    """
+    t = (root / "patches" / "ai4-dashboard" / "0012-pending-approval.patch").read_text()
+    assert "isPendingApproval" in t
+    assert "profile.isAuthenticated === false" in t
+    assert "PENDING.TITLE" in t
+
+
+def test_the_pending_page_does_not_read_as_a_refusal(root):
+    """Since T6 the likeliest visitor to /forbidden is someone who has just
+    signed up. 'You don't have the rights to do that!' tells them nothing they
+    can act on."""
+    strings = json.loads(
+        (root / "configs" / "dashboard" / "i18n" / "en.caios.json").read_text()
+    )
+    body = " ".join(strings["PENDING"].values()).lower()
+    assert "waiting" in body or "approv" in body
+    for wrong in ("forbidden", "denied", "rights"):
+        assert wrong not in body, f"the waiting room says {wrong!r}"
+
+
+def test_every_string_the_console_uses_is_defined(root):
+    """A missing key renders as the key itself, in the interface, in capitals."""
+    strings = json.loads(
+        (root / "configs" / "dashboard" / "i18n" / "en.caios.json").read_text()
+    )
+    html = (root / ADMIN_DIR / "components" / "admin" / "admin.component.html").read_text()
+    ts = (root / ADMIN_DIR / "components" / "admin" / "admin.component.ts").read_text()
+    used = set(re.findall(r"'(ADMIN\.[A-Z-]+)'", html + ts))
+    assert used, "the console uses no translation keys at all"
+    for key in sorted(used):
+        block, _, leaf = key.partition(".")
+        assert leaf in strings.get(block, {}), f"{key} is not defined"
+
+    patch = (root / "patches" / "ai4-dashboard" / "0012-pending-approval.patch").read_text()
+    for key in sorted(set(re.findall(r"'(PENDING\.[A-Z-]+)'", patch))):
+        block, _, leaf = key.partition(".")
+        assert leaf in strings.get(block, {}), f"{key} is not defined"
+
+    sidenav = (root / "patches" / "ai4-dashboard" / "0013-admin-sidenav.patch").read_text()
+    for key in sorted(set(re.findall(r"'(SIDENAV\.ADMIN[A-Z-]*)'", sidenav))):
+        block, _, leaf = key.partition(".")
+        assert leaf in strings.get(block, {}), f"{key} is not defined"

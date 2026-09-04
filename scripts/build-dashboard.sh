@@ -117,6 +117,26 @@ else
     exit 1
 fi
 
+# 2a-ii. the registration console (T6)
+#
+# Same arrangement as the home page: CAIOS-owned Angular staged verbatim,
+# because it creates only new files and there is nothing upstream can move
+# underneath it. The upstream edits it needs are the route (patch 0011) and the
+# sidenav entry (patch 0013).
+#
+# A hard failure for the same reason: patch 0011 makes app.routes.ts import
+# @app/modules/admin, so a missing directory here surfaces as a TypeScript
+# error a long way from its cause.
+if [[ -d "$CFG/admin" ]]; then
+    mkdir -p "$DST/src/app/modules/admin"
+    cp -r "$CFG"/admin/. "$DST/src/app/modules/admin/"
+    rm -f "$DST/src/app/modules/admin/README.md"
+    echo "    staged the registration console ($(find "$CFG/admin" -name '*.ts' | wc -l) files)"
+else
+    echo "    ERROR: $CFG/admin is missing, and patch 0011 routes /admin to it."
+    exit 1
+fi
+
 # 2b. the CAIOS strings
 #
 # Deep-merged over upstream's en.json rather than patched into it. en.json is a

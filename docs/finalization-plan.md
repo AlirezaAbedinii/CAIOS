@@ -17,7 +17,7 @@ finishing.
 | 1 | Portal with services underneath: OSCAR and serverless | Built and working | — |
 | 2 | Two use cases, one low code and one high code | Both work; both sit behind the catalogue | T1 |
 | 3 | "Not included in the Demo Version" for other services | **Unbuilt.** The phrase is nowhere in the repository | T4 |
-| 4 | Registration service: form and admin console | **Unbuilt.** Deferred by decision — demo accounts instead | T6 (optional) |
+| 4 | Registration service: form and admin console | **Built 2026-09-04** | T6 |
 | 5 | HTTP instead of HTTPS | **Platform ready; switch held on the proxy VM** | T5 |
 | 6 | No licensing problem re: Europe and AI4OS | Upstream is clean. **Two problems are ours** | T3 |
 | 7 | Identify potential improvements | Written up; no implementation | — |
@@ -437,11 +437,40 @@ four places; PAPI compares it character by character and a mismatch is a silent
 
 **Difficulty.** Medium-high, and the riskiest change here.
 
-### T6 — Registration and admin console *(optional)*
+### T6 — Registration and admin console
 
-Deferred by decision on 2026-09-02: demo accounts with passwords are acceptable,
-and this is only built if time allows. `researcher`, `site_a`, `site_b` and
-`site_c` already exist.
+**Status 2026-09-04: BUILT.** Checklist item 4 is no longer unbuilt. A stranger
+can register at the Keycloak form, sees a waiting room in the dashboard, and an
+administrator approves them from `/admin` in one click.
+
+Three stages, each committed and verified:
+
+| | What | Proof |
+|---|---|---|
+| **T6.0** | Self-registration on; a service account; `platform-admin` holding `ap-d` | live realm, existing logins unaffected |
+| **T6.1** | The approval service, `/registration/*` on the API hostname | `scripts/check-registration.sh`, green end to end |
+| **T6.2** | The `/admin` console, the sidenav entry, and the "waiting for approval" page | build + browser |
+
+The design decision the rest rests on: **"pending" is not stored anywhere.** A
+pending user is a realm user holding no `access:<vo>:<level>` role. Approval is
+one role assignment, denial is one disable, and Keycloak stays the only thing
+that knows anything. D-70 to D-72.
+
+**Found on the way, and fixed.** A user with no access role made PAPI answer
+HTTP 500 — `get_highest_level()` returns `None` and upstream hands it to
+`AI4OS_LEVELS.index()`. It had never fired because every account until now was
+created by the bootstrap script with a role already attached; self-registration
+produces exactly that user, so the most likely person to reach that code path
+was getting the least useful answer the platform can give. Patch `0018`.
+
+**What it does not do.** No email anywhere — there is no SMTP server, so
+verification is off and nobody is notified of anything. An approver has to look
+at the page. For a demo whose approver is one person, that is the honest
+trade rather than a half-built notification system.
+
+*Original scope note, kept for the record:* deferred on 2026-09-02 on the basis
+that demo accounts with passwords were acceptable. `researcher`, `site_a`,
+`site_b` and `site_c` still exist and still work.
 
 If built: access is a single realm role (`access:vo.caios.ca:ap-u`), so approval
 is one role assignment. Keycloak gets `registrationAllowed: true` and an
@@ -511,8 +540,9 @@ part that mattered.
 4. T3 — licensing, LICENSE/NOTICE, AI4OS references — **done**
 5. T4 — every control tested; unavailable ones disabled or removed — **done**
 6. T5 — HTTP switch — **plumbing done; flip held on `docs/nginx-proxy.md`**
-7. **T7 — availability and preflight** ← next
-8. T8 — demo script, read-throughs, record
+7. T6 — registration and admin console — **done**
+8. **T7 — availability and preflight** ← next
+9. T8 — demo script, read-throughs, record
 
 Phase R runs alongside, whenever the above is blocked on someone else.
 

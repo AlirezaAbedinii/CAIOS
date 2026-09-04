@@ -581,6 +581,48 @@ unavailable in insecure contexts — but the bundle carries
 `angular-oauth2-oidc`'s pure-JavaScript SHA-256 and calls `subtle.digest`
 nowhere. `crypto.getRandomValues`, which it does use, works on HTTP.
 
+### `ai4-dashboard/0011-admin-route.patch`
+
+Routes `/admin` to the registration console, which is staged from
+`configs/dashboard/admin/` by `scripts/build-dashboard.sh` — the same
+arrangement as the home page and patch `0004`, and for the same reason: it
+creates only new files, so there is nothing upstream can move underneath it.
+
+**No route guard, deliberately.** Every call the page makes requires
+`access:<vo>:ap-d` at the approval service. A guard here would be a second
+place where "who may approve" is decided, and two places can disagree. A
+non-administrator who types the URL gets a page that cannot load anything,
+which is the correct outcome reached the correct way.
+
+### `ai4-dashboard/0012-pending-approval.patch`
+
+**The waiting room.** Since T6 anybody can register, so the most common visitor
+to `/forbidden` is now somebody who has just signed up — and "You don't have
+the rights to do that!" tells them nothing they can act on.
+
+`ForbiddenComponent` renders a different panel when the signed-in account holds
+no access level. That is read from the token the browser already has:
+`AuthService` sets `isAuthenticated` only when the token carries an
+`access:<vo>:<level>` role, so false-while-signed-in *is* the pending state. No
+extra request, and no second opinion about who somebody is.
+
+The original panel is untouched for every other case.
+
+### `ai4-dashboard/0013-admin-sidenav.patch`
+
+A sidenav entry for the console, shown only to an account holding
+`access:<vo>:ap-d` — the same role the approval API requires, so the menu and
+the service agree by construction rather than by two lists that can drift.
+`isDeveloper` was already parsed from the token by `AuthService`; this only
+carries it into the sidenav the way `isAuthorized` and `isProjectMember`
+already were.
+
+**Hidden rather than disabled**, which is the opposite of the choice made in
+patch `0008` for `try-me` and `batch`. Those are platform capabilities this
+deployment cannot run, and saying so is honest. This is a capability the
+*viewer* does not have, and advertising it to every researcher would only
+invite a click that goes nowhere.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

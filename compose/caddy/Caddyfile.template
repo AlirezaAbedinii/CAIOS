@@ -128,7 +128,21 @@ ${CAIOS_ALT_SCHEME}://${CAIOS_DASHBOARD_HOST} {
 ${CAIOS_SCHEME}://${CAIOS_API_HOST} {
 	${CAIOS_TLS}
 	encode gzip
-	reverse_proxy 127.0.0.1:8000
+
+	# Registration approvals (T6). A separate container, but the same hostname
+	# and therefore the same browser origin — so the dashboard needs no second
+	# CORS entry, and the control-plane certificate needs no fifth SAN.
+	#
+	# NOT handle_path: the prefix is kept, so the service's routes are the same
+	# strings here, in the code and in a log line. PAPI has nothing under
+	# /registration, so there is nothing to collide with.
+	handle /registration/* {
+		reverse_proxy 127.0.0.1:8090
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
 }
 
 ${CAIOS_ALT_SCHEME}://${CAIOS_API_HOST} {

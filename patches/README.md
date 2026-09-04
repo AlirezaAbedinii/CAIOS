@@ -668,6 +668,36 @@ than merely a safe one: a deployment that is not running holds no GPU. The
 guard the crash was hiding — no more than two GPUs per user — still works, and
 `tests/test_failed_deployments.py` asserts both halves.
 
+### `ai4-papi/0018-pending-account-is-not-a-crash.patch` — pinned to `e80a2b7`
+
+**A user with no access role is a state, not an error.** T6.
+
+`get_highest_level()` returns `None` when a token carries no
+`access:<vo>:<level>` role, and `check_authorization` passes that straight to
+`AI4OS_LEVELS.index()`:
+
+```
+ValueError: None is not in list
+```
+
+which reaches the user as a bare HTTP 500 and "Internal Server Error".
+
+It never fired before T6 because every account was created by
+`scripts/keycloak-bootstrap.sh` with a role already attached. Self-registration
+is the entire point of T6 and it produces precisely this user: someone who
+signed up, can sign in, and is waiting for approval. **The single most likely
+person to reach this code path was getting the least useful answer the platform
+can give** — and the dashboard could not tell it apart from a real outage,
+which is what "pending approval" has to be distinguishable from.
+
+401, matching the insufficient-level branch immediately below it, so nothing
+that already handles that has to learn a second status code.
+
+Access control was never actually bypassed: the deployment *list* endpoint
+returns 200 with `[]` because it is scoped to the caller and a new user owns
+nothing, and every endpoint that creates, reads or deletes a deployment calls
+`check_authorization` and therefore crashed rather than allowing anything.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and

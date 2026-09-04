@@ -1,0 +1,6 @@
+# Pinned. The platform must build with no surprises and, once built, demo with
+# the internet unplugged — so nothing here is allowed to drift under us.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+pyjwt[crypto]==2.10.1

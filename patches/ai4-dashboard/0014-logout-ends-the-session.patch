@@ -1,0 +1,75 @@
+--- a/src/app/core/services/auth/auth.service.ts
++++ b/src/app/core/services/auth/auth.service.ts
+@@ -284,12 +284,9 @@
+     }
+ 
+     logout() {
+-        if (this.oauthService.hasValidIdToken()) {
+-            this.oauthService.logOut(true);
+-        }
+-        this.router.navigateByUrl('/catalog/modules');
+-
+         // save 'on boarding library' and 'access level' related variables
++        //
++        // [CAIOS] Moved above the sign-out below, which now navigates away.
+         const variables: Record<string, string | null> = {};
+         for (const key of Object.keys(localStorage)) {
+             if (key.endsWith('Tour') || key.includes('accessLevel')) {
+@@ -297,6 +294,35 @@
+             }
+         }
+ 
++        if (this.oauthService.hasValidIdToken()) {
++            // [CAIOS] No `true` here, and that one argument was the whole bug.
++            //
++            // logOut(true) means "do not redirect to the provider's logout
++            // URL". It forgets the tokens in THIS TAB and leaves the Keycloak
++            // session cookie completely untouched. Signing in again then goes
++            // to Keycloak, finds a live SSO session, and comes straight back
++            // with a fresh code — so "log out" followed by "log in" silently
++            // returns the same user and the login form is never shown.
++            //
++            // Since T6 that is most of the point: demonstrating a registration
++            // means signing in as a new account and then as the administrator,
++            // and neither was possible without clearing the browser.
++            //
++            // Without the argument this performs RP-initiated logout — it
++            // reads the id token for id_token_hint, clears its own keys, and
++            // navigates to Keycloak's end_session_endpoint, which ends the
++            // session at the source and returns here.
++            //
++            // It must run BEFORE localStorage.clear() below. OAuthStorage is
++            // localStorage (app.providers.ts), so clearing first would take the
++            // id token with it and leave Keycloak holding a logout request it
++            // cannot attribute to anybody.
++            this.oauthService.logOut();
++        } else {
++            // Nothing to end at Keycloak; just leave the page we are on.
++            this.router.navigateByUrl('/catalog/modules');
++        }
++
+         // clear all local storage variables
+         localStorage.clear();
+ 
+--- a/src/app/core/services/auth/auth.config.ts
++++ b/src/app/core/services/auth/auth.config.ts
+@@ -7,6 +7,19 @@
+     // URL of the SPA to redirect the user to after login
+     redirectUri: window.location.origin,
+ 
++    // [CAIOS] And where Keycloak returns to after ending the session.
++    //
++    // Stated rather than left to the library's fallback, because the fallback
++    // is a configuration flag whose default has changed between releases — and
++    // when it is missing, Keycloak does not redirect back at all: it shows its
++    // own "you are logged out" page, which is somebody else's branding in the
++    // middle of a demo.
++    //
++    // The same value as redirectUri above, which the realm already accepts, so
++    // this needs no new entry in post.logout.redirect.uris beyond the one
++    // scripts/keycloak-bootstrap.sh registers for both schemes.
++    postLogoutRedirectUri: window.location.origin,
++
+     // The SPA's id. The SPA is registerd with this id at the auth-server
+     clientId: 'ai4-dashboard',
+ 

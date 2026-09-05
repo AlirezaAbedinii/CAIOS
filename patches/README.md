@@ -623,6 +623,44 @@ deployment cannot run, and saying so is honest. This is a capability the
 *viewer* does not have, and advertising it to every researcher would only
 invite a click that goes nowhere.
 
+### `ai4-dashboard/0014-logout-ends-the-session.patch`
+
+**Signing out did not sign you out.** Reported 2026-09-05: log out, log in
+again, and the dashboard silently returns the same user without ever showing
+the login form.
+
+`logout()` called `this.oauthService.logOut(true)`, and that argument is
+`noRedirectToLogoutUrl`. It forgets the tokens **in the current tab** and
+leaves the Keycloak session cookie completely untouched. The next
+`initLoginFlow()` goes to Keycloak, finds a live SSO session, and returns
+immediately with a fresh authorization code.
+
+Since T6 that is not a nuisance, it is a blocker: demonstrating registration
+means signing in as a new account and then as the administrator, and neither
+was possible without clearing browser data.
+
+Dropping the argument performs RP-initiated logout — the id token goes out as
+`id_token_hint`, and Keycloak's `end_session_endpoint` ends the session at the
+source.
+
+**Two orderings that matter**, both of which are why this is more than a
+one-character change:
+
+- `OAuthStorage` is `localStorage` (`app.providers.ts`), so `logOut()` has to
+  run *before* the `localStorage.clear()` further down. Clearing first takes
+  the id token with it and leaves Keycloak holding a logout request it cannot
+  attribute to anybody.
+- The variables the method preserves are now read first, because `logOut()`
+  navigates away, and `router.navigateByUrl` is now the `else` branch rather
+  than a statement racing a redirect that was already issued.
+
+`postLogoutRedirectUri` is stated in `auth.config.ts` rather than left to the
+library's fallback, whose default has moved between releases. Without it
+Keycloak does not return to the dashboard at all — it shows its own
+"you are logged out" page, which is somebody else's branding in the middle of a
+demo. The value is the same origin as `redirectUri`, which the realm already
+accepts.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

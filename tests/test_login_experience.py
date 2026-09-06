@@ -1,11 +1,13 @@
-"""Signing out signs you out, and what a new account is first told.
+"""Signing out signs you out, and what a new account is told.
 
-Two faults reported on 2026-09-05, after the first real person registered:
+Three faults reported on 2026-09-05 after the first real person registered:
 
   * **Logging out did not log you out.** Log out, log in, and the dashboard
     silently returned the same user without ever showing the login form.
   * The access-level popup — the first sentence a new account reads — linked to
     AI4EOSC's documentation.
+  * The profile overview told an unapproved account to "ask support", linked to
+    AI4EOSC's help desk, who cannot help anybody with this platform.
 
 Offline: these read the repository. The live half of the first one is a browser,
 and the Keycloak half was verified with a full authorization-code flow.
@@ -104,7 +106,6 @@ def test_navigation_does_not_race_the_redirect(root):
     assert "+            this.router.navigateByUrl('/catalog/modules');" in t
 
 
-
 # --- what a new account is told --------------------------------------------
 #
 # Both strings are deep-merged over upstream's en.json, so neither needs a
@@ -127,6 +128,35 @@ def test_the_access_popup_sends_nobody_off_the_platform(root):
         "a new account's popup should say what happens next, which is that "
         "somebody has to approve it"
     )
+
+
+def test_the_profile_does_not_send_an_unapproved_user_to_someone_elses_support(root):
+    """Upstream: 'Please <a ...>ask support</a> for the request link of your
+    virtual organisation.' That support desk is AI4EOSC's, it cannot help
+    anybody with this platform, and 'the request link of your virtual
+    organisation' describes a process CAIOS does not have."""
+    overview = _strings(root)["PROFILE"]["OVERVIEW-TAB"]
+    desc = overview["UNAUTHORIZED-DESC"]
+    assert "<a " not in desc and "href" not in desc
+    assert "ask support" not in desc.lower()
+    assert "virtual organisation" not in desc.lower()
+    assert "approv" in desc.lower()
+
+
+def test_both_overrides_actually_target_upstream_keys(root):
+    """A merge-over only works if the key path matches exactly; a typo
+    silently adds a new key nobody reads and leaves the original showing."""
+    upstream = root / "build" / "ai4-dashboard" / "src" / "assets" / "i18n" / "en.json"
+    if not upstream.is_file():
+        pytest.skip("build/ai4-dashboard absent — run scripts/apply-patches.sh")
+    base = json.loads(upstream.read_text())
+    ours = _strings(root)
+    for key in ("ACCESS-MODAL-TITLE", "ACCESS-MODAL-BODY"):
+        assert key in base["PROFILE"], f"upstream no longer has PROFILE.{key}"
+        assert key in ours["PROFILE"]
+    for key in ("UNAUTHORIZED", "UNAUTHORIZED-DESC"):
+        assert key in base["PROFILE"]["OVERVIEW-TAB"]
+        assert key in ours["PROFILE"]["OVERVIEW-TAB"]
 
 
 def test_the_popup_keeps_the_interpolation_it_is_given(root):

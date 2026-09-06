@@ -133,9 +133,13 @@
         "ADMINISTRATION": "Administration",
         "ADMIN": "Registration requests"
     },
-    "_comment_profile": "The access-level popup is the first sentence a newly-registered account reads - it fires whenever the level changes, which since T6 includes the moment somebody signs up. Upstream's version ends by linking to docs.ai4os.eu, a page about AI4EOSC's access levels, which is not this platform. Deep-merged over en.json, so no patch is needed. The level code is kept because app.component.ts interpolates it, but the sentence no longer leaves it to the reader to work out what it means.",
+    "_comment_profile": "Two upstream strings that send a CAIOS user to somebody else's documentation. Both are deep-merged over en.json, so neither needs a patch. ACCESS-MODAL-BODY is the popup that appears whenever the access level changes - which since T6 includes the moment somebody registers, making it the first sentence a new user reads. UNAUTHORIZED-DESC is what the profile overview says to an account with no VO, which is exactly what a pending account is. Both linked to docs.ai4os.eu: the first to a page about AI4EOSC's access levels, the second to AI4EOSC's support desk, who cannot help anybody with this platform. Rewritten to say what is true here and to name no level codes, which mean nothing to a researcher.",
     "PROFILE": {
         "ACCESS-MODAL-TITLE": "Your access to CAIOS changed",
-        "ACCESS-MODAL-BODY": "Your account now has the access level <b>{{currentHighestRole}}</b>. If you have just registered, your account is waiting for a CAIOS administrator to approve it \u2014 you will be able to use the platform once that happens."
+        "ACCESS-MODAL-BODY": "Your account now has the access level <b>{{currentHighestRole}}</b>. If you have just registered, your account is waiting for a CAIOS administrator to approve it \u2014 you will be able to use the platform once that happens.",
+        "OVERVIEW-TAB": {
+            "UNAUTHORIZED": "Your account is not yet approved",
+            "UNAUTHORIZED-DESC": "A CAIOS administrator reviews new accounts by hand. Once yours is approved, sign in again and the platform will be open to you."
+        }
     }
 }

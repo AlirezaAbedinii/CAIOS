@@ -1,13 +1,14 @@
-"""Signing out signs you out.
+"""Signing out signs you out, and what a new account is first told.
 
-Reported on 2026-09-05, after the first real person registered: log out, log
-in, and the dashboard silently returned the same user without ever showing the
-login form.
+Two faults reported on 2026-09-05, after the first real person registered:
 
-Offline: these read the repository. The live half is a browser, and the
-Keycloak half was verified with a full authorization-code flow — with the
-session cookie alive the authorization endpoint answers 302-with-code, and
-after end_session it serves the login form.
+  * **Logging out did not log you out.** Log out, log in, and the dashboard
+    silently returned the same user without ever showing the login form.
+  * The access-level popup — the first sentence a new account reads — linked to
+    AI4EOSC's documentation.
+
+Offline: these read the repository. The live half of the first one is a browser,
+and the Keycloak half was verified with a full authorization-code flow.
 """
 
 import json
@@ -102,3 +103,34 @@ def test_navigation_does_not_race_the_redirect(root):
     assert "+        } else {" in t
     assert "+            this.router.navigateByUrl('/catalog/modules');" in t
 
+
+
+# --- what a new account is told --------------------------------------------
+#
+# Both strings are deep-merged over upstream's en.json, so neither needs a
+# patch. Both are asserted by content rather than by banning a domain: the
+# footer's SIDENAV.DOCUMENTATION link to docs.ai4os.eu is deliberate and
+# recorded, because AI4OS is the stack this platform is built on.
+
+
+def test_the_access_popup_sends_nobody_off_the_platform(root):
+    """The first sentence a newly-registered account reads.
+
+    It fires whenever the access level changes, which since T6 includes the
+    moment somebody signs up — so its link to AI4EOSC's documentation was
+    reaching the people least able to make sense of it.
+    """
+    body = _strings(root)["PROFILE"]["ACCESS-MODAL-BODY"]
+    assert "<a " not in body and "href" not in body, "the popup still links out"
+    assert "ai4os" not in body.lower() and "ai4eosc" not in body.lower()
+    assert "approve" in body.lower(), (
+        "a new account's popup should say what happens next, which is that "
+        "somebody has to approve it"
+    )
+
+
+def test_the_popup_keeps_the_interpolation_it_is_given(root):
+    """app.component.ts passes currentHighestRole into the translation. Drop
+    the placeholder and the sentence silently loses its subject."""
+    body = _strings(root)["PROFILE"]["ACCESS-MODAL-BODY"]
+    assert "{{currentHighestRole}}" in body

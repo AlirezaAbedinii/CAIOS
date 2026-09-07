@@ -208,6 +208,53 @@ DSTATE="$(python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('stat
     || bad "a denied account can still sign in"
 
 echo
+echo "=== 6. The browser's path, which curl does not exercise ==="
+
+# Everything above sets the Authorization header by hand. A browser does not:
+# it relies on angular-oauth2-oidc attaching the token, and on the approval
+# service answering a CORS preflight. Both are invisible to every check above,
+# and both broke the console on 2026-09-07 while this script stayed green.
+
+DASH="${SCHEME}://${CAIOS_DASHBOARD_HOST}"
+MAIN_JS="$(c "$DASH/" | grep -oE 'main-[A-Za-z0-9_-]+\.js' | head -1)"
+if [[ -z "$MAIN_JS" ]]; then
+    bad "could not find the dashboard's main bundle"
+else
+    # The interceptor attaches the token only to URLs starting with one of
+    # resourceServer.allowedUrls. Upstream sets that to the PAPI base alone,
+    # which does not cover /registration — so the console called it with no
+    # Authorization header, got FastAPI's 403 "Not authenticated", and the
+    # dashboard's error interceptor turned that into a Forbidden page.
+    #
+    # Downloaded first, then searched. NOT `curl ... | grep -q`: under the
+    # `set -o pipefail` at the top of this script that construct reports
+    # failure on SUCCESS. grep -q exits the moment it matches, curl dies of
+    # SIGPIPE writing to the closed pipe, and pipefail returns curl's status —
+    # so the check fails precisely when the thing it looks for is present.
+    c "$DASH/$MAIN_JS" -o "$WORK/main.js"
+    if grep -q "/registration" "$WORK/main.js"; then
+        ok "the bundle knows the token may go to /registration ($MAIN_JS)"
+    else
+        bad "the dashboard bundle has no /registration in its allowed URLs"
+        note "patch 0015. Without it /admin ejects the administrator to /forbidden."
+    fi
+fi
+
+PREFLIGHT="$(curl -sk -X OPTIONS -D- -o /dev/null --max-time 30 \
+    -H "Origin: $DASH" \
+    -H "Access-Control-Request-Method: POST" \
+    -H "Access-Control-Request-Headers: authorization,content-type" \
+    "$API/registration/approve/preflight-probe" || true)"
+if grep -qi "access-control-allow-origin: *$DASH" <<<"$PREFLIGHT" \
+   && grep -qi "access-control-allow-headers:.*[Aa]uthorization" <<<"$PREFLIGHT" \
+   && grep -qi "access-control-allow-methods:.*POST" <<<"$PREFLIGHT"; then
+    ok "the approval service answers the browser's preflight for POST"
+else
+    bad "the CORS preflight would block Approve and Deny in a browser"
+    note "CAIOS_CORS_ORIGINS in compose/docker-compose.yml must list $DASH"
+fi
+
+echo
 if [[ "$FAILED" == "0" ]]; then
     echo "Registration lifecycle OK — the throwaway account has been deleted."
 else

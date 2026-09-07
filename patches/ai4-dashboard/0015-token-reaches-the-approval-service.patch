@@ -1,0 +1,31 @@
+--- a/src/app/core/services/app-config/app-config.service.ts
++++ b/src/app/core/services/app-config/app-config.service.ts
+@@ -16,8 +16,27 @@
+             (config) => {
+                 this.appConfig = config;
+                 if (this.appConfig.apiURL && this.appConfig.apiURL !== '') {
++                    // [CAIOS] The platform serves TWO APIs on the API host.
++                    //
++                    // angular-oauth2-oidc's interceptor attaches the bearer
++                    // token only to URLs that start with one of these, so a
++                    // backend missing from this list is called with no
++                    // Authorization header at all. FastAPI's HTTPBearer then
++                    // answers 403 "Not authenticated", and the dashboard's own
++                    // error interceptor turns any 403 into a redirect to
++                    // /forbidden — so the administrator opening /admin was
++                    // thrown onto the Forbidden page, which reads as a
++                    // permissions problem and is nothing of the kind.
++                    //
++                    // The approval service (T6) lives at /registration on the
++                    // same host, alongside PAPI at /v1. Derived from apiURL
++                    // rather than configured separately, exactly as
++                    // RegistrationService derives it, because two addresses
++                    // that must agree are two addresses that can disagree.
++                    const apiURL: string = this.appConfig.apiURL;
+                     oauthConfig.resourceServer.allowedUrls = [
+-                        this.appConfig.apiURL,
++                        apiURL,
++                        apiURL.replace(/\/v1\/?$/, '') + '/registration',
+                     ];
+                 }
+             }

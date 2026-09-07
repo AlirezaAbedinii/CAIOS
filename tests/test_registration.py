@@ -419,3 +419,41 @@ def test_every_string_the_console_uses_is_defined(root):
     for key in sorted(set(re.findall(r"'(SIDENAV\.ADMIN[A-Z-]*)'", sidenav))):
         block, _, leaf = key.partition(".")
         assert leaf in strings.get(block, {}), f"{key} is not defined"
+
+
+def test_the_browser_actually_sends_a_token_to_the_approval_service(root):
+    """The bug this exists to prevent, found by opening /admin as the
+    administrator and being thrown onto the Forbidden page.
+
+    angular-oauth2-oidc's interceptor attaches the bearer token only to URLs
+    beginning with one of `resourceServer.allowedUrls`. Upstream sets that to
+    `[apiURL]`, which is the PAPI base ending in /v1 — so every call to
+    /registration went out with no Authorization header, FastAPI's HTTPBearer
+    answered 403 "Not authenticated", and the dashboard's own error interceptor
+    turned that 403 into a redirect to /forbidden. It reads as a permissions
+    problem and is nothing of the kind.
+
+    `scripts/check-registration.sh` did not catch it because curl sets the
+    header by hand. Only a browser exercises this.
+    """
+    patch = (root / "patches" / "ai4-dashboard"
+             / "0015-token-reaches-the-approval-service.patch").read_text()
+    assert "allowedUrls" in patch
+    assert "'/registration'" in patch
+
+
+def test_the_two_places_that_derive_the_url_agree(root):
+    """RegistrationService builds the base it calls; app-config.service builds
+    the base the token is allowed to reach. If those two ever disagree, every
+    request is unauthenticated again — and the symptom is a Forbidden page,
+    which points nowhere near the cause."""
+    service = (root / ADMIN_DIR / "services" / "registration.service.ts").read_text()
+    patch = (root / "patches" / "ai4-dashboard"
+             / "0015-token-reaches-the-approval-service.patch").read_text()
+
+    derivation = r"replace(/\/v1\/?$/, '') + '/registration'"
+    assert derivation in service, "RegistrationService changed how it builds the URL"
+    assert derivation in patch, (
+        "app-config.service.ts no longer derives the same base as "
+        "RegistrationService, so the token will not be attached to it"
+    )

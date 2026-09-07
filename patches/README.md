@@ -661,6 +661,32 @@ Keycloak does not return to the dashboard at all — it shows its own
 demo. The value is the same origin as `redirectUri`, which the realm already
 accepts.
 
+### `ai4-dashboard/0015-token-reaches-the-approval-service.patch`
+
+**The administrator opening `/admin` was thrown onto the Forbidden page.**
+Found 2026-09-07 by doing it in a browser.
+
+`angular-oauth2-oidc`'s interceptor attaches the bearer token only to URLs that
+begin with one of `resourceServer.allowedUrls`, and upstream sets that to
+`[apiURL]` — the PAPI base, ending in `/v1`. The platform now serves a second
+API on the same host at `/registration` (T6, D-71), which matches no prefix in
+that list, so every call went out **with no Authorization header at all**.
+FastAPI's `HTTPBearer` answered `403 Not authenticated`, and the dashboard's own
+error interceptor turns any 403 into a redirect to `/forbidden`.
+
+So the symptom — a permissions page — pointed at the one thing that was not
+wrong. The account had `ap-d`; the request simply never carried it.
+
+The base is derived from `apiURL` rather than configured separately, exactly as
+`RegistrationService` derives the URL it calls, because two addresses that must
+agree are two addresses that can disagree. A test asserts both derivations are
+the same string.
+
+**Why the smoke test missed it.** `scripts/check-registration.sh` sets the
+Authorization header itself, which is what curl does and what a browser does
+not. The whole class of fault lives between the token and the request, and only
+a browser exercises it.
+
 ### `ai4-nomad_tests/0001-namespaces.patch` — pinned to `HEAD` (unversioned repo)
 
 `ai4_nomad_tests/conf.py` and `tests/node/cpu.py:83` hardcode the namespace list

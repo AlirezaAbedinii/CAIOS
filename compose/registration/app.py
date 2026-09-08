@@ -63,6 +63,19 @@ ADMIN_API = f"{SCHEME}://{AUTH_HOST}/admin/realms/{REALM}"
 ROLE_USER = f"access:{VO}:ap-u"
 ROLE_ADMIN = f"access:{VO}:ap-d"
 
+# And the group, which is a separate thing OSCAR insists on.
+#
+# OSCAR picks the claim it authorises on by the NAME OF THE REALM: an issuer
+# containing /realms/egi means `entitlements`, /realms/ai4eosc means realm
+# roles, and anything else — ours is /realms/caios — means `group_membership`.
+# So the role granted above is invisible to OSCAR, and an approved account
+# without this group is refused by it with 401 on every request.
+#
+# That is not a quiet failure. The Inference page polls every 5 seconds, so it
+# shows an error banner every 5 seconds for as long as the page is open.
+# Created and mapped by scripts/keycloak-bootstrap.sh.
+OSCAR_GROUP = os.environ.get("CAIOS_OSCAR_GROUP", "oscar-users")
+
 # Same shape as PAPI's CORS list: an origin is scheme-exact, and a missing one
 # is a wall the browser reports as a generic failure with nothing in our log.
 CORS_ORIGINS = [
@@ -195,6 +208,28 @@ def _access_levels(user_id: str) -> list[str]:
     return [r["name"].rsplit(":", 1)[1] for r in _held_access_roles(user_id)]
 
 
+def _oscar_group() -> dict:
+    """The oscar-users group, or a refusal that says how to create it.
+
+    Looked up by name every time rather than cached: this is called twice a
+    week at most, and a cached id survives a realm rebuild that the group
+    itself does not.
+    """
+    groups = _kc("GET", "/groups", params={"search": OSCAR_GROUP}).json()
+    for g in groups:
+        if g.get("name") == OSCAR_GROUP:
+            return g
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"The {OSCAR_GROUP!r} group does not exist in this realm, so an "
+            "approved account would still be refused by the serverless "
+            "inference service. Run scripts/keycloak-bootstrap.sh, which "
+            "creates the group and the claim mapper, then approve again."
+        ),
+    )
+
+
 def _assignable_role(user_id: str, name: str) -> dict:
     """The representation of a realm role this user does not have yet.
 
@@ -300,6 +335,13 @@ def approve(user_id: str, _: dict = Depends(require_admin)) -> Account:
             f"/users/{user_id}/role-mappings/realm",
             json=[_assignable_role(user_id, ROLE_USER)],
         )
+
+    # Access to the platform is the role; access to serverless inference is the
+    # group. Granting one without the other produces an account that works
+    # everywhere except the Inference page, where it fails every 5 seconds.
+    # PUT is idempotent, so a second approval is still harmless.
+    _kc("PUT", f"/users/{user_id}/groups/{_oscar_group()['id']}")
+
     return _describe(_kc("GET", f"/users/{user_id}").json())
 
 
@@ -330,5 +372,13 @@ def deny(user_id: str, caller: dict = Depends(require_admin)) -> Account:
     held = _held_access_roles(user_id)
     if held:
         _kc("DELETE", f"/users/{user_id}/role-mappings/realm", json=held)
+
+    # And the group, so a denied account is denied everywhere rather than
+    # everywhere except OSCAR. Tolerated if the group is absent: denial must
+    # not be the thing that fails when a realm is half-built.
+    try:
+        _kc("DELETE", f"/users/{user_id}/groups/{_oscar_group()['id']}")
+    except HTTPException:
+        pass
     _kc("PUT", f"/users/{user_id}", json={"enabled": False})
     return _describe(_kc("GET", f"/users/{user_id}").json())

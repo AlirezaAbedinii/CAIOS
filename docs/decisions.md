@@ -1116,3 +1116,58 @@ fired because every account until now was created with a role already attached.
 Self-registration produces exactly that user, so the most likely person to meet
 that code path was getting the least useful answer the platform can give. Patch
 `0018`.
+
+**D-73 — An error that cannot be serialised is an error that never happened.**
+D-57 recorded in August that "PAPI cannot serialise an OSCAR error so every
+OSCAR failure reaches the user as a bare 500". It was recorded and not fixed,
+and on 2026-09-08 it cost most of a debugging session — because it was hiding a
+completely different fault.
+
+`raise_for_status` put the exception **object** in `HTTPException(detail=...)`.
+FastAPI raised `TypeError: Object of type HTTPError is not JSON serializable`
+*inside its own exception handler*, returned a bare 500, and **destroyed the
+original error on the way out**. The only surviving copy was PAPI's traceback,
+which nobody looking at a dashboard can reach.
+
+Two rules follow. An exception object is never a `detail`; `str(e)` is. And an
+upstream failure is **502**, not 500 — partly because that is what happened,
+and partly because the dashboard ejects any 401 or 403 to `/forbidden`, which
+on a page that polls every five seconds is not an error message but being
+thrown off the page repeatedly.
+
+**D-74 — Anything configured by hand on the live realm is already lost.**
+OSCAR chooses the claim it authorises on by a substring match on the issuer
+URL: `/realms/egi` means `entitlements`, `/realms/ai4eosc` means realm roles,
+and anything else — ours is `/realms/caios` — means `group_membership`. So the
+`access:<vo>:<level>` role every CAIOS token carries is invisible to OSCAR, and
+a group is required as well.
+
+The `oscar-users` group, its claim mapper and the four demo users' membership
+were created **by hand** during Stage O2 and written up in `docs/oscar-plan.md`
+as prose. Nothing put them in `configs/` or in a script. Two consequences, both
+real by the time they were found:
+
+- every account created afterwards — `platform-admin` from T6 included, and
+  every self-registered user — was refused by OSCAR with 401;
+- rebuilding the realm from its template would have silently removed serverless
+  inference from everybody, with no test to notice.
+
+`scripts/keycloak-bootstrap.sh` now creates the group and the mapper and adds
+every account it manages; the approval service adds it on approve and removes
+it on deny. The general rule: a thing that exists only in a running system is
+not configuration, it is an outage waiting for the next rebuild.
+
+**D-75 — `cmd | grep -q` is banned in scripts that set `pipefail`.**
+`grep -q` exits the moment it matches, the writer dies of SIGPIPE, and
+`pipefail` returns the *writer's* status — so the check fails precisely when
+the thing it looks for is present. It cost two debugging rounds in one day, in
+`check-registration.sh` and then in `keycloak-bootstrap.sh`. Capture the output
+first and match a here-string. `tests/test_oscar_authorisation.py` enforces it,
+and found a third latent instance the moment it was written.
+
+**2026-09-08** — The Inference page's endless red banner, traced and fixed.
+Recorded D-73 to D-75. Two faults were stacked and the first hid the second for
+weeks: OSCAR was answering 401 to every account created since Stage O2, and
+PAPI was turning that — and every other OSCAR error — into a blank 500. The
+page polls every five seconds, which is why one unauthorised account produced
+an unending banner rather than a single error.

@@ -15,13 +15,13 @@ finishing.
 | # | Requirement | State | Task |
 |---|---|---|---|
 | 1 | Portal with services underneath: OSCAR and serverless | Built and working | — |
-| 2 | Two use cases, one low code and one high code | Both work; both sit behind the catalogue | T1 |
-| 3 | "Not included in the Demo Version" for other services | **Unbuilt.** The phrase is nowhere in the repository | T4 |
+| 2 | Two use cases, one low code and one high code | **Done 2026-09-02** (T1) | T1 |
+| 3 | "Not included in the Demo Version" for other services | **Done 2026-09-02** (T4) | T4 |
 | 4 | Registration service: form and admin console | **Built 2026-09-04** | T6 |
 | 5 | HTTP instead of HTTPS | **Platform ready; switch held on the proxy VM** | T5 |
-| 6 | No licensing problem re: Europe and AI4OS | Upstream is clean. **Two problems are ours** | T3 |
+| 6 | No licensing problem re: Europe and AI4OS | **Done 2026-09-02** (T3) — LICENSE, NOTICE, and every module's real licence | T3 |
 | 7 | Identify potential improvements | Written up; no implementation | — |
-| 8 | Demo video performable by test users | Script exists and has drifted | T8 |
+| 8 | Demo video performable by test users | Script exists and has drifted **further** — it predates the home page, registration and the LLM catalogue | T8 |
 | 9 | Acceptable availability | Two concrete gaps | T7 |
 | 10 | Agentic workflow / compute graph | Out of scope | — |
 | 11 | `pacslab.ca` / `caios-demo` subdomain | Out of scope, but designed for | T5 |

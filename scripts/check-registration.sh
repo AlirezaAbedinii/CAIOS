@@ -124,7 +124,11 @@ c -b "$WORK/cookies" -c "$WORK/cookies" -D "$WORK/reg.hdr" -o "$WORK/reg.html" \
     -d "password=$PASSWORD" -d "password-confirm=$PASSWORD" \
     "$ACTION" >/dev/null
 
-if head -1 "$WORK/reg.hdr" | grep -q "302"; then
+# Read first, then match. `head -1 … | grep -q` happens to work because head
+# exits after one line, but it is the same shape as the trap described in
+# section 6 and there is no reason to leave one of those lying around.
+REG_STATUS="$(head -1 "$WORK/reg.hdr")"
+if grep -q "302" <<<"$REG_STATUS"; then
     ok "registered as $USERNAME"
 else
     bad "registration was rejected"

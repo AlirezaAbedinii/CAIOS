@@ -1,0 +1,47 @@
+--- a/ai4papi/routers/v1/inference/oscar.py
++++ b/ai4papi/routers/v1/inference/oscar.py
+@@ -42,14 +42,41 @@
+         try:
+             r = func(*args, **kwargs)
+         except ValueError as e:
++            # [CAIOS] str(e), not e. See below — same fault, same fix.
+             raise HTTPException(
+                 status_code=400,
+-                detail=e,
++                detail=str(e),
+             )
+         except requests.exceptions.HTTPError as e:
++            # [CAIOS] An exception object is not JSON.
++            #
++            # Upstream puts the exception itself in `detail`. FastAPI then
++            # tries to serialise it and raises
++            #
++            #     TypeError: Object of type HTTPError is not JSON serializable
++            #
++            # inside the exception handler, so the response becomes a bare
++            # HTTP 500 "Internal Server Error" and the ORIGINAL error is
++            # destroyed on the way out. Every OSCAR failure of every kind
++            # arrived at the user as the same blank 500, and the one place the
++            # cause still existed was PAPI's traceback.
++            #
++            # The Inference page polls this every 5 seconds, so a single
++            # unauthorised account produced a red "Error calling the API"
++            # banner every 5 seconds, saying nothing, forever.
++            #
++            # 502 rather than 500 because that is what happened: an upstream
++            # service answered badly. It is also the difference between a
++            # snackbar and an ejection — the dashboard's error interceptor
++            # sends any 401 or 403 to /forbidden, which on a page that polls
++            # would throw the user off it every 5 seconds.
++            status = getattr(getattr(e, "response", None), "status_code", None)
+             raise HTTPException(
+-                status_code=500,
+-                detail=e,
++                status_code=502,
++                detail=(
++                    f"The serverless inference service (OSCAR) answered "
++                    f"{status if status else 'with an error'}: {e}"
++                ),
+             )
+ 
+         # Catch errors when the function itself does not raise errors but the response

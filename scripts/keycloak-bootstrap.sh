@@ -82,6 +82,78 @@ kc update "clients/${CLIENT_UUID}" -r "$REALM" \
 echo
 
 # ---------------------------------------------------------------------------
+# The OSCAR group, and the claim that carries it.
+#
+# OSCAR decides who may call it from a claim it picks BY THE NAME OF THE REALM:
+# an issuer containing /realms/egi means `entitlements`, /realms/ai4eosc means
+# realm roles, and anything else — ours is /realms/caios — means
+# `group_membership`. So the access:<vo>:<level> role every CAIOS token already
+# carries is invisible to OSCAR, and a group is required instead. D-57.
+#
+# This was set up by hand on the live realm during Stage O2 and never written
+# down as code. Two things followed, and both were found on 2026-09-08 by a
+# newly-registered user opening the Inference page:
+#
+#   * every account created since — platform-admin included — was refused by
+#     OSCAR with 401, and
+#   * rebuilding the realm from the template would have silently lost
+#     serverless inference for everybody, with no test to notice.
+#
+# It is idempotent, so it also repairs a realm that has drifted.
+# ---------------------------------------------------------------------------
+
+OSCAR_GROUP="oscar-users"
+
+echo "==> group ${OSCAR_GROUP}"
+GROUP_ID="$(kc get groups -r "$REALM" 2>/dev/null \
+    | python3 -c "
+import json, sys
+try:
+    print(next((g['id'] for g in json.load(sys.stdin) if g['name'] == '${OSCAR_GROUP}'), ''))
+except Exception:
+    print('')
+")"
+if [[ -z "$GROUP_ID" ]]; then
+    kc create groups -r "$REALM" -s "name=${OSCAR_GROUP}" >/dev/null
+    GROUP_ID="$(kc get groups -r "$REALM" | python3 -c "
+import json, sys
+print(next((g['id'] for g in json.load(sys.stdin) if g['name'] == '${OSCAR_GROUP}'), ''))
+")"
+    echo "     created"
+else
+    echo "     exists"
+fi
+
+echo "==> mapper: group_membership on the dashboard client"
+# full.path=false so the claim reads ["oscar-users"] and not ["/oscar-users"].
+# OSCAR compares the strings exactly; a leading slash refuses everybody.
+DASH_CLIENT_ID="$(kc get clients -r "$REALM" -q "clientId=caios-dashboard" \
+    --fields id --format csv --noquotes 2>/dev/null | tail -n1)"
+# Captured, not piped into `grep -q`. Under the `set -o pipefail` at the top of
+# this script that construct reports FAILURE ON SUCCESS: grep -q exits the
+# moment it matches, kcadm dies of SIGPIPE writing to the closed pipe, and
+# pipefail returns kcadm's status. The check then "finds" nothing and tries to
+# create a mapper that already exists.
+EXISTING_MAPPERS="$(kc get "clients/${DASH_CLIENT_ID}/protocol-mappers/models" \
+    -r "$REALM" 2>/dev/null || true)"
+if ! grep -q "oscar-group-membership" <<<"$EXISTING_MAPPERS"; then
+    kc create "clients/${DASH_CLIENT_ID}/protocol-mappers/models" -r "$REALM" \
+        -s "name=oscar-group-membership" \
+        -s "protocol=openid-connect" \
+        -s "protocolMapper=oidc-group-membership-mapper" \
+        -s "config.\"claim.name\"=group_membership" \
+        -s "config.\"full.path\"=false" \
+        -s "config.\"access.token.claim\"=true" \
+        -s "config.\"id.token.claim\"=true" \
+        -s "config.\"userinfo.token.claim\"=true" >/dev/null
+    echo "     created"
+else
+    echo "     exists"
+fi
+
+echo
+
+# ---------------------------------------------------------------------------
 # T6 — self-registration, and the service account that approves it.
 #
 # "Pending" is not a state we store anywhere. It is simply a realm user who
@@ -197,6 +269,12 @@ for entry in "${USERS[@]}"; do
     # level that can deploy.
     kc add-roles -r "$REALM" --uusername "$username" \
         --rolename "access:${VO}:${level}" >/dev/null 2>&1 || true
+
+    # And into oscar-users, or OSCAR refuses this account with 401 and the
+    # Inference page shows an error every 5 seconds. See the block above.
+    kc update "users/${uid}/groups/${GROUP_ID}" -r "$REALM" \
+        -s "realm=$REALM" -s "userId=${uid}" -s "groupId=${GROUP_ID}" \
+        -n >/dev/null 2>&1 || true
 
     printf '  %s  %-15s  %-6s  %s%s\n' "$action" "$username" "$level" "$password" "$generated"
 done

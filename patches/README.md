@@ -804,6 +804,44 @@ returns 200 with `[]` because it is scoped to the caller and a new user owns
 nothing, and every endpoint that creates, reads or deletes a deployment calls
 `check_authorization` and therefore crashed rather than allowing anything.
 
+### `ai4-papi/0019-oscar-errors-are-readable.patch` — pinned to `e80a2b7`
+
+**Every OSCAR failure reached the user as the same blank 500.** D-57 recorded
+this in August and it was never fixed; it was found again on 2026-09-08 because
+it was hiding a different fault entirely.
+
+`raise_for_status` puts the exception **object** in `detail`:
+
+```python
+except requests.exceptions.HTTPError as e:
+    raise HTTPException(status_code=500, detail=e)
+```
+
+FastAPI then tries to serialise it and raises
+
+```
+TypeError: Object of type HTTPError is not JSON serializable
+```
+
+*inside the exception handler*. The response becomes a bare
+`500 Internal Server Error`, and **the original error is destroyed on the way
+out** — the only surviving copy is PAPI's own traceback, which nobody looking
+at a dashboard can see.
+
+The Inference page polls this endpoint every 5 seconds, so the visible result
+was a red "Error calling the API" banner every 5 seconds, saying nothing, for
+as long as the page was open.
+
+`str(e)` is the fix. The status becomes **502** rather than 500 because that is
+what happened — an upstream service answered badly — and because it is the
+difference between a snackbar and an ejection: the dashboard's error
+interceptor sends any 401 or 403 to `/forbidden`, which on a polling page would
+throw the user off it every five seconds.
+
+The message now names the upstream status and the failing URL, which is how the
+fault underneath this one was finally identified as `401 Unauthorized for url:
+…/system/services`.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and

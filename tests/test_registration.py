@@ -232,14 +232,19 @@ def test_denial_disables_rather_than_deletes(root):
     t = _service(root)
     deny = t[t.index("def deny("):]
     assert '"enabled": False' in deny
-    # The only thing deny() may DELETE is a role mapping. Deleting the user
-    # would let the same address sign up again the next minute.
+    # deny() may take away what an account HOLDS — its realm roles and its
+    # oscar-users membership — and nothing else. Deleting the user itself would
+    # let the same address sign up again the next minute.
     deletes = re.findall(r'_kc\(\s*"DELETE",\s*f?"([^"]+)"', deny)
-    assert deletes, "deny() removes no roles at all"
+    assert deletes, "deny() removes nothing at all"
     for target in deletes:
-        assert target.endswith("/role-mappings/realm"), (
-            f"deny() issues DELETE {target}, which is not a role mapping"
+        assert target.endswith("/role-mappings/realm") or "/groups/" in target, (
+            f"deny() issues DELETE {target}, which removes neither a role nor "
+            f"a group membership"
         )
+    assert not any(re.fullmatch(r"/users/\{user_id\}/?", d) for d in deletes), (
+        "deny() deletes the account. It must disable it instead."
+    )
 
 
 def test_denial_cannot_lock_everyone_out(root):

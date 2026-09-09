@@ -1,0 +1,63 @@
+# CAIOS control plane, brought up at boot.
+#
+#   sudo cp ops/caios-compose.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now caios-compose.service
+#
+# WHAT THIS IS ACTUALLY FOR
+# -------------------------
+# Not "starting the containers" — they already carry `restart: unless-stopped`
+# and Docker brings those back on its own. This exists for the ONE service that
+# Docker will not restart, and whose absence is invisible.
+#
+# Vault runs in dev mode, which is in-memory. A reboot returns it EMPTY: no
+# jwt-keycloak auth backend, no caios-user policy, no role. The `vault_init`
+# container that creates all three carries `restart: on-failure` and exits 0, so
+# Docker never re-runs it. The result is a Vault that reports itself perfectly
+# healthy and refuses every login — and PAPI calls Vault BEFORE it calls Nomad
+# when deploying the federated-learning server, so the headline demo fails with
+# a bare HTTP 500 naming neither Vault nor the reason.
+#
+# Measured on the running system on 2026-09-09 by restarting the container:
+# jwt-keycloak/ and caios-user were gone, vault_init did not re-run, and the
+# container still said "running".
+#
+# `docker compose up -d` re-runs vault_init, which is idempotent, so this unit
+# is also a no-op against a healthy stack.
+#
+# WHY THERE IS NO ExecStop
+# ------------------------
+# Deliberate, and the reason is worth keeping. If this unit owned the stack's
+# lifecycle, a failure of the unit at boot would leave NOTHING running — worse
+# than today, where the containers' own restart policies bring back everything
+# except vault_init.
+#
+# Without ExecStop the unit is strictly additive: the restart policies do what
+# they already did, and this reconciles what they cannot. `systemctl stop` marks
+# the unit inactive and leaves the platform running, which is the safe surprise
+# rather than the dangerous one. To actually stop the stack, use
+# `docker compose down` in compose/.
+
+[Unit]
+Description=CAIOS control plane (docker compose)
+Documentation=file:///mnt/CAIOS/docs/runbook.md
+# Requires, not Wants: without Docker there is nothing for this to do, and
+# failing loudly beats a unit that "succeeded" against a dead daemon.
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/mnt/CAIOS/compose
+# NOT --build. A boot is the worst possible moment to discover that a build
+# fails, and the images are already on disk.
+ExecStart=/usr/bin/docker compose --env-file ../configs/env/caios.env up -d
+# Generous: keycloak_db's healthcheck gates keycloak, which gates the rest, and
+# a cold page cache makes that slower than it looks. Not 0 — a unit that can
+# hang forever at boot is its own outage.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

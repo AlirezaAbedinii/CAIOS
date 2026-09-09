@@ -1171,3 +1171,29 @@ weeks: OSCAR was answering 401 to every account created since Stage O2, and
 PAPI was turning that — and every other OSCAR error — into a blank 500. The
 page polls every five seconds, which is why one unauthorised account produced
 an unending banner rather than a single error.
+
+**D-76 — The boot unit is additive, and deliberately does not own the stack.**
+`caios-compose.service` runs `docker compose up -d` at boot and has **no
+`ExecStop`**. That is not an omission.
+
+Its real job is one service. The containers carry `restart: unless-stopped` and
+Docker brings those back on its own; `vault_init` carries `restart: on-failure`
+and exits 0, so Docker never re-runs it — and Vault runs in dev mode, which is
+in-memory. A reboot therefore returns a Vault that reports itself perfectly
+healthy and has no auth backend, no policy and no role. PAPI calls Vault before
+it calls Nomad when deploying the federated-learning server, so the headline
+demo fails with a bare HTTP 500 naming neither.
+
+Measured rather than assumed, on 2026-09-09, by restarting the container on the
+live system: `jwt-keycloak/` and `caios-user` were gone, `vault_init` did not
+re-run, and `docker inspect` still said `running`.
+
+Had the unit owned the lifecycle, a failure of the unit at boot would leave
+**nothing** running — worse than the situation it was written to fix. Without
+`ExecStop` it can only ever add: the restart policies do what they already did,
+and the unit reconciles the one thing they cannot. `systemctl stop` leaves the
+platform up, which is the safe surprise rather than the dangerous one.
+
+Verified without a reboot, which is the point: `systemctl start` against the
+running stack left every container's `StartedAt` byte-identical and re-ran
+`vault_init` alone.

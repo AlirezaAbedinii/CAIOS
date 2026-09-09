@@ -54,6 +54,52 @@ curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
 left the box.
 
 
+
+---
+
+## The host rebooted, and deployments now fail with HTTP 500
+
+**Run this. It takes five seconds.**
+
+```bash
+cd compose && docker compose --env-file ../configs/env/caios.env up -d vault_init
+```
+
+### Why
+
+Vault runs in **dev mode**, which is in-memory. Its container carries
+`restart: unless-stopped`, so a reboot brings it back — as an **empty** Vault,
+with no `jwt-keycloak` auth backend, no `caios-user` policy and no role. The
+`vault_init` container that creates all three carries `restart: on-failure` and
+last exited **0**, so Docker does not re-run it.
+
+The result is a Vault that reports itself perfectly healthy and refuses every
+login. PAPI calls Vault **before** it calls Nomad when deploying the
+federated-learning server or an LLM, so the headline demo fails with a bare
+HTTP 500 that mentions neither Vault nor the reason.
+
+Measured on the running system, 2026-09-09:
+
+| | before restart | after |
+|---|---|---|
+| container | `running` | `running` — *looks healthy* |
+| auth backends | `jwt-keycloak/`, `token/` | `token/` only |
+| policies | `caios-user`, `default`, `root` | `default`, `root` |
+| `vault_init` | exited 0 | did not re-run |
+
+`caios-compose.service` now runs `docker compose up -d` at boot, which re-runs
+`vault_init` and closes this automatically. The command above is what to do if
+that unit is ever disabled, or on a host where it was never installed.
+
+### Confirm it is fixed
+
+```bash
+bash scripts/check-identity.sh
+```
+
+The Vault section must say a token was issued and a secret was written and read
+back. Anything else and the deployments will keep failing.
+
 ---
 
 ## Somebody registered and cannot use anything

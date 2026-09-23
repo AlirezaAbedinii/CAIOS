@@ -84,6 +84,10 @@ docs/context.md
 docs/questions-for-supervisor.md
 docs/phase-plan.md
 docs/presentation.md
+# Every dated variant too. These are supervisor-meeting slides, not
+# repository documentation — they go stale the day after the meeting and
+# nothing in the build or the runbook reads them.
+docs/presentation-*.md
 
 # Catch-all for internal notes: anything ending in .local.md, and a private/
 # directory for whatever does not fit a rule above. Prefer these over

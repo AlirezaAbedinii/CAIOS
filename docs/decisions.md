@@ -850,6 +850,69 @@ trade goes the other way.
 
 *Append new decisions below with date and one line of reasoning.*
 
+**2026-09-23** — The domain became one variable, and the proxy VM's config
+became a generated artifact of it. Recorded D-77 to D-79. Three latent faults
+fell out of C0: the committed env template could no longer reproduce the
+running platform, the deployment domain had four spellings and one was wrong,
+and a variable the federated bundles print was never defined.
+
+**D-77 — `caios_server` gets no SSH key on the proxy VM, and the proxy is
+therefore not Ansible-managed.**
+Every other machine in the architecture is configured by a playbook, and this
+one will not be. `134.87.8.230` is the jumpserver: humans reach every instance
+through it, so it is the bastion, and trust flows one way by design. Giving
+`caios_server` a key there closes the loop — a bug in PAPI, Keycloak, Caddy or
+the dashboard would reach the cluster key, then the bastion, then everything
+behind it, CAIOS or not. `ubuntu` on an Ubuntu cloud image normally has
+passwordless sudo, so that key is closer to root on the bastion than to shell
+access on a web server.
+
+Restricting it (`from=`, `no-port-forwarding`, `no-agent-forwarding`) narrows
+it without changing the answer: an attacker holding `caios_server` is coming
+from exactly that address.
+
+CLAUDE.md prefers idempotent automation to hand-SSH, and that rule still
+holds inside the trust boundary. This is the boundary.
+
+What replaces it costs little: `scripts/render-nginx-config.sh` generates the
+config from the same `CAIOS_PUBLIC_DOMAIN` everything else derives from, and
+`docs/nginx-proxy.md` is the four-command runbook to copy it up. Only the
+transport is manual, and there is exactly one file to move. The gate is not
+weaker for it — `render-nginx-config.sh --diff` proves the template reproduces
+the live config before it ever carries a new name, and
+`scripts/check-public-path.sh` measures the result from outside.
+
+**D-78 — The proxy VM serves a second project, and the coupling is invisible.**
+`/etc/nginx/conf.d/seventask.conf` proxies an unrelated application on :8888.
+Nothing in this repository knew it existed until the full `nginx -T` was read
+on 2026-09-23.
+
+It does not define its own `map $http_upgrade $connection_upgrade`. It uses
+the one in `caios.conf`, because a duplicate `map` in the http context is a
+global syntax error. So removing that block breaks WebSockets for them, and
+emitting it twice stops nginx starting for everybody. Our templates own it,
+`tests/test_jumpserver_config.py` asserts it appears exactly once, and the
+head template says why so nobody tidies it away.
+
+Only `/etc/nginx/conf.d/caios.conf` is ever replaced.
+
+**D-79 — Two domains at once, not a cutover.**
+`CAIOS_LEGACY_DOMAIN` gets its own pair of nginx server blocks on its own
+certificate, alongside the primary. Both answer throughout: the new domain on
+Let's Encrypt, the sslip.io name on the CAIOS CA it already has.
+
+Rolling back is swapping two variables and re-applying. No certificate is
+reissued, no DNS record is deleted, and sslip.io keeps resolving because it is
+a public service that never stops answering. A week before a recording, a
+change that can be undone in two minutes is worth more than a tidier one that
+cannot.
+
+The Let's Encrypt certificate lives only on the proxy. Caddy and Traefik keep
+CAIOS CA certificates for the internal leg — which `proxy_ssl_verify on` with
+`proxy_ssl_name $host` checks against the hostname the visitor asked for, so
+both must be reissued with the new SANs in the same change or every request
+becomes a 502 behind a public certificate a browser calls valid.
+
 **2026-08-31** — The home page rewritten for its actual audience. Recorded
 D-63 to D-66. It had been written in the vocabulary of the people who built the
 platform; it is now three blocks and six slides, with a measured chart in place

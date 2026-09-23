@@ -38,21 +38,39 @@ SSLIP_ALLOWED = [
     ("scripts/install-oscar.sh", "MINIO_HOST="),
     ("scripts/oscar-submit.sh", "minio-console."),
 
-    # A classifier, not a hostname: it decides whether ACME is possible at all
-    # and says so at render time, because every later failure looks the same.
+    # Classifiers, not hostnames. Each decides whether ACME is possible at
+    # all, because Let's Encrypt issues wildcards over DNS-01 alone and nobody
+    # controls the sslip.io zone — so this is not a setting to get wrong, it
+    # is a fact to detect and refuse on.
     ("scripts/render-configs.sh", "CAIOS_PUBLIC_DOMAIN\" == *.sslip.io"),
     ("scripts/render-configs.sh", "CAIOS_DOMAIN_KIND="),
+    ("scripts/render-nginx-config.sh", "tls_for()"),
+
+    # A synthetic domain in a test fixture, not a hostname. Exempted on the
+    # word "fixture" rather than on the file, so a real hostname typed into
+    # this same file is still caught.
+    ("tests/test_jumpserver_config.py", "fixture"),
 ]
 
+# .template covers the env file, the Caddyfile, the Keycloak realm and the
+# nginx config for the proxy VM — all of which name public hostnames and all
+# of which are rendered rather than read directly, so a stale one is invisible
+# until something downstream fails for an unrelated-looking reason.
 SCANNED_SUFFIXES = (".sh", ".yml", ".yaml", ".ini", ".hcl", ".py", ".json",
-                    ".cfg", ".patch")
-SCANNED_NAMES = ("caios.env.template",)
+                    ".cfg", ".patch", ".template")
+SCANNED_NAMES = ()
 SKIP_PREFIXES = ("docs/", "vendor/", "build/", "tests/test_public_domain.py")
 
 
 def _tracked(root):
-    out = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True,
-                         text=True, check=True).stdout.split()
+    # --others as well as --cached: a file that is not committed yet is
+    # exactly the one most likely to have a hostname typed into it, and
+    # scanning only what is tracked means the test passes right up until the
+    # moment the mistake is permanent. --exclude-standard keeps build/ and
+    # the gitignored env file out.
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+        cwd=root, capture_output=True, text=True, check=True).stdout.split()
     return [p for p in out
             if not p.startswith(SKIP_PREFIXES)
             and (p.endswith(SCANNED_SUFFIXES) or p.endswith(SCANNED_NAMES))]

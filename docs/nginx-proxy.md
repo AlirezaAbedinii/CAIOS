@@ -1,195 +1,212 @@
-# The proxy VM — the one change T5 still needs, and how to make it
+# The proxy VM — the public front door, and how to change it
 
 `134.87.8.230` is a **separate machine** running Ubuntu's nginx 1.18.0. It is
-the public front door for the whole platform and it is **not configured from
-this repository**. Nothing in `ansible/`, `compose/` or `scripts/` touches it.
+the public front door for the whole platform, and it is also the jumpserver:
+humans reach every instance through it over OpenVPN.
 
-Found on 2026-09-02, during T5. `docs/public-access.md` had claimed there was
-no such machine; that claim is corrected there, along with the `/etc/hosts`
-entry on `caios_server` that hid it from every test.
+Its full configuration was read on 2026-09-23 and the CAIOS half is saved at
+`ops/jumpserver/caios.conf.live-20260923`. That file is the baseline the
+generated config is checked against.
+
+---
+
+## Two things to know before touching it
+
+### 1. It serves a project that is not CAIOS
+
+`/etc/nginx/conf.d/seventask.conf` proxies an unrelated application on
+**:8888** to `192.168.104.198`. Nothing in this repository knew about it until
+2026-09-23.
+
+**Only ever replace `/etc/nginx/conf.d/caios.conf`.** Never `nginx.conf`,
+never `seventask.conf`, never anything in `sites-enabled` (which is empty).
+
+And one coupling that is easy to destroy by tidying up. `caios.conf` defines
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+```
+
+in the **http context**, and `seventask.conf` *uses it without defining its
+own* — deliberately, with a comment saying so, because a duplicate `map` is a
+global nginx syntax error. So:
+
+- remove it, and WebSockets break for the other project;
+- emit it twice, and **nginx refuses to start, for everybody**.
+
+`tests/test_jumpserver_config.py` asserts it appears exactly once.
+
+### 2. It is the way people reach the cluster
+
+Breaking nginx costs the website. Breaking `sshd` costs access to every
+instance. **Nothing in this procedure touches sshd**, and nothing should.
+
+For the same reason `caios_server`'s SSH key is deliberately **not** installed
+here: that would let anything that compromises the public web tier reach the
+bastion, and from there everything behind it. The proxy is configured by a
+human from a workstation that already has access. See D-77.
 
 ---
 
 ## What it does today
 
+Measured through `scripts/check-public-path.sh`, which is immune to the
+`/etc/hosts` entry on `caios_server` that otherwise hides this machine.
+
 | Request | Result |
 |---|---|
-| `:80`, any hostname | `301` to the same URL on `https://` |
-| `:443`, `dashboard\|api\|auth\|vault.134.87.8.230.sslip.io` | terminates TLS, proxies to Caddy on `192.168.104.181` |
-| `:443`, `*.pacs-deployments.134.87.8.230.sslip.io` | terminates TLS, proxies to Traefik on `192.168.104.105` |
-| `:443`, anything else | `502` |
+| `:80`, **any** hostname | `301` to `https://` — one `default_server` block |
+| `:443` `dashboard\|api\|auth\|vault.<domain>` | `200/200/302/307`, proxied to Caddy on `192.168.104.181` |
+| `:443` `*.pacs-deployments.<domain>` | proxied to Traefik on `192.168.104.105` |
+| `:443` anything else | falls to the default server, then Caddy, then `502` |
 
-It presents the **CAIOS CA's** certificate, not a publicly trusted one.
+It presents the **CAIOS CA's** certificate: `/etc/nginx/certs/caios-public.pem`
+is a byte-identical copy of this repository's `compose/certs/control-plane.pem`
+(same serial), and `caios-deployments.pem` is the Traefik wildcard. Both were
+copied here by hand.
 
-Two facts established by measurement rather than assumption:
+`auth` and `vault` send `Strict-Transport-Security: max-age=31536000;
+includeSubDomains` — Keycloak and Vault set it themselves. Those two hostnames
+therefore cannot be served over plain HTTP again in any browser that has seen
+them, for a year. `docs/certificate-plan.md` says there is no HSTS anywhere;
+that is wrong and this is the correction.
 
-- It is a different machine from both cluster nodes. Its SSH host key matches
-  neither `192.168.104.181` nor `192.168.104.105`.
-- It does **not** proxy to Caddy on port 80. Caddy's `:80` answers `404` for
-  every control-plane hostname while the public HTTPS path answers `200`, so
-  the upstream leg is HTTPS.
-
-That last one is why the current state is safe: adding HTTP site blocks to
-Caddy changed nothing for a public visitor.
-
----
-
-## Why T5 is blocked on it
-
-**The redirect makes the HTTP switch worse than a no-op — it makes the platform
-unreachable.**
-
-With `CAIOS_SCHEME=http`:
-
-1. Visitor opens `http://dashboard.134.87.8.230.sslip.io/`
-2. The proxy answers `301 → https://dashboard...`
-3. The proxy terminates TLS and proxies to Caddy on `:443`
-4. Caddy, now serving HTTP, answers `:443` with `302 → http://dashboard...`
-5. Back to step 1.
-
-A redirect loop, on the hostname the demo opens on.
-
-And even without the loop, the switch would buy nothing: the proxy's own
-certificate is issued by the CAIOS CA, so a visitor still has to install
-`caios-ca.pem` — which is the entire point of the requirement.
-
-**So `CAIOS_SCHEME` must stay `https` until this file has been applied.**
-`scripts/preflight.sh` (T7) should assert it.
-
----
-
-## The change
-
-One server block replaced. On the proxy VM:
-
-```bash
-sudo cp /etc/nginx/sites-available/caios /etc/nginx/sites-available/caios.bak-$(date +%Y%m%d)
-```
-
-Replace the `listen 80` block — the one that does nothing but redirect — with a
-block that proxies, using the same `Host`-based routing the `:443` blocks
-already use:
+### The internal leg is verified
 
 ```nginx
-# CAIOS T5. Plain HTTP is a first-class entrance, not a doormat.
-#
-# The platform serves HTTP (CAIOS_SCHEME=http in configs/env/caios.env) so that
-# a visitor needs no certificate authority installed. Redirecting to HTTPS here
-# would send them to a TLS page whose API calls are then blocked as mixed
-# content — and, because Caddy answers HTTPS with a redirect back to HTTP, into
-# a redirect loop.
-#
-# The :443 blocks below are unchanged. Both schemes answer; the platform
-# decides which one it advertises.
-
-server {
-    listen 80;
-    listen [::]:80;
-    server_name dashboard.134.87.8.230.sslip.io
-                api.134.87.8.230.sslip.io
-                auth.134.87.8.230.sslip.io
-                vault.134.87.8.230.sslip.io;
-
-    # Caddy on caios_server. Plain HTTP upstream: Caddy serves both schemes and
-    # the HTTP site block is the real one while CAIOS_SCHEME=http.
-    location / {
-        proxy_pass http://192.168.104.181;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-
-        # Keycloak mints the issuer from this. It MUST say http, or every token
-        # carries an https:// issuer into an http:// platform and PAPI answers
-        # 401 on everything while the login page itself looks perfect.
-        proxy_set_header X-Forwarded-Proto http;
-        proxy_set_header X-Forwarded-Port  80;
-
-        # JupyterLab and Open WebUI. ws:// rather than wss:// now, same upgrade.
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade    $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Open WebUI and vLLM stream token by token. Buffering turns that into
-        # one long pause followed by the whole answer at once, which on camera
-        # reads as a model that does not work.
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-    }
-}
-
-server {
-    listen 80;
-    listen [::]:80;
-    server_name *.pacs-deployments.134.87.8.230.sslip.io;
-
-    # Traefik on caios_edge. It routes on Host alone, so the header must survive
-    # exactly — every deployment is distinguished by hostname and nothing else.
-    location / {
-        proxy_pass http://192.168.104.105;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto http;
-
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade    $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-    }
-}
+proxy_ssl_verify      on;
+proxy_ssl_name        $host;
+proxy_ssl_trusted_certificate /etc/nginx/certs/caios-ca.pem;
 ```
 
-Then:
+nginx checks that Caddy and Traefik present a certificate valid for **the
+hostname the visitor asked for**. Moving the platform to a new domain without
+reissuing *both* internal certificates with the new SANs turns every request
+into a `502`, behind a public certificate a browser calls perfectly valid.
+This is trap 1 of the certificate plan, and it is the one that will actually
+happen.
+
+---
+
+## Changing it
+
+The config is generated from `configs/env/caios.env` — the same
+`CAIOS_PUBLIC_DOMAIN` everything else derives from (stage C0).
 
 ```bash
+bash scripts/render-nginx-config.sh --diff
+```
+
+renders to `build/jumpserver/caios.conf` and diffs it against the saved live
+copy. **With no domain change, that diff is empty**; that is what proves the
+template is faithful before it is asked to carry a new name.
+
+### Applying it
+
+From a workstation that already has jumpserver access:
+
+```bash
+scp build/jumpserver/caios.conf ubuntu@134.87.8.230:/tmp/caios.conf
+```
+
+Then, on the proxy — back up, install, **test, and only then reload**:
+
+```bash
+sudo cp /etc/nginx/conf.d/caios.conf ~/caios.conf.bak-$(date +%Y%m%d-%H%M%S) && \
+sudo cp /tmp/caios.conf /etc/nginx/conf.d/caios.conf && \
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-`nginx -t` before reload is not ceremony: Ubuntu 22.04 ships nginx **1.18**,
-which rejects `http2 on;` (that is 1.25.1+) and wants `listen 443 ssl http2;`.
-If the existing `:443` blocks use the newer form, this nginx is not 1.18 and
-the version assumptions here need rechecking.
+`&&` throughout is the safety: a failed `nginx -t` stops before the reload, and
+the running nginx keeps its current configuration until one succeeds. A bad
+file sitting in `conf.d` changes nothing by itself.
 
-**Leave every `:443` block exactly as it is.** They are what makes the rollback
-work: flip `CAIOS_SCHEME` back to `https`, re-render, restart, and the platform
-is served over TLS again with no change needed here.
+If `nginx -t` fails:
+
+```bash
+sudo cp ~/caios.conf.bak-<stamp> /etc/nginx/conf.d/caios.conf && sudo nginx -t
+```
+
+### Verifying it
+
+From `caios_server`, before and after:
+
+```bash
+bash scripts/check-public-path.sh > /tmp/before
+# ... apply ...
+bash scripts/check-public-path.sh > /tmp/after
+diff /tmp/before /tmp/after
+```
+
+Empty is the pass. The script fails outright if any response came from
+somewhere other than the proxy, which is the mistake this whole page exists to
+prevent.
 
 ---
 
-## Then, and only then
+## Adding a real domain (C2/C3)
+
+**Additive, not a cutover.** Set the new domain as the primary and move the
+current one to `CAIOS_LEGACY_DOMAIN`:
 
 ```bash
-sed -i 's/^CAIOS_SCHEME=.*/CAIOS_SCHEME=http/' configs/env/caios.env
-bash scripts/render-configs.sh
-bash scripts/keycloak-bootstrap.sh          # sslRequired=none on the LIVE realm
-bash scripts/apply-patches.sh
-bash scripts/build-dashboard.sh
-cd compose && docker compose --env-file ../configs/env/caios.env up -d --build
-cd .. && bash scripts/build-fl-bundles.sh
-bash scripts/verify-cluster.sh
-bash scripts/check-dashboard.sh
-bash scripts/check-identity.sh
+CAIOS_PUBLIC_DOMAIN=caios.ca
+CAIOS_LEGACY_DOMAIN=${CAIOS_PUBLIC_IP}.sslip.io
 ```
 
-Redeploy anything that was running: a Nomad job bakes its Traefik router tags
-at submit time, so a deployment created before the flip keeps its HTTPS-only
-router until it is recreated.
+Both then get their own `server` blocks on their own certificates, and both
+keep answering. **Rolling back is swapping those two lines** and re-applying —
+no certificate is reissued and nothing is deleted at any point.
 
-## Verifying it, from a machine that is not `caios_server`
+The Let's Encrypt certificate lives **only here**. Caddy and Traefik keep
+their CAIOS CA certificates for the internal leg, which is what
+`proxy_ssl_verify` validates against — so they must be reissued with the new
+SANs in the same change.
 
-Or from `caios_server` with `--resolve`, which is what defeats the `/etc/hosts`
-entry that hid this proxy in the first place:
+Certbot, on the proxy, once:
 
 ```bash
-for h in dashboard api auth; do
-  curl -sD- --resolve $h.134.87.8.230.sslip.io:80:134.87.8.230 \
-       http://$h.134.87.8.230.sslip.io/ -o /dev/null | head -1
-done
+sudo apt-get install -y certbot python3-certbot-dns-cloudflare
+sudo install -m 600 /dev/null /etc/letsencrypt/cloudflare.ini
+# dns_cloudflare_api_token = <CAIOS_CF_API_TOKEN from caios.env>
+
+sudo certbot certonly --dns-cloudflare \
+  --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini \
+  --dns-cloudflare-propagation-seconds 30 \
+  -d caios.ca -d '*.caios.ca' -d '*.pacs-deployments.caios.ca' \
+  --email "$CAIOS_ACME_EMAIL" --agree-tos --non-interactive \
+  --deploy-hook 'systemctl reload nginx' \
+  --dry-run          # REMOVE only after the dry run passes
 ```
 
-Every line must be `200`, `302` or `404` — **never `301`**. A `301` means the
-redirect is still there and the loop is live.
+**Do the `--dry-run` first.** Production rate limits are unforgiving and a
+burned week would be fatal this close to recording. Certbot installs its own
+renewal timer; the deploy hook is what makes a renewal take effect.
+
+One certificate covers both tiers, which is why the rendered config points
+both server blocks at the same `fullchain.pem`.
+
+### gRPC is not proxied here
+
+There is no `grpc_pass` anywhere in this config, and `proxy_pass` cannot carry
+gRPC. The federated demo works because its three clients run inside the
+cluster and reach Traefik directly across the private subnet — they never come
+through this machine.
+
+**Test the federated round trip on a public hostname before changing
+anything**, so a pre-existing limitation is not mistaken for damage done by the
+cutover. nginx 1.18 supports `grpc_pass grpcs://...` if it turns out to matter.
+
+---
+
+## What this page used to say
+
+Until 2026-09-23 it described a plan to make `:80` proxy to Caddy instead of
+redirecting, so the platform could be served over plain HTTP (T5, checklist
+item 5). **That is retired.** A real domain with a publicly trusted
+certificate removes the browser warning the other way — the certificate
+becomes legitimate rather than absent — and nothing travels in clear text.
+See `docs/certificate-plan.md` and D-77.
+
+It also said the config lived in `/etc/nginx/sites-available/caios`. It does
+not; it is `/etc/nginx/conf.d/caios.conf`, and `sites-enabled` is empty.

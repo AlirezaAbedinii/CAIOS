@@ -83,3 +83,59 @@ def test_llm_host_vars(root):
     assert meta.get("status") == "test", (
         "nomad_client_meta must start as status: test, not ready"
     )
+
+
+# --- the public proxy (C1) -------------------------------------------------
+
+JUMP_HOST = "caios_jump"
+
+# Groups that would do something to a machine. Membership of any of these
+# means a Consul agent, a Nomad agent, Docker, or a reformatted disk.
+CLUSTER_GROUPS = (
+    "consul_master", "consul_clients", "nomad_master",
+    "nomad_cpu_clients", "nomad_gpu_clients", "nomad_volume",
+    "traefik_master", "monitoring",
+)
+
+
+def test_the_jumpserver_exists_and_is_addressable(inv, root):
+    hosts = _hosts(inv, "jumpserver")
+    assert hosts == [JUMP_HOST], f"[jumpserver] should hold only {JUMP_HOST}: {hosts}"
+    # Read the raw line: the fixture's parser splits on "=", so the address
+    # ends up as a value rather than staying on the host line.
+    import re
+    raw = (root / INVENTORY).read_text()
+    assert re.search(rf"^{JUMP_HOST}\s+ansible_host=\d+\.\d+\.\d+\.\d+", raw, re.M), (
+        f"{JUMP_HOST} has no ansible_host address. Ansible cannot reach it by "
+        f"name — nothing resolves 'caios_jump'."
+    )
+
+
+def test_the_jumpserver_is_in_no_cluster_group(inv):
+    """It is not a cluster node and nothing may treat it as one.
+
+    playbook-nomad.yml would install Docker and a Nomad agent on it;
+    playbook-prepare-volumes.yml would repartition and reformat /dev/vdb,
+    which this machine does not have. It is also the way humans reach the
+    cluster, so breaking it costs more than the website.
+    """
+    for group in CLUSTER_GROUPS:
+        assert JUMP_HOST not in _hosts(inv, group), (
+            f"{JUMP_HOST} is in [{group}]. That group is acted on by a "
+            f"playbook that assumes a cluster node."
+        )
+
+
+def test_only_its_own_playbook_targets_it(root):
+    """A `hosts:` line that reaches the jumpserver by accident is the whole
+    risk here, and it would not be obvious from the playbook itself."""
+    import re
+    for pb in sorted((root / "ansible").glob("playbook-*.yml")):
+        targets = re.findall(r"^\s*hosts:\s*(\S+)", pb.read_text(), re.M)
+        for t in targets:
+            if pb.name == "playbook-jumpserver.yml":
+                assert t == "jumpserver", f"{pb.name} targets {t}"
+            else:
+                assert t != "all" and "jumpserver" not in t, (
+                    f"{pb.name} targets '{t}', which can reach the jumpserver"
+                )

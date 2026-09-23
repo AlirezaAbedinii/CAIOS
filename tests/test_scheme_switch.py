@@ -317,7 +317,11 @@ def test_scripts_derive_the_scheme(root, name):
 
 @pytest.mark.parametrize("name", SCHEME_AWARE_SCRIPTS + ["render-configs.sh",
                                                         "keycloak-bootstrap.sh",
-                                                        "verify-cluster.sh"])
+                                                        "verify-cluster.sh",
+                                                        # C0 and C1.
+                                                        "snapshot-config.sh",
+                                                        "check-public-path.sh",
+                                                        "deploy-jumpserver.sh"])
 def test_scripts_parse(root, name):
     r = subprocess.run(["bash", "-n", str(root / "scripts" / name)],
                        capture_output=True, text=True)

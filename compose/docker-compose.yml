@@ -277,6 +277,14 @@ services:
       CAIOS_CTRL_IP: ${CAIOS_CTRL_IP}
       CAIOS_EDGE_IP: ${CAIOS_EDGE_IP}
       CAIOS_PUBLIC_IP: ${CAIOS_PUBLIC_IP}
+      # C0. main.yaml is expanded by the image's own envsubst at start, so
+      # every variable it names has to arrive here or the placeholder survives
+      # into the running config as a literal — an endpoint the dashboard shows
+      # as "${CAIOS_API_HOST}" and every CORS origin silently wrong.
+      CAIOS_PUBLIC_DOMAIN: ${CAIOS_PUBLIC_DOMAIN}
+      CAIOS_DEPLOYMENTS_DOMAIN: ${CAIOS_DEPLOYMENTS_DOMAIN}
+      CAIOS_DASHBOARD_HOST: ${CAIOS_DASHBOARD_HOST}
+      CAIOS_API_HOST: ${CAIOS_API_HOST}
     volumes:
       # Mounted over main_TMP.yaml, not main.yaml. The image copies main.yaml to
       # main_tmp.yaml at build time and regenerates main.yaml from it through

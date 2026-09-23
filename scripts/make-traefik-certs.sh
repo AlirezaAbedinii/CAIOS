@@ -28,9 +28,14 @@
 # So: issue a CA once, sign the wildcard with it, and hand out the CA. One file
 # to trust, in one place, and browsers can import it too.
 #
-# Let's Encrypt is not an option here. It issues wildcards only over DNS-01,
-# which needs control of the zone, and we do not control sslip.io. V1 swaps in a
-# real domain; only the two IPs in caios.env change.
+# THIS CERTIFICATE STAYS ON THE CAIOS CA, even after the platform moves to a
+# real domain with a publicly trusted certificate (docs/certificate-plan.md).
+# The Let's Encrypt certificate lives on the nginx proxy VM, which terminates
+# TLS for visitors; Traefik only ever speaks to that proxy, over the private
+# subnet. nginx validates this certificate with `proxy_ssl_verify on` and
+# `proxy_ssl_name $host`, so it must carry a SAN for every public deployment
+# name — reissue it in the SAME change that moves the domain, or the whole
+# platform answers 502 behind a certificate that looks perfect in a browser.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,15 +45,19 @@ ENV_FILE="configs/env/caios.env"
 [[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE — see configs/env/caios.env.template"; exit 1; }
 set -a; source "$ENV_FILE"; set +a
 : "${CAIOS_EDGE_IP:?CAIOS_EDGE_IP (address of the Traefik node) is empty}"
+: "${CAIOS_DEPLOYMENTS_DOMAIN:?CAIOS_DEPLOYMENTS_DOMAIN is empty — see caios.env}"
 
-# Must match `domain=` in ansible/inventory/hosts.ini and lb.domain in
-# configs/papi/main.yaml. A deployment resolves as:
+# `pacs` is meta.domain, set per node in ansible/inventory/hosts.ini. A
+# deployment resolves as:
 #   <service>-<uuid>.<meta.domain>-<lb.domain>
 # so the wildcard covers one label, not a nested subdomain.
-# Prefer the floating/public IP when set so deployment links and the
-# Traefik wildcard match what nginx exposes (docs/public-access.md Step 3/4).
-DEPLOY_IP="${CAIOS_PUBLIC_IP:-$CAIOS_EDGE_IP}"
-BASE="pacs-deployments.${DEPLOY_IP}.sslip.io"
+#
+# CAIOS_DEPLOYMENTS_DOMAIN is lb.domain in configs/papi/main.yaml — the same
+# string, from the same variable, so the certificate cannot drift from the
+# hostnames PAPI hands out. It is a PUBLIC name: it resolves to the nginx
+# proxy VM, not to caios_edge.
+DEPLOY_PREFIX="pacs"
+BASE="${DEPLOY_PREFIX}-${CAIOS_DEPLOYMENTS_DOMAIN}"
 OUT="${TRAEFIK_CERT_OUT:-$HOME}"
 NAME="caios-deployments"
 CA_KEY="$OUT/caios-ca.key"

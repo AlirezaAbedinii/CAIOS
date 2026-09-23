@@ -19,7 +19,10 @@ LLM_SUBS = {
     "OWNER_EMAIL": "researcher@example.org",
     "TITLE": "Test LLM",
     "DESCRIPTION": "A test deployment",
-    "BASE_DOMAIN": "deployments.192.168.104.105.sslip.io",
+    # A representative CAIOS_DEPLOYMENTS_DOMAIN. Any public name works here;
+    # what the tests assert is the SHAPE of the rendered hostname, not the
+    # domain, so this deliberately does not read configs/env/caios.env.
+    "BASE_DOMAIN": "deployments.example.test",
     "HOSTNAME": "abc123def456",
     "VLLM_ARGS": json.dumps(
         ["--gpu-memory-utilization", "0.80", "--max-model-len", "16384", "Qwen/Qwen3.5-2B"]

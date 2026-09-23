@@ -2,11 +2,11 @@
 CAIOS Stage 1 gate: prove a job can be scheduled AND reached over HTTPS at its
 own subdomain, before PAPI exists to blame.
 
-  # NOTE the value: "deployments.<ip>.sslip.io", WITHOUT the "pacs-" prefix.
+  # NOTE the value: CAIOS_DEPLOYMENTS_DOMAIN, WITHOUT the "pacs-" prefix.
   # The service tag below prepends ${meta.domain}- itself (meta.domain is "pacs"),
   # so including it here produces smoke.pacs-pacs-deployments... and a 404 from
   # Traefik. This must match lb.domain in configs/papi/main.yaml exactly.
-  export BASE_DOMAIN=deployments.<CAIOS_EDGE_IP>.sslip.io
+  export BASE_DOMAIN=$CAIOS_DEPLOYMENTS_DOMAIN
 
   sed "s|BASE_DOMAIN_PLACEHOLDER|$BASE_DOMAIN|" nomad-jobs/smoke-test.hcl \
     | nomad job run -
@@ -78,7 +78,7 @@ job "caios-smoke-test" {
     # Traefik discovers this through Consul and routes on the Host header.
     # Note the hostname shape: <name>.<meta.domain>-<base domain>. The join
     # between meta.domain and the base domain is a HYPHEN, not a dot — so the
-    # wildcard certificate must cover *.pacs-deployments.<ip>.sslip.io.
+    # wildcard certificate must cover *.pacs-$CAIOS_DEPLOYMENTS_DOMAIN.
     service {
       name = "caios-smoke-test-ui"
       port = "ui"

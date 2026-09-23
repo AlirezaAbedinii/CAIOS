@@ -1,0 +1,96 @@
+# CAIOS public edge on jump-server (FLOATING_IP=134.87.8.230).
+#
+# nginx terminates public TLS and forwards by Host: to Caddy (.181) and
+# Traefik (.105). Traefik's routes change with Nomad jobs — this file never
+# names a deployment.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream caios_control_plane { server 192.168.104.181:443; }
+upstream caios_deployments   { server 192.168.104.105:443; }
+
+proxy_ssl_trusted_certificate /etc/nginx/certs/caios-ca.pem;
+proxy_ssl_verify              on;
+proxy_ssl_verify_depth        2;
+proxy_ssl_server_name         on;
+proxy_ssl_name                $host;
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2 default_server;
+    listen [::]:443 ssl http2 default_server;
+
+    server_name dashboard.134.87.8.230.sslip.io
+                api.134.87.8.230.sslip.io
+                auth.134.87.8.230.sslip.io
+                vault.134.87.8.230.sslip.io;
+
+    ssl_certificate     /etc/nginx/certs/caios-public.pem;
+    ssl_certificate_key /etc/nginx/certs/caios-public.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_session_cache   shared:SSL:10m;
+
+    client_max_body_size 0;
+
+    location / {
+        proxy_pass https://caios_control_plane;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port  443;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_buffering         off;
+        proxy_request_buffering off;
+        proxy_read_timeout      3600s;
+        proxy_send_timeout      3600s;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+
+    server_name ~^[^.]+\.pacs-deployments\.134\.87\.8\.230\.sslip\.io$;
+
+    ssl_certificate     /etc/nginx/certs/caios-deployments.pem;
+    ssl_certificate_key /etc/nginx/certs/caios-deployments.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    client_max_body_size 0;
+
+    location / {
+        proxy_pass https://caios_deployments;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port  443;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_buffering         off;
+        proxy_request_buffering off;
+        proxy_read_timeout      3600s;
+        proxy_send_timeout      3600s;
+    }
+}

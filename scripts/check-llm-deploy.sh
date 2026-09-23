@@ -125,7 +125,7 @@ for _ in $(seq 1 "$((DEPLOY_TIMEOUT / 10))"); do
     # PAPI returns the endpoint with Nomad's own placeholders still in it until
     # the allocation has actually been placed:
     #
-    #   https://vllm-<uuid>.${meta.domain}-deployments.<ip>.sslip.io
+    #   https://vllm-<uuid>.${meta.domain}-<CAIOS_DEPLOYMENTS_DOMAIN>
     #
     # meta.domain is interpolated by the Nomad client, so before placement there
     # is nothing to interpolate it with. An earlier version of this loop fetched

@@ -4,15 +4,22 @@
 # Copied from vendor/ai4-papi/etc/main.yaml at e80a2b7 and rewritten for a
 # single VO. Mounted over /srv/ai4-papi/etc/main.yaml by compose/docker-compose.yml.
 #
-# ${CAIOS_CTRL_IP} is substituted at container start from configs/env/caios.env.
-# If you are reading this before the IPs are known, that is why they are not
-# literal.
+# The placeholders below are substituted at container start from
+# configs/env/caios.env, by the envsubst the PAPI image runs itself. If you are
+# reading this before the domain is known, that is why nothing is literal.
+#
+# Named without the dollar-brace on purpose: envsubst expands them in comments
+# too, so a comment that spells one out stops naming the variable the moment it
+# is rendered. The variables are CAIOS_SCHEME, CAIOS_API_HOST,
+# CAIOS_DASHBOARD_HOST and CAIOS_DEPLOYMENTS_DOMAIN. Every one of them must
+# also appear in compose/docker-compose.yml's papi environment block, or the
+# placeholder survives into the running config as a literal.
 
 self:  # info about the API endpoint
 
   # T5. ${CAIOS_SCHEME} comes from compose and is expanded by the envsubst the
   # PAPI image runs at start, like the IPs above it.
-  domain: ${CAIOS_SCHEME}://api.${CAIOS_PUBLIC_IP}.sslip.io
+  domain: ${CAIOS_SCHEME}://${CAIOS_API_HOST}
 
 auth:
 
@@ -23,8 +30,8 @@ auth:
     # missing one produces a CORS wall, which reaches the user as "Error calling
     # the API" on every page with nothing in PAPI's log to explain it. Listing
     # both costs nothing and removes the whole failure mode from the switch.
-    - https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io
-    - http://dashboard.${CAIOS_PUBLIC_IP}.sslip.io
+    - https://${CAIOS_DASHBOARD_HOST}
+    - http://${CAIOS_DASHBOARD_HOST}
     - http://localhost:8080          # local dashboard development
     - ${DASHBOARD_URL}               # expanded by PAPI from the environment
 
@@ -46,10 +53,12 @@ lb:  # load balancer, Traefik
   domain:  # each VO accesses deployments through their domain
     # Deployments resolve as: <service>-<uuid>.<meta.domain>-<this value>
     # meta.domain is `pacs`, set per node in ansible/inventory/hosts.ini, so a
-    # Jupyter IDE lands at ide-a1b2c3.pacs-deployments.<EDGE_IP>.sslip.io
+    # Jupyter IDE lands at ide-a1b2c3.pacs-deployments.<public domain>
     #
-    # Note this is caios_edge's IP (Traefik), not caios_server's.
-    vo.caios.ca: deployments.${CAIOS_PUBLIC_IP}.sslip.io
+    # This is a PUBLIC name. It resolves to the nginx proxy VM, which
+    # terminates TLS and forwards to Traefik on caios_edge — not to
+    # caios_edge directly. The wildcard certificate has to match it.
+    vo.caios.ca: ${CAIOS_DEPLOYMENTS_DOMAIN}
 
 oscar:
   # Stage O3. Was absent until 2026-08-26 (D-09 cut OSCAR from MVP), which made

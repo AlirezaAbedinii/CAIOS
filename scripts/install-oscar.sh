@@ -41,10 +41,34 @@
 #    verification stays ON, per D-43 — distribute the CA, do not skip the check.
 set -uo pipefail
 
+# C0. The issuer has to be the exact string Keycloak mints, and OSCAR compares
+# it character by character — so it comes from caios.env like everything else
+# rather than from a literal that goes stale the moment the domain changes.
+# Sourced if present; the defaults below keep this runnable from the OSCAR
+# node, which does not have the repository checked out.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+if [[ -n "${ROOT:-}" && -f "$ROOT/configs/env/caios.env" ]]; then
+    set -a; . "$ROOT/configs/env/caios.env"; set +a
+fi
+
 NODE="${CAIOS_OSCAR_NODE:-192.168.104.69}"
-OIDC_ISSUER="${CAIOS_OIDC_ISSUER:-https://auth.134.87.8.230.sslip.io/realms/caios}"
+
+# The four hostnames below are NOT public and must never move to the public
+# domain. OSCAR and MinIO are reached over the private subnet at the OSCAR
+# node's own address, with certificates from the CAIOS CA; Let's Encrypt
+# cannot issue for a private IP and nothing outside the cluster talks to them.
 OSCAR_HOST="oscar.${NODE}.sslip.io"
 MINIO_HOST="minio.${NODE}.sslip.io"
+
+# This one IS public — it is the issuer in every token OSCAR validates.
+# Gotcha 25: OSCAR picks which claim to authorise on by substring-matching the
+# issuer, and "/realms/caios" is what selects group_membership for us. Keep the
+# realm segment intact when the domain changes.
+: "${CAIOS_PUBLIC_DOMAIN:?CAIOS_PUBLIC_DOMAIN is unset. Run this from the repository,
+   or pass CAIOS_OIDC_ISSUER explicitly. It must not fall back to a literal:
+   a stale issuer makes OSCAR reject every token with 401, and the dashboard
+   reports that as a red banner every 5 seconds naming nothing (gotcha 26).}"
+OIDC_ISSUER="${CAIOS_OIDC_ISSUER:-${CAIOS_SCHEME:-https}://auth.${CAIOS_PUBLIC_DOMAIN}/realms/${KEYCLOAK_REALM:-caios}}"
 
 APPLY=false
 [[ "${1:-}" == "--apply" ]] && APPLY=true

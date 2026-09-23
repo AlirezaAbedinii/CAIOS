@@ -7,7 +7,7 @@ federated server.
 
     # on the cluster, from a site's JupyterLab terminal
     python3 client.py --site site_a \
-        --server fedserver-<uuid>.pacs-deployments.<EDGE_IP>.sslip.io:443 \
+        --server fedserver-<uuid>.pacs-<deployments domain>:443 \
         --ca caios-ca.pem
 
     # local rehearsal against demo/fl/local_server.py

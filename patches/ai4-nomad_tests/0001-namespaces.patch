@@ -21,7 +21,7 @@
 +# real deployment. Driven from the environment instead:
 +#
 +#   AI4_NAMESPACES=caios
-+#   AI4_BASE_DOMAIN=deployments.<traefik-ip>.sslip.io
++#   AI4_BASE_DOMAIN=$CAIOS_DEPLOYMENTS_DOMAIN
  DOMAINS = {
 -    "ai4eosc": "deployments.cloud.ai4eosc.eu",
 -    "imagine": "deployments.cloud.imagine-ai.eu",

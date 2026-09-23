@@ -139,8 +139,8 @@ def test_papi_cors_lists_both_schemes(root):
     with nothing in PAPI's log to explain it. Listing both costs nothing.
     """
     t = (root / "configs" / "papi" / "main.yaml").read_text()
-    assert "- https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io" in t
-    assert "- http://dashboard.${CAIOS_PUBLIC_IP}.sslip.io" in t
+    assert "- https://${CAIOS_DASHBOARD_HOST}" in t
+    assert "- http://${CAIOS_DASHBOARD_HOST}" in t
 
 
 def test_keycloak_client_accepts_both_schemes(root):

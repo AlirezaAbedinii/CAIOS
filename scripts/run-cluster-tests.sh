@@ -28,8 +28,15 @@ export NOMAD_CLIENT_KEY="${NOMAD_CLIENT_KEY:-/etc/nomad.d/certs/cli-key.pem}"
 # Consumed by our patch to the suite's conf.py, which upstream hardcodes to the
 # AI4EOSC namespaces. Note the base domain has NO "pacs-" prefix: the test
 # builds "<meta.domain>-<base>" itself, and meta.domain is already "pacs".
+#
+# C0. This used to be built from CAIOS_EDGE_IP, which was wrong and latent: the
+# suite fetches each test job back through Traefik over HTTPS, and the wildcard
+# certificate covers the PUBLIC deployment names only. Against an edge-IP
+# hostname it would have failed with "SSL Error: Invalid SSL certificates" —
+# and since this suite is the only thing that sets meta.status=ready, that is a
+# cluster which schedules nothing while looking healthy (gotcha 2).
 export AI4_NAMESPACES="caios"
-export AI4_BASE_DOMAIN="deployments.${CAIOS_EDGE_IP}.sslip.io"
+export AI4_BASE_DOMAIN="${CAIOS_DEPLOYMENTS_DOMAIN}"
 
 # requests uses certifi, not the system trust store, so pointing at our CA here
 # is what stops the HTTPS check failing with "Invalid SSL certificates".

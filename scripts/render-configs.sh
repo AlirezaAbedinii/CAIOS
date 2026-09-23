@@ -18,7 +18,7 @@ cd "$ROOT"
 ENV_FILE="configs/env/caios.env"
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "Missing $ENV_FILE."
-    echo "  cp configs/env/caios.env.template $ENV_FILE   and fill in the two floating IPs."
+    echo "  cp configs/env/caios.env.template $ENV_FILE   and fill in the addresses."
     exit 1
 fi
 
@@ -27,12 +27,22 @@ set -a
 source "$ENV_FILE"
 set +a
 
-for required in CAIOS_CTRL_IP CAIOS_EDGE_IP; do
+for required in CAIOS_CTRL_IP CAIOS_EDGE_IP CAIOS_PUBLIC_IP \
+                CAIOS_PUBLIC_DOMAIN CAIOS_DEPLOYMENTS_DOMAIN; do
     if [[ -z "${!required:-}" ]]; then
         echo "$required is empty in $ENV_FILE. Every hostname derives from it."
         exit 1
     fi
 done
+
+# C0. An sslip.io name is an address wearing a domain's clothes, and the
+# difference decides whether a publicly trusted certificate is even possible.
+# Say which one is in force, because every later failure looks the same.
+if [[ "$CAIOS_PUBLIC_DOMAIN" == *.sslip.io ]]; then
+    CAIOS_DOMAIN_KIND="sslip.io — no ACME possible, certificates come from the CAIOS CA"
+else
+    CAIOS_DOMAIN_KIND="a real domain — certificates can come from Let's Encrypt"
+fi
 
 # T5. One variable decides the scheme of every user-facing URL on the platform.
 # Anything but http or https would render a Caddyfile that fails to parse and a
@@ -106,7 +116,10 @@ Rendered for:
   api        ${CAIOS_SCHEME}://${CAIOS_API_HOST}
   auth       ${CAIOS_SCHEME}://${CAIOS_AUTH_HOST}
   vault      ${CAIOS_SCHEME}://${CAIOS_VAULT_HOST}
-  deployments  *.pacs-deployments.${CAIOS_EDGE_IP}.sslip.io
+  deployments  *.pacs-${CAIOS_DEPLOYMENTS_DOMAIN}
+
+Public domain: ${CAIOS_PUBLIC_DOMAIN}
+  ${CAIOS_DOMAIN_KIND}
 
 ${CAIOS_ALT_SCHEME}:// answers on all four hostnames with a 302 to
 ${CAIOS_SCHEME}://, so a browser that upgrades the scheme on its own comes back.

@@ -132,21 +132,59 @@ All from module or tool metadata, served by PAPI from `catalog/mirror/`:
 
 ---
 
+## The five-minute cut
+
+**The recording is about five minutes.** That is the constraint everything
+below now answers to. At a speaking pace that is 600 to 700 words, so nothing
+waits on camera: each beat is recorded as its own clip, everything slow is
+deployed and warmed beforehand, and every load is a cut.
+
+Proposed 2026-09-24, **to be confirmed**:
+
+| Time | Beat | On screen | How the waiting disappears |
+|---|---|---|---|
+| 0:00–0:20 | What CAIOS is | the home page: Canadian, private, for medical and neuroscience research; three depths of control | — |
+| 0:20–0:50 | A new researcher gets in | Keycloak's sign-up form → the waiting room → an administrator approves at `/admin` → the marketplace | two browser windows, cut between them |
+| 0:50–1:50 | **No code**: a private language model | LLMs → a model's card → the deploy form → the running deployment → a clinical note summarised in the chat window | deployed before recording; the 1–3 min load is a cut |
+| 1:50–2:40 | **Low code**: serverless inference | YOLO → *Deploy* ▾ → *Inference API (serverless)* → the Inference list → one request → detections | service created and warmed beforehand |
+| 2:40–4:00 | **High code**: the notebook | YOLO → *Deploy* ▾ dedicated, JupyterLab, one GPU → a notebook of four or five short cells: the GPU, detections drawn on an image, then the same model's serverless endpoint and the private LLM called from the same notebook | workspace deployed and notebook staged beforehand |
+| 4:00–4:40 | Federated learning *(decided later)* | three hospital workspaces training, rounds at 2×, then the chart: 0.853 against 0.806 and 0.865 | pre-bootstrapped |
+| 4:40–5:00 | Close | Statistics: live usage on Compute Canada; one roadmap line | — |
+
+If federated learning is cut, its 40 seconds go to the notebook.
+
+What it changes about the steps:
+
+- **Step 3 is now the critical path**, and it is YOLO. It goes next.
+- **Step 4's result has to be clean on camera.** See its first measurement
+  below: today the synchronous answer is the job's log with the detections
+  buried in it.
+- **Step 5 narrows to the screens above.** The Gradio page is not among them.
+  The Keycloak sign-up form and the YOLO module page are, and the second
+  carries `vo.imagine-ai.eu` and "AI4 …" chips today.
+- **Step 2 still runs**, because test users can click any module, but after
+  step 3: its Jupyter column only exists if step 3 finds JupyterLab works on
+  modules.
+- The sign-up beat is a new account, and the rest is recorded as `researcher`
+  (Dana Okafor). The name in the dashboard header changes between beat two and
+  beat three; a cut hides it, or the new account records everything and every
+  deployment is created during the session. Decide at step 6.
+
 ## Steps
 
 | # | Step | Gate | State |
 |---|---|---|---|
 | 0 | Clean slate | the stale deployments gone, gpu-1 and gpu-3 free | **done 2026-09-24** |
 | 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
-| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed | next |
-| 3 | High code | a notebook that runs on the GPU from a marketplace deployment | |
-| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | |
+| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed | after 3 |
+| 3 | High code | a notebook that runs on the GPU from a marketplace deployment | **next** |
+| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24 |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
-Order: 0, 1, then 2 with the step-3 spike and step 4 in parallel, then 3, 5, 6, 7.
-About four to five working days. Commit and push after each step.
+Order, revised for the five-minute cut: 0, 1, **3**, 4, 5, 2, 6, 7. About four
+working days. Commit and push after each step.
 
 ### Step 1 — Module deploys stop depending on Europe · done
 
@@ -196,6 +234,39 @@ Inference page, send an image to the synchronous endpoint with `curl`, upload
 one through the MinIO console, delete the service. Re-measure cold and warm,
 fix the guide. The MinIO secret key is rendered in the page: never on camera.
 
+**First measurement, 2026-09-24: all three services answer, and two things
+would look wrong on camera.** One real photograph to each of the three
+`researcher` services from 2026-08-26, both routes, TLS verified against the
+CAIOS CA:
+
+| Service | Synchronous (`/run/…`) | Through the bucket |
+|---|---|---|
+| YOLO, "CAIOS object detection" | 200 in 13.0 s cold, 5.2 s warm | result in 9.1 s: clean JSON, person 0.909, tie 0.611 |
+| image classification, 8 GB | 200 in 15.4 s | ran, **result lost** — only a log |
+| image classification, 4 GB | 200 in 16.7 s, 12.4 s again | ran, **result lost** — only a log |
+
+1. **The synchronous answer is the job's log, not the result.** PAPI's service
+   script (`etc/oscar/service.yaml`) returns `cat service.log` for a
+   synchronous call. The detections are in it, as one Python-repr line
+   (`return: [[{'name': 'person', …}]]`) — line 14 of 16 for YOLO, line 221 of
+   about 230 for the classifier, under forty kilobytes of TensorFlow warnings.
+   Correct, and unusable on screen.
+2. **The classifier's bucket result is thrown away.** DEEPaaS 2.6.0 colours its
+   log, so the line naming the result file ends in an ANSI escape
+   (`…tmp-file-mwkea.json^[[00m`). The script `cut`s that filename, escape
+   included, and the `mv` that saves it finds no such file. YOLO ships DEEPaaS
+   2.5.2, which does not colour its log, which is the only reason it works.
+
+Both are one PAPI patch to `etc/oscar/service.yaml`: strip escapes before
+parsing, and answer a synchronous call with the result rather than the log.
+It reaches **new** services only; the three existing ones keep the script they
+were created with.
+
+Not a CAIOS fault but worth knowing: `curl --aws-sigv4` (7.81 here) cannot
+upload to this MinIO — it predates the `x-amz-content-sha256` header MinIO
+requires and gets 403 `SignatureDoesNotMatch`. The browser console and any S3
+SDK are fine.
+
 ### Step 5 — Names and logos
 
 Clean the metadata when the mirror is built (`scripts/mirror-catalogue.sh`):
@@ -235,17 +306,20 @@ tokens, passwords.
 
 ---
 
-## Open decisions
+## Decisions
 
-1. **Is federated learning in the recording?** `CLAUDE.md` still calls it the
-   headline; the three tiers do not mention it. Recommended: keep it as the end
-   of the high-code tier, since it runs in the same JupyterLab workspaces.
-2. **High-code vehicle:** YOLO in Jupyter mode with B as the fallback, or
-   `obj-detection-torch` specifically?
-3. **The three OSCAR services from 2026-08-26** — clear them so the Inference
-   list is clean on camera?
-4. **Which account records, and from which machine?** Recommended: `researcher`,
-   on a laptop on the VPN. And any names or logos noticed that finding 6 misses.
+Answered 2026-09-24:
+
+1. **Federated learning: decided later.** In if it fits as high code, and it
+   probably does. It keeps a provisional 40 seconds in the cut.
+2. **High code is YOLO.** `ai4os-yolo-torch`, in Jupyter mode if step 3's spike
+   finds that works, else the dev-env fallback (B).
+3. **The OSCAR services stay**, and were tested with real requests instead —
+   see step 4.
+4. **`researcher` records.** A new account is created on camera, to show
+   sign-up and approval.
+
+Still open: the storyboard above.
 
 ---
 

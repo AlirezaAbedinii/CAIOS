@@ -124,11 +124,12 @@ Click the row.
 Header **`Inference detail`**. It shows Deployment ID, Docker image, Creation
 time, CPUs and Memory, then two sections.
 
-**Ignore `Synchronous calls`.** It shows an *Endpoint* and a *Token*. On this
-cluster that path does not work — synchronous invocation needs a component we
-deliberately did not install. It is displayed unconditionally by the API.
+**`Synchronous calls`** shows an *Endpoint* and a *Token* — Route A below.
+It works: Knative was installed on 2026-08-26, and all three services answered
+on it on 2026-09-24. *(This section used to say to ignore it. That predates
+Knative.)*
 
-**Use `Asynchronous calls`.** Write down all four:
+**`Asynchronous calls`** — Route B. Write down all four:
 
 | Field on screen | What it is |
 |---|---|
@@ -174,9 +175,24 @@ curl -H "Authorization: Bearer <TOKEN>" \
      <ENDPOINT>
 ```
 
-The detections come back in the response body. **Measured: 5.3-5.9 seconds**,
-warm or cold — Knative starts a container if none is running, and the pull is
-already cached.
+The answer comes back in the same response — **but it is the job's log, not a
+JSON document.** The detections are on the line that starts `return:`, as a
+Python list:
+
+```
+… INFO deepaas.cmd.cli [-] return: [[{'name': 'person', 'class': 0, 'confidence': 0.90899, 'box': {…}}, …]]
+```
+
+For YOLO that is line 14 of 16. For the image classifier it is line 221 of
+about 230, under forty kilobytes of TensorFlow warnings. `docs/demo-plan.md`
+step 4 plans a patch so it returns the result alone; until then, filter it:
+
+```bash
+curl … | grep 'return:'
+```
+
+**Measured 2026-09-24:** 13.0 s for the first call after the service had been
+idle (the image already on the node), 5.2 s warm. The classifier: 12–17 s.
 
 No MinIO, no buckets, no second web app. If you are building anything on top of
 CAIOS, this is the integration point: it is an ordinary HTTP API with a bearer
@@ -255,7 +271,7 @@ thirteen-second version.
 
 | What you see | Why |
 |---|---|
-| `outputs/` has a `.log` but no `.json` | Your input file was not named `.json` |
+| `outputs/` has a `.log` but no `.json` | Your input file was not named `.json` — or it is the **image classifier**: its DEEPaaS 2.6.0 colours its log, the escape code breaks the script's filename parsing, and the result is discarded. Known, measured 2026-09-24; the prediction is in the `.log`, on the `return:` line |
 | The log ends in `UnicodeDecodeError: byte 0x89` | You uploaded a raw image instead of the JSON wrapper. `0x89` is the first byte of a PNG |
 | Nothing appears in `outputs/` at all | The upload went to the wrong folder. It must be `inputs/`, inside the bucket named on the detail page |
 | The Deploy menu item is greyed out | Not logged in, or not a project member |
@@ -269,6 +285,6 @@ thirteen-second version.
 > Marketplace → model → **Deploy ▾ → Inference API (serverless)** → fill the
 > form → **Deployments → Inference** → click your service → copy the
 > **Endpoint** and **Token** → `curl` your JSON at it → the detections come
-> back in the response.
+> back in the response, on its `return:` line.
 >
 > The MinIO route is still there for batches, but you do not need it.

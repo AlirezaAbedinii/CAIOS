@@ -165,10 +165,17 @@ wrapped as JSON. See step 3.
 **`outputs/` has a `.log` but no `.json`.** The input file was not named
 `.json`, so the script did not save structured output.
 
-**The detail page shows a `/run/<service>` endpoint that does not work.** That
-is *synchronous* invocation, which needs Knative, and this cluster is
-asynchronous-only by choice (D-51). It is displayed unconditionally by PAPI.
-Do not click it in front of anyone; the async path above is the one that works.
+**The `/run/<service>` endpoint on the detail page.** *Corrected 2026-09-24.*
+This used to say it does not work, because the cluster was asynchronous-only
+(D-51). Knative was installed the same day this was written, and all three
+services answered on it on 2026-09-24. What it returns is the job's **log**,
+with the detections on the line starting `return:` — see
+`docs/oscar-gui-guide.md`, Route A, and `docs/demo-plan.md` step 4.
+
+**`outputs/` has only a `.log`, and the input *was* named `.json`.** The
+image classifier's result is discarded by the service script: its DEEPaaS
+colours the line naming the result file, and the escape code breaks the
+filename. The prediction is in the `.log`. YOLO is not affected.
 
 **Nothing appears at all.** Check the per-user namespace —
 `oscar-svc-<first 8 characters of the OIDC subject>`, not `oscar-svc`. That is

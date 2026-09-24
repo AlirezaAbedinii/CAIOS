@@ -49,6 +49,39 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-24 — Step 3 spike: JupyterLab works in the YOLO module, the GPU does not
+
+The high-code tier is YOLO, and the question was whether a marketplace module
+can be a notebook at all. A one-off job, outside PAPI, ran
+`ai4oshub/ai4os-yolo-torch` exactly as the module template would in Jupyter
+mode, with a GPU.
+
+**JupyterLab came up first time with nothing changed.** `deep-start` installed
+it from PyPI in about nine seconds and loaded its own config; the deployment
+password logs in, no password gets 403, and the file browser opens on the
+module's own code. The note in `configs/papi/modules-user.yaml` that switched
+Jupyter off for every module — "runs as root without `--allow-root`" — was
+drawn from `posenet-tf` and does not hold here. Step 2 now tests Jupyter mode
+on all eight before it is offered again.
+
+**The GPU, in practice, does not work.** PyTorch 1.13.1 is built for CUDA
+11.6, older than the H100, so the driver JIT-compiles its kernels at the first
+CUDA call. After 25 minutes at 99% of the job's one core, with the JIT cache
+at exactly 1024 MB — the driver's default ceiling, past which it evicts and
+compiles again — it was still going, and it was stopped. That is gotcha 13's
+lesson from the other side: the device was there, `torch.cuda` would have said
+`True`, and the first line that used it would have hung for half an hour.
+
+**On CPU it is fast**: 0.1–0.27 s an image on one core, six objects found in
+`bus.jpg`. So the tier is the YOLO module in Jupyter mode, on CPU, and the GPU
+is the language model's to show. The storyboard is updated to say so.
+
+Surfaced on the way: Jupyter mode installs JupyterLab from PyPI at every
+start, and YOLO fetches its weights from GitHub at first use — in every cold
+OSCAR job as well. Both mean: deploy and warm before recording.
+
+---
+
 ## 2026-09-24 — Five minutes, YOLO, and the OSCAR services under real load
 
 Decided: high code is YOLO; `researcher` records, with a new account signed up

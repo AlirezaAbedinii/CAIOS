@@ -147,7 +147,7 @@ Proposed 2026-09-24, **to be confirmed**:
 | 0:20–0:50 | A new researcher gets in | Keycloak's sign-up form → the waiting room → an administrator approves at `/admin` → the marketplace | two browser windows, cut between them |
 | 0:50–1:50 | **No code**: a private language model | LLMs → a model's card → the deploy form → the running deployment → a clinical note summarised in the chat window | deployed before recording; the 1–3 min load is a cut |
 | 1:50–2:40 | **Low code**: serverless inference | YOLO → *Deploy* ▾ → *Inference API (serverless)* → the Inference list → one request → detections | service created and warmed beforehand |
-| 2:40–4:00 | **High code**: the notebook | YOLO → *Deploy* ▾ dedicated, JupyterLab, one GPU → a notebook of four or five short cells: the GPU, detections drawn on an image, then the same model's serverless endpoint and the private LLM called from the same notebook | workspace deployed and notebook staged beforehand |
+| 2:40–4:00 | **High code**: the notebook | YOLO → *Deploy* ▾ dedicated, JupyterLab → a notebook of four or five short cells: detections drawn on an image, then the same model's serverless endpoint and the private LLM called from the same notebook. **CPU** — see step 3's spike; the GPU is the LLM beat's to show | workspace deployed and notebook staged beforehand |
 | 4:00–4:40 | Federated learning *(decided later)* | three hospital workspaces training, rounds at 2×, then the chart: 0.853 against 0.806 and 0.865 | pre-bootstrapped |
 | 4:40–5:00 | Close | Statistics: live usage on Compute Canada; one roadmap line | — |
 
@@ -176,14 +176,17 @@ What it changes about the steps:
 |---|---|---|---|
 | 0 | Clean slate | the stale deployments gone, gpu-1 and gpu-3 free | **done 2026-09-24** |
 | 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
-| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed | after 3 |
-| 3 | High code | a notebook that runs on the GPU from a marketplace deployment | **next** |
+| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **next** |
+| 3 | High code | a notebook that runs from a marketplace deployment | spike done 2026-09-24; notebook after 2 |
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24 |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
-Order, revised for the five-minute cut: 0, 1, **3**, 4, 5, 2, 6, 7. About four
+Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
+step-3 spike, **2**, the rest of 3, 4, 5, 6, 7. Step 2 moved up because the
+high-code beat needs JupyterLab offered on modules again, and that should not
+be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
 
 ### Step 1 — Module deploys stop depending on Europe · done
@@ -202,6 +205,13 @@ working days. Commit and push after each step.
 
 ### Step 2 — Every marketplace module tested
 
+Two columns per module, not one: DEEPaaS mode as below, and **Jupyter mode**
+(JupyterLab answers `/login`, the deployment password logs in), because the
+high-code beat needs `jupyter` offered on modules again and the one image that
+failed on 2026-09-02 was `posenet-tf`. Plus one policy question the spike
+raised: every module image predates the H100 (finding 2, step 3's spike), so
+should the deploy form still offer modules a GPU at all?
+
 `scripts/check-modules.sh`, shaped like `check-llm-catalogue.sh`. For each module
 in `catalog/keep.txt`: deploy (DEEPaaS, CPU), wait for `running`, `GET
 /v2/models/`, one `predict` with a fixture of the right data type, the UI
@@ -211,7 +221,14 @@ module the demo uses, with a matrix multiplication (gotcha 13).
 
 ### Step 3 — High code
 
-A spike first: a one-off Nomad job, outside PAPI so nothing user-visible
+**Spike done 2026-09-24 — see the step log.** JupyterLab works in the YOLO
+module as it stands; the GPU does not, in any useful sense; YOLO on CPU is
+fast. So the tier is **A on CPU**: Marketplace → YOLO → *Deploy* → JupyterLab,
+no GPU. What remains: offer `jupyter` for modules again once step 2 has tested
+Jupyter mode on all eight; write the notebook; rename the *"Inference API + UI
+(dedicated)"* menu item, which is wrong for a notebook (step 5).
+
+The spike, as planned: a one-off Nomad job, outside PAPI so nothing user-visible
 changes, running `ai4os-yolo-torch` with `deep-start --jupyter` and a GPU. It
 answers three questions: does JupyterLab come up, how long does it take (it
 installs JupyterLab from PyPI at every start), and does the GPU compute.
@@ -391,3 +408,50 @@ see step 6.
 **Observed, not touched:** on `caios_edge`, `docker system df` fails with
 *rw layer snapshot not found for container 17aa0177f60d…*. Traefik is serving
 normally. Worth a look before the cold-start run (T7), not before.
+
+### Step 3 spike — YOLO in Jupyter mode · 2026-09-24
+
+A one-off Nomad job outside PAPI, mirroring the module template's `main` task in
+Jupyter mode — `ai4oshub/ai4os-yolo-torch:latest`, `deep-start --jupyter`, one
+core, 8 GB, one GPU — pinned to `caios-wn-gpu-0`, the only node with disk room
+for the image. Purged afterwards.
+
+**JupyterLab works, first time, with no change.** `deep-start` installed
+JupyterLab from PyPI in about 9 s, loaded its own config from
+`/srv/.deep-start`, and served `/srv` on `0.0.0.0:8888`:
+
+```
+GET  /login                          200   Jupyter Server
+POST /login  (the deployment password)  302 -> /lab
+GET  /api/contents/  logged in       200   ai4os-yolo-torch, ai4os-yolov8-torch
+GET  /api/contents/  not logged in   403
+```
+
+So the reason recorded on 2026-09-02 for switching Jupyter off on every module
+("runs as root without `--allow-root`") does not hold for this image — its
+config sets `allow_root = True` and loads. Whether it holds for any of the
+other seven is step 2's Jupyter column.
+
+**The GPU is not usable.** PyTorch 1.13.1 is built for CUDA 11.6, which
+predates Hopper, so it carries no kernels for compute capability 9.0 and the
+driver JIT-compiles them from PTX at the first CUDA call. That call was still
+compiling after **25 minutes** at 99% of the job's one core, with the JIT
+cache at exactly **1024 MB** — the driver's default ceiling, beyond which it
+evicts and recompiles. Stopped there. A test user who ticks *one GPU* for this
+module would see a notebook that hangs on its first GPU line for half an hour.
+
+**On CPU, YOLO is fast**, on that same single core:
+
+```
+ultralytics 8.4.3                       import 1.0 s, yolov8n.pt 0.4 s (from GitHub)
+bus.jpg     bus, 4 people, stop sign    0.27 s, then 0.12 s
+zidane.jpg  2 people, tie               0.11 s, then 0.10 s
+```
+
+Two runtime dependencies this surfaced, both to keep in mind for demo day
+rather than to fix: Jupyter mode installs JupyterLab **from PyPI at every
+start**, and YOLO's weights come **from GitHub** at first use — in the
+notebook, and in every cold OSCAR job too. Deploy and warm before recording.
+
+The notebook the module ships, `notebooks/1.0-yolov8_api_start.ipynb`, is a
+four-cell stub (it prints the hostname). The demo needs its own.

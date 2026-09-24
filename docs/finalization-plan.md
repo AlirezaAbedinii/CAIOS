@@ -542,7 +542,9 @@ part that mattered.
 6. T5 — HTTP switch — **plumbing done; flip held on `docs/nginx-proxy.md`**
 7. T6 — registration and admin console — **done**
 8. **T7 — availability and preflight** ← next
-9. T8 — demo script, read-throughs, record
+9. T8 — demo script, read-throughs, record — **superseded 2026-09-24 by
+   `docs/demo-plan.md`**, which also moves the recording ahead of the
+   certificate
 
 Phase R runs alongside, whenever the above is blocked on someone else.
 

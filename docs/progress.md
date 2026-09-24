@@ -33,14 +33,12 @@ which was not in the plan.
 | 6 — LLM deployment | vLLM + Open WebUI on the lab's own GPUs | **Done** — gate passed, `docs/llm-plan.md` |
 
 **Nothing is blocking.** The GPU-scheduling defect found on 2026-08-19 was fixed
-the same day (R-18). Next actions, in order:
+the same day (R-18).
 
-1. **Rehearse the demo end to end in a browser**, following
-   `docs/demo-script.md`. The LLM half has now been driven by a human clicking,
-   and it found two faults; the federated half has not.
-3. **A real domain and certificate** (V1 item 1). Half a day, and it removes the
-   browser warning that currently opens the demo.
-4. Record it.
+**As of 2026-09-24 the recording comes before the certificate.**
+`docs/demo-plan.md` is the working plan: three tiers — no code (the LLM), low
+code (OSCAR), high code (JupyterLab) — steps 0 to 7, then record. The
+certificate (`docs/certificate-plan.md` C2/C3) follows it.
 
 Two things a person still has to judge, which no script settles:
 
@@ -48,6 +46,51 @@ Two things a person still has to judge, which no script settles:
   know the project? That is the Stage 5 gate's real half.
 - Is brain MRI the right disease area? (Q-08 — answered by default, not by
   decision.)
+
+---
+
+## 2026-09-24 — The demo before the certificate, and a cluster cleared for it
+
+Priorities changed: finish the code and record the demo first, the real
+certificate after. `docs/demo-plan.md` is the plan — three tiers of control,
+all starting from the marketplace — and it opens with what a failed deployment
+found.
+
+### The module that failed was never the problem
+
+An `obj-detection-torch` deployment titled "high code" died two minutes in. The
+module had started; its `ui` sidecar — the DEEPaaS Gradio page, pulled from
+AI4EOSC's registry in Europe — hit `net/http: timeout awaiting response
+headers`, and a sidecar with no restarts takes the allocation down with it.
+The registry answered normally an hour later.
+
+The pre-pull playbook already pulls that image and quotes that exact error.
+It never helped a module deployment: the template sets `force_pull = true`, and
+**Nomad 1.11.3 pulls any `:latest` tag every time whatever `force_pull` says** —
+the local-image check in `createImage()` runs only when the tag is not `latest`.
+Step 1 pins the image by digest, which is the one reference form that makes
+Nomad look locally first.
+
+### Found on the way
+
+- `obj-detection-torch` is PyTorch 1.4 on CUDA 10.1 — too old to address a MIG
+  slice at all. `ai4os-yolo-torch` (CUDA 11.6) is the better high-code
+  candidate, and is what OSCAR already runs.
+- The reason recorded for switching JupyterLab off on modules does not hold:
+  `deep-start`'s own config sets `allow_root = True`, so the error means the
+  config failed to load. Step 3 spikes it.
+- Upstream names still on screen, all from metadata: `vo.imagine-ai.eu` tags,
+  "AI4 trainable/pre trained/inference", "AI4OS Development Environment", and
+  an AI4EOSC logo in the Gradio footer. Step 5.
+
+### Step 0: the stale deployments are gone
+
+Three LLMs held three of the four compute nodes, so today's `demo no code`
+landed on hospital C and the federation had nowhere to run. Deleted through
+PAPI as each owner, so the LLMs' Vault secrets went too: `test meeting`
+(28 days old, on the LLM node), `test8000` (18 days, hospital B) and the dead
+`high code` module. gpu-0, gpu-1 and gpu-3 now run only docuum. `demo no code`
+is redeployed first on recording day, so it lands on gpu-3.
 
 ---
 

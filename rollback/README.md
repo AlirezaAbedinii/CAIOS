@@ -93,3 +93,25 @@ sudo docker compose -f compose/docker-compose.yml \
 
 Accounts already approved keep working either way: their access is a realm
 role, and nothing in T6 is required to honour it.
+
+## `papi-pre-0020.tar` — saved 2026-09-24
+
+The first PAPI image kept here; until now only the dashboard had rollbacks.
+It is the PAPI built on 2026-09-08, serving until patch `0020` was deployed:
+patches `0001` to `0019`, with the module template's `ui` sidecar still pulling
+`deepaas_ui:latest` from AI4EOSC's registry at every deployment. Git tag
+`papi-pre-0020` records what it was built from.
+
+**This is the undo for patch `0020`**, and rolling back reintroduces the fault
+it fixed: a module deployment dies whenever that registry stalls.
+
+```bash
+sudo docker load -i rollback/papi-pre-0020.tar
+sudo docker tag caios/papi:pre-0020 caios/papi:latest
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env up -d --no-deps --force-recreate papi
+```
+
+`--no-deps`, so the recreate touches PAPI alone. Without it compose may also
+recreate Keycloak or Vault, and a recreated Vault is an empty one until
+`vault_init` has run (D-76).

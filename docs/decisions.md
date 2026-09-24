@@ -1260,3 +1260,33 @@ platform up, which is the safe surprise rather than the dangerous one.
 Verified without a reboot, which is the point: `systemctl start` against the
 running stack left every container's `StartedAt` byte-identical and re-ran
 `vault_init` alone.
+
+**2026-09-24** — The recording moved ahead of the certificate
+(`docs/demo-plan.md`), and step 1 of that plan found why module deployments
+die on a download from Europe. Recorded D-80.
+
+**D-80 — An image a deployment cannot start without is referenced by digest
+or pinned tag, never `latest`, and is pre-pulled by the same reference.**
+Nomad 1.11.3 re-pulls any `latest` tag at every deployment whatever
+`force_pull` says: `createImage()` in its docker driver checks for a local copy
+only `if !ForcePull && tag != "latest"`. So a pre-pull protects nothing unless
+the template names the image the way the pre-pull did.
+
+Found the expensive way. The module template's `ui` sidecar pulled
+`deepaas_ui:latest` from AI4EOSC's registry, with no restarts; on 2026-09-24
+the registry's manifest endpoint stalled — for every image tried, while its
+`/v2/` and token endpoints answered — and a module deployment died with the
+image already on the node. `playbook-prepull-images.yml` had been pulling that
+image onto every node since Stage 3 and had never once helped.
+
+Patch `0020` references it by digest with `force_pull = false`; the playbook
+pulls the identical reference and skips a digest already present, so it also
+completes while that registry is stalling. `tests/test_module_template.py`
+keeps the template and the playbook equal. Verified on the live cluster: the
+`ui` task started with no *Downloading image* event while the registry was
+still hanging.
+
+The LLM template already obeyed this (`v0.27.1`, `v0.11.0`), which is why it
+never failed this way. Module images themselves stay on `latest` — the tag is
+the user's choice in the deploy form — so each deployment still asks Docker
+Hub, which is fast when the layers are cached and has been reliable here.

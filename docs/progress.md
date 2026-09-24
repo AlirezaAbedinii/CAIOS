@@ -49,6 +49,65 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-24 — Step 1: a module deployment no longer waits on Europe
+
+The same module, on the same node, on the same afternoon: two minutes and dead
+before, **running in six seconds** after — while AI4EOSC's registry was still
+stalling.
+
+### The registry was down for the whole step, which made the gate honest
+
+Its `/v2/` and token endpoints answered in under a second. Its manifest
+endpoint — the call in the failed deployment's error — hung for the full 45 s
+on every image tried, HEAD and GET alike. A health check that passes in front
+of the one request that matters is the GitHub outage of 2026-09-01 again.
+
+So the digest to pin could not be read from Europe. All four GPU nodes held the
+same one, `sha256:31f35b28…`, built 2025-05-06 — the date of the Gradio UI
+repository's last commit. `latest` has not moved in over a year; pinning it
+changes nothing about what runs.
+
+### What changed
+
+- **Patch `0020`**: the `ui` sidecar by digest, `force_pull = false` on `ui`
+  and `main`. For `main` that only matters for pinned tags — Nomad re-pulls any
+  `latest` whatever `force_pull` says (D-80) — and Docker Hub was never the
+  problem.
+- **The pre-pull playbook** pulls the same reference and skips a digest already
+  on the node, so it completes while that registry is stalling. It targets the
+  compute nodes only — it had parked about 30 GB of deployment images on the
+  Traefik node, which can never run one — and no longer pulls three images
+  nothing here uses.
+- `tests/test_module_template.py`: five tests, and all five fail with `0020`
+  removed.
+
+### The gate
+
+```
+T+6s   running on caios-wn-gpu-0
+task ui    no "Downloading image" event — taken from the node
+predict    grace_hopper.jpg, 1 CPU core: 200 in 5.5 s, person 0.999, tie 0.953
+ui-<uuid>  200, the Gradio page
+```
+
+TLS verified against the CAIOS CA throughout, through the public proxy.
+
+### Deliberately not done
+
+**YOLO was not pre-pulled**, and the playbook was not run across the cluster.
+Measuring each node for YOLO found the list itself is the problem: it sends
+38 GB of LLM images to every GPU node, docuum has already evicted different
+parts of it on different nodes, and three nodes sit at 71–77 GB against an
+80 GB threshold. Run everywhere today it would pull the LLM images back onto
+site_a and evict whatever was least recently used — possibly `tf2.14.0`, which
+the federated workspaces deploy and which is not on the list at all. The split
+by node role is step 6, once step 3 has decided what the hospitals run. It ran
+on `caios_llm` alone, which held everything already: 8 of 8, nothing changed.
+
+Rollback: `rollback/papi-pre-0020.tar`, git tag `papi-pre-0020`.
+
+---
+
 ## 2026-09-24 — The demo before the certificate, and a cluster cleared for it
 
 Priorities changed: finish the code and record the demo first, the real
@@ -62,7 +121,8 @@ An `obj-detection-torch` deployment titled "high code" died two minutes in. The
 module had started; its `ui` sidecar — the DEEPaaS Gradio page, pulled from
 AI4EOSC's registry in Europe — hit `net/http: timeout awaiting response
 headers`, and a sidecar with no restarts takes the allocation down with it.
-The registry answered normally an hour later.
+The registry's health check answered an hour later; its manifest endpoint, the
+call that failed, was still hanging for every image (step 1, below).
 
 The pre-pull playbook already pulls that image and quotes that exact error.
 It never helped a module deployment: the template sets `force_pull = true`, and

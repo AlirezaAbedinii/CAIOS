@@ -177,6 +177,48 @@ nomad job status -namespace caios <job>
 nomad eval status <eval-id>     # ConstraintFiltered names the constraint that failed
 ```
 
+### A module deployment goes `failed` a minute or two in
+
+Almost always an image pull, and usually not the module's own. Read the
+allocation's events:
+
+```bash
+nomad job allocs -namespace caios <job>
+nomad alloc status -namespace caios <alloc>
+```
+
+The pattern on 2026-09-24 was `ui` → *Driver Failure: Failed to pull
+registry.cloud.ai4eosc.eu/...: net/http: timeout awaiting response headers*,
+then `main` → *Sibling Task Failed*, exit 137. The `ui` sidecar has no
+restarts, so its failure takes the module with it.
+
+Since patch `0020` the `ui` image is referenced by digest and taken from the
+node, so this should only happen on a node that does not hold it. Check, and
+put it back — the playbook skips a digest already present, so it completes even
+while AI4EOSC's registry is stalling:
+
+```bash
+cd ansible
+ansible nomad_gpu_clients -b -m shell -a \
+  "docker image inspect registry.cloud.ai4eosc.eu/ai4os/deepaas_ui@sha256:31f35b28582b516b42a118a7467f6e264d2fc6013dc3300b6d7806855c1712b3 >/dev/null && echo present || echo MISSING"
+ansible-playbook playbook-prepull-images.yml --limit <node>
+```
+
+Mind the budget before running the playbook across every node: until
+`docs/demo-plan.md` step 6 splits its list by node role, it sends the 38 GB of
+LLM images to every GPU node, and three of the four are near docuum's 80 GB
+threshold (gotcha 14).
+
+If the events show a *Downloading image* on `ui`, the running PAPI predates
+`0020`: `bash scripts/apply-patches.sh`, then rebuild PAPI. Is Europe stalling
+right now? A healthy registry answers this in about a second:
+
+```bash
+TOK=$(curl -s "https://registry.cloud.ai4eosc.eu/service/token?service=harbor-registry&scope=repository:ai4os/deepaas_ui:pull" | python3 -c 'import json,sys;print(json.load(sys.stdin)["token"])')
+curl -s -m 30 -o /dev/null -w '%{http_code} %{time_total}s\n' -I -H "Authorization: Bearer $TOK" \
+  https://registry.cloud.ai4eosc.eu/v2/ai4os/deepaas_ui/manifests/latest
+```
+
 ### The dashboard renders but every button fails
 
 PAPI. It holds the only Nomad credentials, so a misconfigured PAPI produces a

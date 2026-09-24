@@ -45,9 +45,12 @@ died on `caios-wn-gpu-0`, and the module was never the problem:
 
 `ui` is DEEPaaS's Gradio page, a `poststart` sidecar pulled from **AI4EOSC's
 registry in Europe**, with `restart { attempts = 0, mode = "fail" }` — so one
-slow pull takes the whole allocation down with it. The registry answered
-normally an hour later (`401` in 0.86 s, which is its unauthenticated reply):
-transient, the same shape as the GitHub outage of 2026-09-01.
+slow pull takes the whole allocation down with it. An hour later the
+registry's `/v2/` endpoint answered in 0.86 s, which first read as a transient
+fault. It was not: step 1 found its manifest endpoint — the exact call in the
+error — hanging for every image tried, for the rest of the afternoon. A
+registry that answers its health check and stalls on the one request that
+matters is the same shape as the GitHub outage of 2026-09-01.
 
 **Every module deployment carries this risk, not only this module.**
 `playbook-prepull-images.yml` already pre-pulls `deepaas_ui` and quotes this
@@ -134,8 +137,8 @@ All from module or tool metadata, served by PAPI from `catalog/mirror/`:
 | # | Step | Gate | State |
 |---|---|---|---|
 | 0 | Clean slate | the stale deployments gone, gpu-1 and gpu-3 free | **done 2026-09-24** |
-| 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | next |
-| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed | |
+| 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
+| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed | next |
 | 3 | High code | a notebook that runs on the GPU from a marketplace deployment | |
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
@@ -145,18 +148,19 @@ All from module or tool metadata, served by PAPI from `catalog/mirror/`:
 Order: 0, 1, then 2 with the step-3 spike and step 4 in parallel, then 3, 5, 6, 7.
 About four to five working days. Commit and push after each step.
 
-### Step 1 — Module deploys stop depending on Europe
+### Step 1 — Module deploys stop depending on Europe · done
 
 - PAPI patch `0020`: the `ui` image referenced **by digest** with
   `force_pull = false`, so a cached copy is used with no network call. `main`
   gets `force_pull = false` too, which helps any pinned tag; for the default
   `latest` Nomad still checks Docker Hub, which is fast when the layers are
   cached and has been reliable throughout.
-- `playbook-prepull-images.yml` pulls the same digest, so the two cannot drift;
-  a unit test asserts they agree. Adds `ai4os-yolo-torch` after measuring each
-  node's disk against docuum's 80 GB threshold (gotcha 14).
-- Gate: deploy `obj-detection-torch`; the `ui` task shows no *Downloading
-  image* event; `predict` returns detections; the UI page loads. Then delete.
+- `playbook-prepull-images.yml` pulls the same digest and skips it when
+  present; `tests/test_module_template.py` keeps the two equal. It now targets
+  the compute nodes only, and no longer pulls three images nothing here runs.
+- **YOLO was not added.** The measurement said the list itself is the problem
+  — see step 6.
+- Gate: passed. See the step log.
 
 ### Step 2 — Every marketplace module tested
 
@@ -203,7 +207,22 @@ appears on camera or test users will click it.
 
 ### Step 6 — The script
 
-Rewrite `docs/demo-script.md` around the three tiers, opening on the home page.
+**First, the pre-pull list, split by node role.** Measured 2026-09-24 in step 1:
+the list sends every image to every GPU node, including 38 GB of LLM images
+(`vllm` 30.8, `open-webui` 7.1) that only `caios_llm` runs in the demo, and
+docuum has already evicted different parts of it on different nodes. Images on
+disk: `caios_site_a` 53 GB, `caios_llm` 71, `caios_site_b` and `caios_site_c`
+77, against docuum's 80. Running the playbook across every node today would
+pull the LLM images back onto site_a and push three nodes past the threshold,
+and docuum would evict whatever was least recently used — possibly `tf2.14.0`,
+which the federated workspaces deploy and which **is not on the list at all**
+(the list has `pytorch2.1`, which nothing in the demo deploys). The split:
+the `ui` digest everywhere; the LLM images on `caios_llm`; on the hospitals
+the federated images plus whatever step 3 chose (YOLO is about 15 GB on disk,
+and fits only on site_a today). `docs/demo-script.md` currently tells you to
+run the playbook before the demo — fix that line in the same change.
+
+Then rewrite `docs/demo-script.md` around the three tiers, opening on the home page.
 A before-you-start list: pre-pull, the LLM deployed first so it lands on gpu-3,
 one warm-up request to OSCAR, the high-code workspace deployed and its notebook
 staged. A fallback clip for each tier.
@@ -257,3 +276,44 @@ module was purged. After:
 `demo no code` stays until recording day and is then redeployed **first**, so it
 lands on gpu-3 and the three hospital nodes stay free for the federation. The
 OSCAR services are untouched (decision 3).
+
+### Step 1 — module deploys stop depending on Europe · done 2026-09-24
+
+**AI4EOSC's registry was stalling throughout**, which made the gate a real
+test rather than a formality. Its `/v2/` and token endpoints answered in under
+a second; the manifest request — the exact call in the failed deployment's
+error — hung for the full 45 s on every image tried, HEAD and GET alike. So the
+digest could not be read from Europe. It was read from the nodes instead: all
+four GPU nodes held the same `sha256:31f35b28…`, built 2025-05-06, which is
+also the date of the Gradio UI repository's last commit. `latest` has not moved
+in over a year, so pinning it changes nothing about what runs.
+
+Patch `0020` built into PAPI and deployed; the old image is
+`rollback/papi-pre-0020.tar`, git tag `papi-pre-0020`. Then the gate, as
+platform-admin, with the dashboard's own defaults:
+
+```
+T+1s   queued
+T+6s   running                      caios-wn-gpu-0, the node that failed at 17:47
+
+task ui    Received -> Task Setup -> Started     no "Downloading image": taken from the node
+task main  Received -> Task Setup -> Downloading image -> Started   (latest, 1 s: Docker Hub)
+
+GET  /v2/models/                     200   obj_detect_pytorch
+POST /v2/models/obj_detect_pytorch/predict/   grace_hopper.jpg, CPU, 1 core
+     200 in 5.5 s   person 0.999, tie 0.953, with boxes
+GET  ui-<uuid>                       200   the Gradio page
+```
+
+TLS verified against the CAIOS CA the whole way, through the public proxy.
+Deleted afterwards. The same module, on the same node, on the same afternoon:
+two minutes and dead before, running in six seconds after.
+
+The playbook was run on `caios_llm` only, which already held every listed
+image: 8 of 8, nothing changed, and the pinned image skipped without a request
+to the stalled registry. It was deliberately **not** run across the cluster —
+see step 6.
+
+**Observed, not touched:** on `caios_edge`, `docker system df` fails with
+*rw layer snapshot not found for container 17aa0177f60d…*. Traefik is serving
+normally. Worth a look before the cold-start run (T7), not before.

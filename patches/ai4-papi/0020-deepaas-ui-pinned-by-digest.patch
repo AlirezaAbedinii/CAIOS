@@ -1,0 +1,43 @@
+--- a/etc/modules/nomad.hcl
++++ b/etc/modules/nomad.hcl
+@@ -272,7 +272,15 @@
+       driver = "docker"
+ 
+       config {
+-        force_pull = true
++        # [CAIOS] false, not upstream's true, so a node's own copy of the image
++        # is used instead of the registry being asked again on every deployment.
++        #
++        # For the default `latest` tag this changes nothing: Nomad re-pulls any
++        # `latest` whatever force_pull says (createImage() in its docker driver).
++        # It takes effect for every pinned tag. Docker Hub, where module images
++        # live, has been reliable here; the registry that failed is the one in
++        # the "ui" task below. patches/README.md, 0020.
++        force_pull = false
+         image      = "${DOCKER_IMAGE}:${DOCKER_TAG}"
+         command    = "deep-start"
+         args       = ["--${SERVICE}"]
+@@ -337,8 +345,21 @@
+       driver = "docker"
+ 
+       config {
+-        force_pull = true
+-        image      = "registry.cloud.ai4eosc.eu/ai4os/deepaas_ui:latest"
++        # [CAIOS] Pinned by digest and not force-pulled, so a deployment never
++        # waits on Europe for an image the node already holds. D-80.
++        #
++        # This task pulls from AI4EOSC's registry and has no restarts, so a pull
++        # that stalls kills `main` with it. On 2026-09-24 an obj-detection-torch
++        # deployment died exactly so ("timeout awaiting response headers") with
++        # this image already on the node: Nomad re-pulls a `latest` tag
++        # whatever force_pull says, and only checks locally for a pinned tag
++        # or a digest.
++        #
++        # The digest is what `latest` has resolved to since 2025-05-06, read
++        # from all four GPU nodes. ansible/playbook-prepull-images.yml pulls the
++        # same reference, and tests/test_module_template.py keeps them equal.
++        force_pull = false
++        image      = "registry.cloud.ai4eosc.eu/ai4os/deepaas_ui@sha256:31f35b28582b516b42a118a7467f6e264d2fc6013dc3300b6d7806855c1712b3"
+         ports      = ["ui"]
+         shm_size   = 250000000   # 250MB
+         memory_hard_limit = 500  # MB

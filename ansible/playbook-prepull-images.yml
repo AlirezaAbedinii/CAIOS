@@ -22,8 +22,18 @@
 # failure kills the whole allocation — a deployment that looks like a platform
 # fault when it is really a slow download.
 #
-# Pulling ahead of time removes the timeout from the critical path entirely, and
-# makes deployments start in seconds instead of minutes.
+# Pulling ahead of time takes the download off the critical path — BUT ONLY FOR
+# AN IMAGE THE JOB TEMPLATE REFERENCES BY A PINNED TAG OR DIGEST, with
+# force_pull = false. Nomad re-pulls any `latest` tag at every deployment
+# whatever force_pull says, so from Stage 3 until 2026-09-24 this playbook pulled
+# deepaas_ui:latest onto every node and every module deployment asked Europe
+# for it again anyway. On 2026-09-24 one died of it with the image on the node.
+# Patch 0020 references it by digest; the entry below is the same reference,
+# and tests/test_module_template.py keeps the two equal. D-80.
+#
+# A digest is immutable, so one already on the node is never pulled again —
+# which also means this playbook still completes while AI4EOSC's registry is
+# stalling, as it was on 2026-09-24.
 #
 # Run playbook-container-storage.yml FIRST. Docker 29 keeps image layers under
 # containerd's root, not Docker's data-root, so on an unfixed node these pulls
@@ -31,7 +41,10 @@
 # with "No space left on device".
 
 - name: Pre-pull deployment images
-  hosts: nomad_clients
+  # The compute nodes only. This said nomad_clients, which includes
+  # caios_edge — meta.type=traefik, a node no PAPI template can place anything
+  # on — and so parked about 30 GB of deployment images there for nothing.
+  hosts: nomad_gpu_clients
   become: true
   gather_facts: false
 
@@ -40,15 +53,22 @@
     # they are the ones whose failure takes an allocation down.
     caios_images:
       # --- module and tool sidecars (AI4EOSC registry, the slow one) ---
-      - registry.cloud.ai4eosc.eu/ai4os/deepaas_ui:latest        # "ui" task
-      - registry.cloud.ai4eosc.eu/ai4os/docker-storage:latest    # storage mount
-      - registry.cloud.ai4eosc.eu/ai4os/docker-zenodo:latest     # dataset download
+      # The module "ui" task, pinned exactly as patch 0020 pins it.
+      - registry.cloud.ai4eosc.eu/ai4os/deepaas_ui@sha256:31f35b28582b516b42a118a7467f6e264d2fc6013dc3300b6d7806855c1712b3
+      # docker-storage and docker-zenodo are gone from this list. They serve
+      # the storage_mount and dataset_download tasks, which PAPI removes from
+      # every deployment here because no storage is ever configured (D-15),
+      # and pulling their `latest` tags made this playbook fail whenever
+      # AI4EOSC's registry stalled.
       # --- the demo workloads themselves (Docker Hub) ---
-      - ai4oshub/ai4os-demo-app:latest
+      # ai4os-demo-app left the marketplace on 2026-09-02 and nothing deploys
+      # it; it was 2.8 GB of every node's docuum budget (gotcha 14).
       # The dev environment has NO `latest` tag — it publishes one tag per
       # framework (u22.04, pytorch2.1, tf2.14.0, cuda12.3.2 ...). Asking for
       # latest fails with "not found", which reads like a network error.
-      # u22.04 is the plain base; pytorch2.1 is what the FL clients will use.
+      # u22.04 is the plain base. NOTE: the FL workspaces deploy tf2.14.0
+      # (scripts/deploy-fl-demo.sh), not pytorch2.1 as this used to say;
+      # docs/demo-plan.md step 6 matches this list to what the demo deploys.
       - ai4oshub/ai4os-dev-env:u22.04
       - ai4oshub/ai4os-dev-env:pytorch2.1
       - ai4oshub/ai4os-federated-server:latest
@@ -83,7 +103,18 @@
     - name: Pull images
       # Retries because the failure being worked around is a timeout, not a
       # refusal — the same pull usually succeeds on a second attempt.
-      ansible.builtin.command: "docker pull {{ item }}"
+      #
+      # A digest already on the node is skipped, not pulled: it cannot have
+      # changed, and asking the registry anyway is the very request that
+      # stalls. Tags are always pulled, so a tag that moved is picked up.
+      ansible.builtin.shell: |
+        if [[ {{ item | quote }} == *@sha256:* ]] && docker image inspect {{ item | quote }} >/dev/null 2>&1; then
+          echo "present by digest: {{ item }}"
+        else
+          docker pull {{ item | quote }}
+        fi
+      args:
+        executable: /bin/bash
       loop: "{{ caios_images }}"
       register: caios_pull
       retries: 3
@@ -102,7 +133,17 @@
         - "'manifest unknown' not in (caios_pull.stderr | default(''))"
 
     - name: Count what is now cached locally
-      ansible.builtin.command: docker images --format '{{ "{{" }}.Repository{{ "}}" }}:{{ "{{" }}.Tag{{ "}}" }}'
+      # By reference, not by listing `docker images`: that prints a
+      # digest-pinned image under whatever tag it arrived with, or <none>,
+      # so a listing would report the pinned "ui" image as missing.
+      ansible.builtin.shell: |
+        n=0
+        for ref in {{ caios_images | map('quote') | join(' ') }}; do
+          docker image inspect "$ref" >/dev/null 2>&1 && n=$((n+1))
+        done
+        echo "$n"
+      args:
+        executable: /bin/bash
       register: caios_local
       changed_when: false
 
@@ -110,5 +151,4 @@
       ansible.builtin.debug:
         msg: >-
           {{ inventory_hostname }}:
-          {{ caios_images | select('in', caios_local.stdout_lines) | list | length }}
-          of {{ caios_images | length }} images cached
+          {{ caios_local.stdout }} of {{ caios_images | length }} images cached

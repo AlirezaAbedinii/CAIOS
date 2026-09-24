@@ -842,6 +842,46 @@ The message now names the upstream status and the failing URL, which is how the
 fault underneath this one was finally identified as `401 Unauthorized for url:
 …/system/services`.
 
+### `ai4-papi/0020-deepaas-ui-pinned-by-digest.patch` — pinned to `e80a2b7`
+
+**A module deployment died waiting on Europe for an image the node already
+had.** 2026-09-24, `obj-detection-torch` on `caios-wn-gpu-0`: the module
+started, then its `ui` sidecar — DEEPaaS's Gradio page, from AI4EOSC's registry
+— failed with
+
+```
+Failed to pull registry.cloud.ai4eosc.eu/ai4os/deepaas_ui:latest:
+net/http: timeout awaiting response headers
+```
+
+and because that task has `restart { attempts = 0, mode = "fail" }`, Nomad
+killed `main` with it (exit 137). Every DEEPaaS module deployment carries the
+same dependency.
+
+`playbook-prepull-images.yml` had been pulling that image onto every node since
+Stage 3, and it never helped, for two reasons that stack:
+
+- upstream's `etc/modules/nomad.hcl` sets `force_pull = true` on `ui` and on
+  `main`;
+- **Nomad re-pulls any `latest` tag whatever `force_pull` says.** In
+  `drivers/docker/driver.go` (v1.11.3, the version here), `createImage()` only
+  looks for a local copy `if !ForcePull && tag != "latest"`. A digest parses to
+  an empty tag, so it is the one form that is looked up locally first.
+
+The patch references `ui` by digest — `sha256:31f35b28…`, what `latest` has
+resolved to since 2025-05-06, read from the four GPU nodes because the
+registry's manifest endpoint was hanging for every image while its `/v2/` and
+token endpoints answered — and sets `force_pull = false` on `ui` and `main`. For
+`main` that takes effect for any pinned tag; the default `latest` still makes
+Nomad check Docker Hub, which has been reliable here and is not what failed.
+
+It cannot be configuration: the image is a literal in the template, and PAPI
+reads no setting for it. The pre-pull playbook pulls the identical reference
+and `tests/test_module_template.py` keeps the two equal. D-80.
+
+Not touched: `etc/try_me/nomad.hcl` carries the same `deepaas_ui:latest`, but
+try-me is disabled here (no `meta.type=tryme` node), so nothing renders it.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and

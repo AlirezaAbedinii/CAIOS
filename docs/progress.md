@@ -49,6 +49,49 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-24 — Five minutes, YOLO, and the OSCAR services under real load
+
+Decided: high code is YOLO; `researcher` records, with a new account signed up
+on camera; the OSCAR services stay; federated learning is decided later. And
+the recording is **about five minutes**, which reshapes the plan more than any
+of the four — `docs/demo-plan.md` now carries a storyboard proposal, and step 3
+goes next because it is the critical path.
+
+### Every OSCAR service answers, and two things would look wrong on camera
+
+One real photograph to each of the three services from 2026-08-26, both
+routes, TLS verified against the CAIOS CA:
+
+| Service | Synchronous | Through the bucket |
+|---|---|---|
+| YOLO | 200 in 13.0 s cold, 5.2 s warm | clean JSON in 9.1 s |
+| image classification ×2 | 200 in 12–17 s | ran; **result discarded** |
+
+**The synchronous answer is the job's log.** PAPI's service script returns
+`cat service.log`, so the detections arrive as one Python-repr line — line 14
+of 16 for YOLO, line 221 of about 230 for the classifier, under forty kilobytes
+of TensorFlow warnings.
+
+**The classifier's bucket result is thrown away** by an ANSI escape. DEEPaaS
+2.6.0 colours its log, so the line naming the result file ends
+`…tmp-file-mwkea.json^[[00m`, the script `cut`s the escape into the filename,
+and the `mv` that should save it finds nothing. YOLO ships 2.5.2, uncoloured,
+which is the only reason it works.
+
+Both are one patch to `etc/oscar/service.yaml`, for step 4; it reaches new
+services only.
+
+Two documents were wrong and are corrected: `docs/oscar-gui-guide.md` told
+readers to ignore the synchronous endpoint (it works — Knative has been
+installed since 2026-08-26), and `docs/oscar-demo.md` called the cluster
+asynchronous-only.
+
+On the way: `curl --aws-sigv4` (7.81) cannot upload to this MinIO — it predates
+the `x-amz-content-sha256` header MinIO requires. The probe's own test objects
+were deleted afterwards; everything older in the buckets is untouched.
+
+---
+
 ## 2026-09-24 — Step 1: a module deployment no longer waits on Europe
 
 The same module, on the same node, on the same afternoon: two minutes and dead

@@ -1,0 +1,20 @@
+date	module	mode	verdict	ready_s	note
+2026-09-25	tf-cnn-benchmarks-api	jupyter	pass	6	login 302 -> /lab; /srv holds tf-cnn-benchmarks-api, tf_cnn_benchmarks
+2026-09-25	ai4os-image-classification-tf	deepaas	fail	7	imgclas: predict 1.8s, ui 502: {"status": "OK", "labels": ["mortarboard", "military_uniform", "academic_gown", "suit", "cornet"], "probabilities": [0.3103408217430115, 0.2
+2026-09-25	ai4os-image-classification-tf	jupyter	pass	18	login 302 -> /lab; /srv holds ai4os-image-classification-tf
+2026-09-25	ai4os-audio-classification-tf	deepaas	fail	28	audioclas: predict 0.3s, ui 502: {"status": "OK", "labels": ["Busy signal", "Telephone dialing, DTMF", "Telephone", "White noise", "Theremin"], "probabilities": [0.967439174
+2026-09-25	ai4os-audio-classification-tf	jupyter	pass	27	login 302 -> /lab; /srv holds ai4os-audio-classification-tf
+2026-09-25	obj-detection-torch	jupyter	fail	3	JupyterLab never served /login
+2026-09-25	retinopathy-test	deepaas	pass	303	retinopathy_test: predict 3.7s, ui 200: {"status": "OK", "predictions": [{"original_filename": "grace_hopper.jpg", "prediction": "{'probabilities': array([[4.1921863e-01, 1.1734911
+2026-09-25	retinopathy-test	jupyter	pass	308	login 302 -> /lab; /srv holds retinopathy-test
+2026-09-25	ai4os-fasterrcnn-torch	deepaas	pass	308	fasterrcnn_pytorch_api: predict 8.9s, ui 200: {"status": "OK", "predictions": "[{\"boxes\": [[5.498852729797363, 21.198949813842773, 637.7216186523438, 640.0], [268.1825866699219, 435.77
+2026-09-25	tf-cnn-benchmarks-api	deepaas	fail	380	benchmarks_cnn: predict failed after 300s: ReadTimeout
+2026-09-25	obj-detection-torch	deepaas	pass	635	obj_detect_pytorch: predict 6.0s, ui 200: {"status": "OK", "predictions": {"results": [{"label": "person", "probability": "0.99915135", "rectangle Coodinates": {"coords": [{"Coordina
+2026-09-25	ai4os-fasterrcnn-torch	jupyter	pass	310	login 302 -> /lab; /srv holds ai4os-fasterrcnn-torch
+2026-09-25	posenet-tf	deepaas	pass	310	posenetclas: predict 0.3s, ui 200: {"status": "OK", "predictions": [{"nose": {"coordinate_x": 239.29546783987627, "coordinate_y": 266.0916450604593, "score": 0.997986793518066
+2026-09-25	posenet-tf	jupyter	fail		failed after 310s: task 'main': Exit Code: 1, Exit Message: "Docker container exited with non-zero exit code: 1"
+2026-09-25	ai4os-yolo-torch	deepaas	pass	310	ai4os_yolo: predict 2.5s, ui 200: {"status": "OK", "predictions": [[{"name": "person", "class": 0, "confidence": 0.90899, "box": {"x1": 4.74379, "y1": 27.09546, "x2": 511.845
+2026-09-25	ai4os-yolo-torch	jupyter	pass	10	login 302 -> /lab; /srv holds ai4os-yolo-torch, ai4os-yolov8-torch
+2026-09-25	posenet-tf	jupyter	pass	10	login 302 -> /lab; /srv holds posenet-tf
+2026-09-25	ai4os-image-classification-tf	deepaas	pass	12	imgclas: predict 1.7s, ui 200 after 5s more: {"status": "OK", "labels": ["military_uniform", "mortarboard", "suit", "academic_gown", "cornet"], "probabilities": [0.34239161014556885, 0.
+2026-09-25	ai4os-audio-classification-tf	deepaas	pass	18	audioclas: predict 0.4s, ui 200 after 0s more: {"status": "OK", "labels": ["Busy signal", "Telephone dialing, DTMF", "Telephone", "White noise", "Theremin"], "probabilities": [0.967439174

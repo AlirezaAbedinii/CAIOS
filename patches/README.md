@@ -882,6 +882,29 @@ and `tests/test_module_template.py` keeps the two equal. D-80.
 Not touched: `etc/try_me/nomad.hcl` carries the same `deepaas_ui:latest`, but
 try-me is disabled here (no `meta.type=tryme` node), so nothing renders it.
 
+### `ai4-papi/0021-jupyter-allow-root.patch` — pinned to `e80a2b7`
+
+**One module image cannot start JupyterLab as root, and every module runs as
+root.** `posenet-tf` ships an older Jupyter config in `/srv/.jupyter/` that
+never sets `allow_root`, so in Jupyter mode the container logs
+
+```
+[C ServerApp] Running as root is not recommended. Use --allow-root to bypass.
+```
+
+and exits 1. That single image is what took JupyterLab away from every module
+on 2026-09-02; `deep-start`'s own config sets `allow_root = True`, and the other
+images that ship JupyterLab or install it were fine (step 2 of
+`docs/demo-plan.md` measured all eight).
+
+`deep-start` appends `$jupyterOPTS` to `jupyter lab` verbatim, so the patch sets
+`jupyterOPTS = "--allow-root"` in the module template's `main` task. Harmless
+where the config already allows it, and ignored in DEEPaaS mode.
+
+It cannot be configuration: the environment of the `main` task is a literal
+block in `etc/modules/nomad.hcl`, and `modules-user.yaml` offers no field that
+reaches it.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and

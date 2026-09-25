@@ -616,22 +616,54 @@ dashboard shipped with no logo at all.
 
 ### Changing which modules appear in the marketplace
 
-Edit `catalog/keep.txt`, then:
+Edit `catalog/keep.txt`, then refresh the mirror and PAPI's cache:
 
 ```bash
-bash scripts/curate-catalogue.sh            # show what would change
-bash scripts/curate-catalogue.sh --apply    # rewrite and push the fork
+bash scripts/mirror-catalogue.sh    # prunes the served .gitmodules to keep.txt
+sudo docker restart caios_papi      # PAPI caches the catalogue for six hours
 ```
 
-**Then wait up to five minutes.** `raw.githubusercontent.com` serves
-`.gitmodules` with `max-age=300`, so the marketplace keeps showing the old list
-after the push no matter how many times you restart PAPI. This looks exactly
-like a broken cache and is not one. After that, restart PAPI to clear its own
-six-hour cache:
+*Corrected 2026-09-25.* This section used to say to push the fork with
+`scripts/curate-catalogue.sh --apply` and wait five minutes for
+`raw.githubusercontent.com`'s cache. Since T1 (2026-09-02) PAPI reads the
+mirror, and `scripts/lib/prune-gitmodules.py` applies `keep.txt` to it, so
+`keep.txt` is authoritative with or without the fork. Pushing the fork keeps it
+tidy; it is no longer what changes the marketplace.
+
+Then re-run `bash scripts/check-modules.sh`, and check the home page still
+states the right count (`tests/test_home_page.py`).
+
+### Testing every module in the marketplace
 
 ```bash
-sudo docker restart caios_papi
+bash scripts/check-modules.sh                  # all of them, DEEPaaS and JupyterLab
+bash scripts/check-modules.sh --only posenet   # one module
+bash scripts/check-modules.sh --modes jupyter  # one mode
 ```
+
+Deploys each module through PAPI with the form's defaults (one CPU, no GPU),
+as `researcher`: in DEEPaaS mode it predicts on a real input and loads the
+Gradio page; in Jupyter mode it logs in with the deployment password. At most
+six deployments are alive at once — about what fits beside a running LLM — and
+each is deleted as soon as it has been tested. Results are appended to
+`demo/modules/check-results.tsv` as they arrive.
+
+**Run it after any change to `catalog/keep.txt` or `configs/papi/modules-user.yaml`.**
+`tests/test_failed_deployments.py` reads that file: JupyterLab may only be
+offered on modules while every marketplace module passes it on its latest run.
+
+It pulls every module image onto whichever node Nomad picks — tens of
+gigabytes — and docuum evicts older images to make room. Re-run the pre-pull
+for the demo's images afterwards (`docs/demo-plan.md` step 6).
+
+**On demo day: a fresh module's Gradio page can answer 502 for a few
+seconds.** The UI sidecar waits for the API and then builds itself from the
+API's swagger, so it comes up 0–5 s after the API (measured). A 502 there means
+wait a moment, not that the deployment is broken.
+
+If it is interrupted with Ctrl-C it still deletes what it created. If it is
+killed outright, list and delete leftovers — they are titled `check-modules …`
+and owned by `researcher`.
 
 ### Changing which bioimage.io models the AI4Life loader offers
 

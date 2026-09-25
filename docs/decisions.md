@@ -1290,3 +1290,21 @@ The LLM template already obeyed this (`v0.27.1`, `v0.11.0`), which is why it
 never failed this way. Module images themselves stay on `latest` — the tag is
 the user's choice in the deploy form — so each deployment still asks Docker
 Hub, which is fast when the layers are cached and has been reliable here.
+
+**2026-09-25** — Step 2 of `docs/demo-plan.md`: every marketplace module
+deployed in both modes. Recorded D-81.
+
+**D-81 — Modules offer JupyterLab, on per-module measurement.**
+It was taken away from every module on 2026-09-02 on the evidence of one image,
+`posenet-tf`, and a note that generalised it to all nine. Measured module by
+module on 2026-09-25, JupyterLab runs in seven of the eight; `posenet-tf` was
+real and is fixed by patch `0021` (`--allow-root`, which `deep-start` passes to
+`jupyter lab`), and `obj-detection-torch` cannot install JupyterLab at all.
+
+The rule that replaces "never" is measurement with teeth.
+`scripts/check-modules.sh` deploys every marketplace module in both modes and
+appends to `demo/modules/check-results.tsv`; `tests/test_failed_deployments.py`
+fails if any module fails either mode without an open decision recorded
+against it by name. An option that crashes is still worse than no option — the
+difference is that "crashes" is now a measurement per module, not an inference
+from one.

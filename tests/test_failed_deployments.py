@@ -3,11 +3,14 @@
 Found 2026-09-02 by reproducing a report that a deployment "goes starting, then
 running, then vanishes". Both halves of that were real and separate:
 
-  * **Why it died.** Every module image ships a `deep-start` that launches
-    JupyterLab as root *without* `--allow-root`. Jupyter refuses, the container
-    exits 1, Nomad retries twice and gives up. Reproduced directly:
-    `docker run ai4oshub/posenet-tf:latest deep-start --jupyter` prints
-    "Running as root is not recommended. Use --allow-root to bypass."
+  * **Why it died.** `posenet-tf` in Jupyter mode: Jupyter refused to run as
+    root, the container exited 1, Nomad retried twice and gave up. Reproduced
+    directly: `docker run ai4oshub/posenet-tf:latest deep-start --jupyter`
+    prints "Running as root is not recommended. Use --allow-root to bypass."
+    *Corrected 2026-09-24:* the conclusion drawn from it — that no module can
+    run JupyterLab — did not hold. `deep-start`'s own config sets
+    `allow_root = True`; the error means that file failed to load in that
+    image. `ai4os-yolo-torch` runs JupyterLab first time.
 
   * **Why it vanished.** `nomad_utils.get_deployments()` filters
     `Status != "dead"`, which hides a deployment the user deleted and a
@@ -15,8 +18,9 @@ running, then vanishes". Both halves of that were real and separate:
     had accumulated in Nomad, invisible in the dashboard, with nothing anywhere
     saying anything had gone wrong.
 
-Patch `0015` fixes the second; `configs/papi/modules-user.yaml` removes the
-option that triggers the first. These tests hold both.
+Patch `0015` fixes the second. For the first, `configs/papi/modules-user.yaml`
+offers JupyterLab only on the evidence of `scripts/check-modules.sh`, which
+deploys every marketplace module in both modes. These tests hold both.
 
 Offline: they read the repository and the patch, never a running PAPI. The live
 half is `scripts/check-deployments.sh`.
@@ -88,28 +92,85 @@ def _conf(root, path):
     return list(yaml.safe_load_all((root / path).read_text(encoding="utf-8")))[0]
 
 
-def test_modules_do_not_offer_jupyter(root):
-    """Measured: it crashes on every module image in the catalogue.
+RESULTS = "demo/modules/check-results.tsv"
+KEEP = "catalog/keep.txt"
 
-    Offering an option that cannot work is worse than not offering it — the
-    user gets a deployment that dies two minutes later for a reason the
-    interface never mentions.
-    """
+# Measured failures that are waiting on a decision about the catalogue, not on
+# a fix — docs/demo-plan.md, step 2. Each one is either fixed, or its module
+# leaves catalog/keep.txt; either way the entry comes out of this dict, and the
+# tests below fail until it does. Anything failing that is NOT listed here
+# fails them too.
+OPEN_DECISIONS = {
+    ("obj-detection-torch", "jupyter"):
+        "JupyterLab is not in the image and pip cannot install it: "
+        "\"Cannot uninstall 'PyYAML'. It is a distutils installed project\"",
+    ("tf-cnn-benchmarks-api", "deepaas"):
+        "predict runs a full CNN benchmark, over five minutes on one CPU core, "
+        "and the GPU it exists to benchmark is unusable to TensorFlow 2.2",
+}
+
+
+def _latest_results(root):
+    """{(module, mode): verdict} from the most recent date each pair was run."""
+    rows = (root / RESULTS).read_text(encoding="utf-8").splitlines()[1:]
+    latest = {}
+    for row in rows:
+        date, module, mode, verdict = row.split("\t")[:4]
+        if (module, mode) not in latest or date >= latest[(module, mode)][0]:
+            latest[(module, mode)] = (date, verdict)
+    return {k: v[1] for k, v in latest.items()}
+
+
+def _marketplace(root):
+    lines = (root / KEEP).read_text(encoding="utf-8").splitlines()
+    return [l.split()[0] for l in lines if l.strip() and not l.lstrip().startswith("#")]
+
+
+def test_modules_offer_deepaas_and_jupyter_only(root):
+    """JupyterLab came back on 2026-09-24, measured per module. VS Code has
+    never been tested on this platform, so it is not offered."""
     svc = _conf(root, MODULES_CONF)["general"]["service"]
-    assert svc["options"] == ["deepaas"], (
-        f"modules still offer {svc['options']} — jupyter does not work on any "
-        "module image (no --allow-root in their deep-start)"
-    )
+    assert svc["options"] == ["deepaas", "jupyter"], svc["options"]
     assert svc["value"] == "deepaas"
 
 
-def test_the_module_service_description_points_somewhere_that_works(root):
-    """Removing an option without saying where to go instead is a dead end."""
-    desc = _conf(root, MODULES_CONF)["general"]["service"]["description"].lower()
-    assert "development environment" in desc or "dev-env" in desc, (
-        "the description should send a user wanting a notebook to the tool that "
-        "actually provides one"
+def test_jupyter_is_offered_only_while_every_module_passes_it(root):
+    """Offering an option that crashes is worse than not offering it.
+
+    The evidence is scripts/check-modules.sh: every module in the marketplace
+    must have passed Jupyter mode on its most recent run. A module that stops
+    passing fails this test, which forces the choice — fix it, drop it from
+    catalog/keep.txt, or stop offering JupyterLab.
+    """
+    svc = _conf(root, MODULES_CONF)["general"]["service"]
+    if "jupyter" not in svc["options"]:
+        pytest.skip("JupyterLab is not offered for modules")
+    latest = _latest_results(root)
+    missing = [m for m in _marketplace(root) if (m, "jupyter") not in latest]
+    failing = {(m, "jupyter") for m in _marketplace(root) if latest.get((m, "jupyter")) == "fail"}
+    open_ = {k for k in OPEN_DECISIONS if k[1] == "jupyter"}
+    assert not missing, f"never tested in Jupyter mode: {missing}"
+    assert failing == open_, (
+        f"failing in Jupyter mode: {sorted(failing)}; awaiting a decision: {sorted(open_)}"
     )
+
+
+def test_every_marketplace_module_deploys_as_an_api(root):
+    """DEEPaaS is the default, so it is what a researcher gets by clicking
+    Deploy without reading the form. A module that fails it should not be in
+    the marketplace."""
+    latest = _latest_results(root)
+    failing = {(m, "deepaas") for m in _marketplace(root) if latest.get((m, "deepaas")) != "pass"}
+    open_ = {k for k in OPEN_DECISIONS if k[1] == "deepaas"}
+    assert failing == open_, (
+        f"not passing DEEPaaS mode: {sorted(failing)}; awaiting a decision: {sorted(open_)}"
+    )
+
+
+def test_the_module_service_description_says_what_each_mode_is(root):
+    """The form is where a researcher chooses; the description is all they read."""
+    desc = _conf(root, MODULES_CONF)["general"]["service"]["description"].lower()
+    assert "jupyterlab" in desc and "inference api" in desc
 
 
 def test_the_dev_env_still_offers_an_interactive_workspace(root):
@@ -120,17 +181,14 @@ def test_the_dev_env_still_offers_an_interactive_workspace(root):
     assert "vscode" in svc["options"]
 
 
-def test_the_reason_jupyter_was_removed_is_written_down(root):
-    """A bare `options: ['deepaas']` invites someone to add jupyter back.
-
-    The measurement that justifies it has to live next to the line it explains,
-    or this is a one-line regression waiting to happen.
-    """
+def test_the_reason_for_the_module_services_is_written_down(root):
+    """The option was removed once on the evidence of one image, and restored
+    on the evidence of another. The history has to live next to the line, or
+    the next person repeats one of the two mistakes."""
     text = (root / MODULES_CONF).read_text(encoding="utf-8")
-    block = text[: text.index("service:")]
-    tail = text[text.index("service:") - 1200 : text.index("service:")]
-    assert "allow-root" in tail, "no explanation of why jupyter is absent"
-    assert block is not None
+    tail = text[text.index("service:") - 1500 : text.index("service:")]
+    for needle in ("posenet-tf", "allow_root", "check-modules"):
+        assert needle in tail, f"the note above service: no longer mentions {needle}"
 
 
 # --- loading quotas.py without PAPI's dependency tree ----------------------

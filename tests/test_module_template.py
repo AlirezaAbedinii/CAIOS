@@ -112,3 +112,14 @@ def test_the_playbook_prepulls_exactly_what_the_template_runs(template, playbook
     stale = [i for i in images if "deepaas_ui" in i and i != image]
     assert not stale, f"the playbook also pulls a different deepaas_ui: {stale}"
 
+
+
+def test_jupyter_may_run_as_root_in_every_module(template):
+    """deep-start appends $jupyterOPTS to `jupyter lab` verbatim. posenet-tf's
+    image ships an old Jupyter config without allow_root, so without this flag
+    Jupyter refuses to start as root and the container exits 1 — the failure
+    that took JupyterLab away from every module on 2026-09-02. Patch 0021."""
+    block = _tasks(template)["main"]
+    assert re.search(r'^\s*jupyterOPTS\s*=\s*"--allow-root"\s*$', block, re.MULTILINE), (
+        "the module template must pass --allow-root to JupyterLab"
+    )

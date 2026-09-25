@@ -176,15 +176,15 @@ What it changes about the steps:
 |---|---|---|---|
 | 0 | Clean slate | the stale deployments gone, gpu-1 and gpu-3 free | **done 2026-09-24** |
 | 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
-| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **next** |
-| 3 | High code | a notebook that runs from a marketplace deployment | spike done 2026-09-24; notebook after 2 |
+| 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **done 2026-09-25**; 14 of 16 pass, two catalogue decisions open |
+| 3 | High code | a notebook that runs from a marketplace deployment | spike done 2026-09-24; **the notebook is next** |
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24 |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
-step-3 spike, **2**, the rest of 3, 4, 5, 6, 7. Step 2 moved up because the
+step-3 spike, 2, **the rest of 3**, 4, 5, 6, 7. Step 2 moved up because the
 high-code beat needs JupyterLab offered on modules again, and that should not
 be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
@@ -203,7 +203,14 @@ working days. Commit and push after each step.
   — see step 6.
 - Gate: passed. See the step log.
 
-### Step 2 — Every marketplace module tested
+### Step 2 — Every marketplace module tested · done
+
+**Done 2026-09-25 — see the step log.** JupyterLab is offered on modules again,
+patch `0021` fixed the one image that could not run it as root, and 14 of 16
+module/mode pairs pass. The two that do not are catalogue questions, not bugs
+(Decisions, below). No module can use this cluster's GPU.
+
+The plan, as it was:
 
 Two columns per module, not one: DEEPaaS mode as below, and **Jupyter mode**
 (JupyterLab answers `/login`, the deployment password logs in), because the
@@ -336,7 +343,25 @@ Answered 2026-09-24:
 4. **`researcher` records.** A new account is created on camera, to show
    sign-up and approval.
 
-Still open: the storyboard above.
+The storyboard was confirmed on 2026-09-25.
+
+Opened by step 2, 2026-09-25:
+
+5. **`obj-detection-torch`** runs as an API (predict 6 s) but cannot run
+   JupyterLab: it is not in the image, and pip cannot install it over a
+   distutils-installed PyYAML. It is also the oldest image in the marketplace
+   (PyTorch 1.4, 2019), and `ai4os-fasterrcnn-torch` does the same job — Faster
+   R-CNN detection — and passes both modes. **Recommended: remove it.**
+6. **`tf-cnn-benchmarks-api`** exists to answer "is this GPU working", and on
+   this cluster the answer is always no: TensorFlow 2.2 finds the H100 slice and
+   never finishes a matrix multiplication on it. On CPU its "predict" is a full
+   benchmark that runs past five minutes. **Recommended: remove it.**
+7. **Should modules be offered a GPU at all?** None of the eight can use one
+   (step log). Offering it holds a GPU nobody else can then use, counts against
+   the researcher's two-GPU limit, and runs on CPU anyway. **Recommended:
+   CPU-only for modules** — `gpu_num` fixed at 0 in `modules-user.yaml`, with a
+   sentence saying why; GPUs stay offered where they work: the LLM, the
+   development environment, federated learning.
 
 ---
 
@@ -455,3 +480,63 @@ notebook, and in every cold OSCAR job too. Deploy and warm before recording.
 
 The notebook the module ships, `notebooks/1.0-yolov8_api_start.ipynb`, is a
 four-cell stub (it prints the hostname). The demo needs its own.
+
+### Step 2 — every module, both modes · 2026-09-25
+
+`scripts/check-modules.sh` (new): each module deployed through PAPI as
+`researcher`, with the form's defaults — one CPU, no GPU — in DEEPaaS mode
+(model listed, a prediction on a real input, the Gradio page) and in Jupyter
+mode (login with the deployment password). Results in
+`demo/modules/check-results.tsv`.
+
+| Module | DEEPaaS | Jupyter |
+|---|---|---|
+| ai4os-yolo-torch | pass — predict 2.5 s, person 0.909 | pass |
+| ai4os-fasterrcnn-torch | pass — predict 8.9 s | pass |
+| obj-detection-torch | pass — predict 6.0 s, person 0.999 | **fail** — cannot install JupyterLab |
+| retinopathy-test | pass — predict 3.7 s | pass |
+| ai4os-image-classification-tf | pass — predict 1.7 s, military uniform 0.34 | pass |
+| ai4os-audio-classification-tf | pass — a 440 Hz tone is "Busy signal", 0.97 | pass |
+| posenet-tf | pass — body keypoints, nose 0.998 | pass, **after patch `0021`** |
+| tf-cnn-benchmarks-api | **fail** — predict runs past 300 s | pass |
+
+What the sweep itself taught, in the order it happened:
+
+- **About six module deployments fit at once**, beside the running LLM. Each
+  reserves a whole core plus 500 MHz for its UI. The first version submitted
+  eight and waited for all of them; two queued for capacity and would have been
+  recorded as failures. It now keeps a rolling window of six and tests each
+  deployment the moment it runs, deleting it straight after.
+- **The Gradio page answers a few seconds after the API.** Checked once, straight
+  after predicting, two modules showed 502 and were wrongly failed; re-tested
+  with a three-minute wait they were up 0–5 s later. Worth knowing on demo day:
+  a 502 on a fresh module's UI means "wait a moment".
+- **`posenet-tf` was the 2026-09-02 failure, and it was real** — its image
+  ships an older Jupyter config in `/srv/.jupyter` without `allow_root`. Patch
+  `0021` passes `--allow-root`, which `deep-start` hands to `jupyter lab`; it
+  now starts in 10 s.
+- **`obj-detection-torch` cannot run JupyterLab** for a different reason: it
+  is not in the image, and `pip install jupyterlab` stops at *Cannot uninstall
+  'PyYAML'. It is a distutils installed project*. The only template-level fix
+  is a global pip setting that would change every researcher's own
+  `pip install` in every module, so it was not taken. Decision 5.
+
+**GPUs.** Read from every module's Dockerfile and base image, and measured for
+the two with a CUDA recent enough to see the slice:
+
+| Module | Built on | With a GPU |
+|---|---|---|
+| retinopathy-test | TensorFlow 1.12, CUDA 9 in its `gpu` tag | cannot see a MIG slice |
+| image-classification-tf, audio-classification-tf, posenet-tf | TensorFlow 1.14, CUDA 10 in `gpu` tags; `latest` is the CPU build | cannot see it |
+| obj-detection-torch | PyTorch 1.4, CUDA 10.1 | cannot see it |
+| ai4os-yolo-torch, ai4os-fasterrcnn-torch | PyTorch 1.13, CUDA 11.6 | sees it; first CUDA call still compiling after 25 min (measured, YOLO) |
+| tf-cnn-benchmarks-api | TensorFlow 2.2, CUDA 11.0 | sees *"H100L-1-12C MIG 1g.12gb, Compute Capability 9.0"*; a 2048² matmul unfinished after 240 s (measured) |
+
+MIG needs CUDA 11 or later to see a slice at all, and Hopper kernels need CUDA
+11.8 or later. None of the eight has both. The cluster's GPUs are fine — vLLM
+and the development environment's PyTorch 2.x images use them natively — the
+modules simply predate the hardware. Decision 7.
+
+Side effects, as expected: every module image was pulled onto whichever node
+Nomad chose, so docuum has evicted some older images. Step 6 re-pulls the
+demo's.

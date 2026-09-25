@@ -1,0 +1,19 @@
+--- a/etc/modules/nomad.hcl
++++ b/etc/modules/nomad.hcl
+@@ -304,6 +304,16 @@
+ 
+       env {
+         jupyterPASSWORD             = "${JUPYTER_PASSWORD}"
++        # [CAIOS] Let JupyterLab run as root, which is what every module image
++        # runs as. deep-start appends this variable to `jupyter lab` verbatim.
++        #
++        # deep-start's own config already says allow_root = True, which is why
++        # most modules never needed it. posenet-tf ships an older config in
++        # /srv/.jupyter that does not, so Jupyter refused and the container
++        # exited 1 — the failure that took JupyterLab away from every module on
++        # 2026-09-02. Harmless where the config already allows it, and ignored
++        # in DEEPaaS mode. patches/README.md, 0021.
++        jupyterOPTS                 = "--allow-root"
+         RCLONE_CONFIG               = "${RCLONE_CONFIG}"
+         RCLONE_CONFIG_RSHARE_TYPE   = "webdav"
+         RCLONE_CONFIG_RSHARE_URL    = "${RCLONE_CONFIG_RSHARE_URL}"

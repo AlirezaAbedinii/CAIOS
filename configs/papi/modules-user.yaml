@@ -41,26 +41,33 @@ general:
     description: Docker tag to use. Tags are module dependent. You should choose the appropriate tag for your selected hardware (eg. use a `gpu`-like tag if you plan to run on GPUs).
     options: ['latest']
 
-  # [CAIOS] JupyterLab is NOT offered for modules, because it does not work.
+  # [CAIOS] Modules offer DEEPaaS and JupyterLab. Not VS Code: never tested here.
   #
-  # Measured 2026-09-02 across the whole catalogue - 9 images of 9, none with
-  # the flag: every module image ships a `deep-start` that launches JupyterLab
-  # as root WITHOUT `--allow-root`.
-  # Jupyter refuses to start, the container exits 1, Nomad retries twice and
-  # marks the job dead — and before patch 0015 the deployment then vanished
-  # from the dashboard with no error at all. Three abandoned `posenet-tf`
-  # deployments accumulated that way before anyone knew why.
+  # The history, because the reason changed. On 2026-09-02 JupyterLab was taken
+  # away from every module after posenet-tf died with "Running as root is not
+  # recommended. Use --allow-root to bypass." — and this note generalised that to
+  # all nine images, on the grounds that none passes the flag. That was the wrong
+  # evidence: deep-start's own jupyter_notebook_config.py sets allow_root = True
+  # and deep-start points JUPYTER_CONFIG_DIR at it, so the error only appears
+  # when that file fails to load. On 2026-09-24 ai4os-yolo-torch came up in
+  # Jupyter mode first time (docs/demo-plan.md, step 3's spike).
   #
-  # Offering an option that always crashes is worse than not offering it. The
-  # high-code path is the dev-env TOOL, whose image is newer and whose
-  # JupyterLab works — verified in a browser, logged in, terminal running.
+  # posenet-tf itself was the exception, and a real one: its image ships an older
+  # config in /srv/.jupyter without allow_root. Patch 0021 passes --allow-root
+  # to every module's JupyterLab, and it now starts.
   #
-  # DEEPaaS is what a module is for anyway: the module IS an inference API.
+  # So the rule is measurement, per module: scripts/check-modules.sh deploys
+  # every module in the marketplace in both modes and records the result in
+  # demo/modules/check-results.tsv, and tests/test_failed_deployments.py fails
+  # if a module fails Jupyter mode without an open decision recorded against it.
+  # Re-run it after changing the catalogue.
+  #
+  # Offering an option that crashes is still worse than not offering it.
   service:
     name: Service to run
     value: 'deepaas'
-    description: Modules run as a DEEPaaS inference API. For an interactive JupyterLab or VS Code workspace, deploy the AI4OS Development Environment from Tools instead.
-    options: ['deepaas']
+    description: DEEPaaS runs the module as an inference API with a web interface. JupyterLab opens a notebook inside the module's own environment, with its code and its model, to work with it directly.
+    options: ['deepaas', 'jupyter']
 
   jupyter_password:
     name: IDE password

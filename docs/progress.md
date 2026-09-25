@@ -49,6 +49,54 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-25 — Step 2: every module, both modes
+
+`scripts/check-modules.sh` deploys each marketplace module through PAPI, with
+the form's own defaults, as an API and as a JupyterLab workspace, and records
+what happened. **14 of 16 pass.** JupyterLab is offered on modules again.
+
+| | DEEPaaS | Jupyter |
+|---|---|---|
+| yolo, fasterrcnn, retinopathy, image- and audio-classification | pass | pass |
+| posenet-tf | pass | pass, after patch `0021` |
+| obj-detection-torch | pass | fail — cannot install JupyterLab |
+| tf-cnn-benchmarks-api | fail — predict runs past 300 s | pass |
+
+### The 2026-09-02 verdict was one image's
+
+`posenet-tf` really did fail in Jupyter mode, and for exactly the reason
+recorded: its image ships an older config in `/srv/.jupyter` without
+`allow_root`. Every other image that can run JupyterLab runs it. Patch `0021`
+passes `--allow-root` — `deep-start` appends `$jupyterOPTS` to `jupyter lab`
+verbatim — and `posenet-tf` starts in ten seconds.
+
+### No module can use this cluster's GPU
+
+Read from each module's Dockerfile, and measured for the two recent enough to
+see the slice. Five are TensorFlow 1.x or PyTorch 1.4 on CUDA 9–10, which
+cannot see a MIG slice at all. YOLO and Faster R-CNN (PyTorch 1.13, CUDA 11.6)
+see it and spend 25+ minutes compiling at the first call. The benchmark module
+(TensorFlow 2.2, CUDA 11.0) names the device — *Compute Capability 9.0* — and
+never finishes a matrix multiplication on it. None of this is the cluster: vLLM
+and the development environment's PyTorch 2.x images use the same GPUs
+natively. The modules predate the hardware.
+
+### What the harness got wrong first
+
+Eight deployments at once did not fit — about six do beside a running LLM — so
+it keeps a rolling window and deletes each deployment as soon as it is tested.
+And two classifiers were failed for a Gradio page that was simply five seconds
+behind its API; it now waits.
+
+### Open, for a decision
+
+Remove `obj-detection-torch` (redundant with Faster R-CNN, 2019-era, cannot run
+JupyterLab) and `tf-cnn-benchmarks-api` (a GPU benchmark that cannot use this
+GPU); and offer modules CPU only. `tests/test_failed_deployments.py` names both
+failures, so nothing else can fail unnoticed while they wait.
+
+---
+
 ## 2026-09-24 — Step 3 spike: JupyterLab works in the YOLO module, the GPU does not
 
 The high-code tier is YOLO, and the question was whether a marketplace module

@@ -93,8 +93,11 @@ Two steps:
 
 | Field | Suggested |
 |---|---|
-| **CPUs** | `4` |
-| **Memory** | `8000` |
+| **CPUs** | the default, `2` |
+| **Memory** | the default, `3000` |
+
+The defaults are enough — measured 2026-09-27 for YOLO and the image classifier
+alike. The 4 CPUs and 8000 MB this guide used to suggest bought nothing.
 
 Then submit. A green message appears reading *"OSCAR service created with uuid
 ai4papi-…"* and you land on the Inference page automatically.
@@ -156,7 +159,7 @@ On `caios_server`:
 
 ```bash
 bash scripts/oscar-submit.sh --list                       # find your service
-bash scripts/oscar-submit.sh <service-name> photo.jpg     # writes the JSON
+bash scripts/oscar-submit.sh <service-name> photo.jpg     # wraps it, sends it, prints the answer
 ```
 
 ---
@@ -175,24 +178,22 @@ curl -H "Authorization: Bearer <TOKEN>" \
      <ENDPOINT>
 ```
 
-The answer comes back in the same response — **but it is the job's log, not a
-JSON document.** The detections are on the line that starts `return:`, as a
-Python list:
+The answer is the result, as JSON — for a service created **on or after
+2026-09-27** (patch `0022`):
 
-```
-… INFO deepaas.cmd.cli [-] return: [[{'name': 'person', 'class': 0, 'confidence': 0.90899, 'box': {…}}, …]]
-```
-
-For YOLO that is line 14 of 16. For the image classifier it is line 221 of
-about 230, under forty kilobytes of TensorFlow warnings. `docs/demo-plan.md`
-step 4 plans a patch so it returns the result alone; until then, filter it:
-
-```bash
-curl … | grep 'return:'
+```json
+[[{"name": "person", "class": 0, "confidence": 0.90899, "box": {"x1": 4.74, "y1": 27.1, "x2": 511.8, "y2": 593.4}},
+  {"name": "tie", "class": 27, "confidence": 0.61069, "box": {…}}]]
 ```
 
-**Measured 2026-09-24:** 13.0 s for the first call after the service had been
-idle (the image already on the node), 5.2 s warm. The classifier: 12–17 s.
+Add `| python3 -m json.tool` to indent it. **Measured 2026-09-27, with the form's
+defaults:** YOLO 5.8 s for the first call after creating the service, 5.5 s
+after that; the image classifier 9.6–10.3 s.
+
+A service created **before** that answers with its job's log instead, and the
+result is the line starting `return:` (line 14 of 16 for YOLO, line 221 of about
+230 for the classifier). `scripts/oscar-submit.sh` reads either. Recreate such a
+service rather than learn to read its log.
 
 No MinIO, no buckets, no second web app. If you are building anything on top of
 CAIOS, this is the integration point: it is an ordinary HTTP API with a bearer
@@ -242,8 +243,8 @@ container is already running.
 
 | State | What it means | Response time |
 |---|---|---|
-| **Warm** | a container is up | ~5 s |
-| **Cold** | nothing running | ~5 s + start-up |
+| **Warm** | a container is up | ~5.5 s (YOLO), ~10 s (classifier) |
+| **Cold** | nothing running | about the same — measured 5.8 s against 5.5 s for YOLO once its image is on the node |
 | **First ever call** | the model image is still being downloaded | **~3 minutes** |
 
 Measured: Knative keeps the container alive for about **30 seconds** after the
@@ -258,8 +259,8 @@ the first call looks like a hang.
 | | |
 |---|---|
 | **The very first request to a new service** | **~3 minutes** — downloading the model image |
-| Endpoint (Route A), after that | **~5 seconds** |
-| Bucket (Route B), after that | **~13 seconds** |
+| Endpoint (Route A), after that | **~5.5 seconds** (YOLO), ~10 (classifier) |
+| Bucket (Route B), after that | **~9 seconds** (YOLO), ~12 (classifier) |
 
 If your first run seems hung, it is not. It is pulling several gigabytes.
 **Run one image through the service before any demo** so the audience sees the
@@ -271,7 +272,8 @@ thirteen-second version.
 
 | What you see | Why |
 |---|---|
-| `outputs/` has a `.log` but no `.json` | Your input file was not named `.json` — or it is the **image classifier**: its DEEPaaS 2.6.0 colours its log, the escape code breaks the script's filename parsing, and the result is discarded. Known, measured 2026-09-24; the prediction is in the `.log`, on the `return:` line |
+| `outputs/` has a `.log` but no `.json` | Your input file was not named `.json` — or it is the **image classifier** in a service created before 2026-09-27, whose script lost the result to a colour code in its log (fixed by patch `0022`; recreate the service) |
+| The endpoint answers with a log, not JSON | The service was created before 2026-09-27. Recreate it, or read the line starting `return:` |
 | The log ends in `UnicodeDecodeError: byte 0x89` | You uploaded a raw image instead of the JSON wrapper. `0x89` is the first byte of a PNG |
 | Nothing appears in `outputs/` at all | The upload went to the wrong folder. It must be `inputs/`, inside the bucket named on the detail page |
 | The Deploy menu item is greyed out | Not logged in, or not a project member |
@@ -285,6 +287,6 @@ thirteen-second version.
 > Marketplace → model → **Deploy ▾ → Inference API (serverless)** → fill the
 > form → **Deployments → Inference** → click your service → copy the
 > **Endpoint** and **Token** → `curl` your JSON at it → the detections come
-> back in the response, on its `return:` line.
+> back in the response, as JSON.
 >
 > The MinIO route is still there for batches, but you do not need it.

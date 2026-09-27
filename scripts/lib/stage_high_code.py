@@ -142,7 +142,11 @@ def main():
     if args.service:
         svc = next((s for s in services if s["name"] == args.service), None)
     else:
-        svc = next((s for s in services if s.get("image", "").endswith("/ai4os-yolo-torch")), None)
+        # The newest: a service created after patch 0022 answers with plain
+        # JSON, an older one with its job's log (the helper reads both).
+        yolo = [s for s in services if s.get("image", "").endswith("/ai4os-yolo-torch")]
+        yolo.sort(key=lambda s: s.get("environment", {}).get("variables", {}).get("PAPI_CREATED", ""))
+        svc = yolo[-1] if yolo else None
     if svc is None:
         sys.exit("no YOLO serverless service for this user: create one from the marketplace "
                  "(YOLO -> Deploy -> Inference API (serverless)), or pass --service")

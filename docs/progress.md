@@ -49,6 +49,43 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-27 — Step 4: serverless answers with its result; modules run on CPU
+
+**Decided today:** `obj-detection-torch` and `tf-cnn-benchmarks-api` stay in the
+marketplace, dimmed as not included in the demo (lands with step 5's dashboard
+rebuild); modules are offered CPU only until their images are rebuilt; YOLO and
+Faster R-CNN get rebuilt on a GPU-capable base after the demo.
+
+### The serverless answer is the answer now
+
+Patch `0022`. A synchronous call used to answer with its job's log, the
+detections one Python-repr line inside it; the classifier's uploads lost their
+result to a colour code. Now, with fresh services and the form's defaults:
+YOLO answers in 5.5–5.8 s with 262 bytes of JSON, the classifier in about 10 s,
+and uploads keep a `.json` result for both.
+
+Two rounds failed on the way, and each found something undocumented about
+OSCAR: a result written to the output folder comes back **base64-encoded**, and
+a synchronous answer **includes stderr**. So the result is written to `/tmp`,
+and nothing else is printed for a synchronous call.
+
+### Modules: CPU only, enforced
+
+`gpu_num` for modules is `[0, 0]`, the form's hint says why, and PAPI refuses a
+module GPU with a 400 even when the form is bypassed. D-83.
+
+### Smaller things
+
+`scripts/oscar-submit.sh` actually sends the image now and prints the answer;
+the high-code staging picks the newest YOLO service; the OSCAR guide, the OSCAR
+demo notes and the runbook say what was measured today. The browser half of the
+step is the rehearsal's opening move.
+
+Also today, asked mid-step: the README describes the seven-node cluster as
+measured, and the repository has a description on GitHub.
+
+---
+
 ## 2026-09-27 — Step 3: the high-code notebook, and whether modules can use the GPU
 
 ### The notebook

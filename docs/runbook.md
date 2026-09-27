@@ -694,6 +694,33 @@ at the top of the script; change both.
 
 ---
 
+## Serverless inference (OSCAR)
+
+Click by click: `docs/oscar-gui-guide.md`. From `caios_server`:
+
+```bash
+bash scripts/oscar-submit.sh --list                          # the user's services
+bash scripts/oscar-submit.sh <service-name> photo.jpg        # send one image, print the answer
+```
+
+It wraps the image in the JSON document a service expects, calls the
+synchronous endpoint as the service's owner, and prints the detections and the
+time. Measured 2026-09-27: YOLO about 5.5 s, the image classifier about 10 s,
+with the form's default 2 CPUs and 3000 MB.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The answer is a log, not JSON | the service was created before patch `0022` (2026-09-27) | recreate it from the marketplace |
+| `outputs/` gets a `.log` and no `.json` | the upload was not named `.json`; or an image-classifier service created before `0022` | name it `.json`; recreate the service |
+| The very first call takes about three minutes | the OSCAR node is pulling the model image | send one request before anyone is watching |
+| The MinIO console does not load | its address is private (`192.168.104.69`) | use the VPN; the public proxy does not route it |
+
+Two things that are not faults. Knative keeps a service's container for about
+30 s after a request, so the first call after a pause pays a start-up; and the
+YOLO image carries no weights (none anywhere in it, checked 2026-09-24), so
+every new container fetches `yolov8n.pt` from GitHub — a GitHub outage would
+be a serverless-YOLO outage.
+
 ## The high-code notebook
 
 `demo/high-code/README.md` is the full story; the recording-day version:

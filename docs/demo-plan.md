@@ -178,13 +178,13 @@ What it changes about the steps:
 | 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
 | 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **done 2026-09-25**; 14 of 16 pass, two catalogue decisions open |
 | 3 | High code | a notebook that runs from a marketplace deployment | **done 2026-09-27** — four cells, 10 s, three runs identical |
-| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24; **next** |
-| 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
+| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | **done 2026-09-27** — answers are JSON now; the browser walk is the rehearsal's |
+| 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **next** |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
-step-3 spike, 2, the rest of 3, **4**, 5, 6, 7. Step 2 moved up because the
+step-3 spike, 2, the rest of 3, 4, **5**, 6, 7. Step 2 moved up because the
 high-code beat needs JupyterLab offered on modules again, and that should not
 be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
@@ -250,7 +250,17 @@ objects on the GPU, draw the boxes, call the same model's serverless endpoint,
 and ask the private LLM to summarise the detections. All three tiers in one
 place.
 
-### Step 4 — Low code re-walked
+### Step 4 — Low code re-walked · done
+
+**Done 2026-09-27 — see the step log.** Patch `0022`: a synchronous call now
+answers with the result as plain JSON, and the classifier's uploads keep their
+result. Every call the dashboard's serverless form and Inference pages make was
+exercised through PAPI as `researcher`, with fresh services; the pages
+themselves did not change, so the browser half of this step — which is also
+how whoever records re-learns the workflow — is the first thing the rehearsal
+does, from `docs/oscar-gui-guide.md`.
+
+The plan, as it was:
 
 As the recording account, in a clean browser, follow `docs/oscar-gui-guide.md`
 literally: create the YOLO service from the marketplace, find it on the
@@ -292,6 +302,13 @@ requires and gets 403 `SignatureDoesNotMatch`. The browser console and any S3
 SDK are fine.
 
 ### Step 5 — Names and logos
+
+Also now, decided 2026-09-27: **dim `obj-detection-torch` and
+`tf-cnn-benchmarks-api`** in the marketplace with "Not included in the Demo
+Version" — their ids into `configs/dashboard/caios.json`'s `demoUnavailable`,
+the mechanism CVAT and NVFLARE already use — and switch
+`tests/test_failed_deployments.py` to read its exemptions from that list, so
+there is one source of truth. It rides on this step's dashboard rebuild.
 
 Clean the metadata when the mirror is built (`scripts/mirror-catalogue.sh`):
 no `vo.*` tags, "Trainable / Pre-trained / Inference", "Development
@@ -345,17 +362,20 @@ Answered 2026-09-24:
 
 The storyboard was confirmed on 2026-09-25.
 
-Opened by step 2, 2026-09-25:
+Opened by step 2, 2026-09-25, and **decided 2026-09-27**:
 
 5. **`obj-detection-torch`** runs as an API (predict 6 s) but cannot run
    JupyterLab: it is not in the image, and pip cannot install it over a
    distutils-installed PyYAML. It is also the oldest image in the marketplace
    (PyTorch 1.4, 2019), and `ai4os-fasterrcnn-torch` does the same job — Faster
    R-CNN detection — and passes both modes. **Recommended: remove it.**
+   **Decided: kept in the marketplace, dimmed, "Not included in the Demo
+   Version". Step 5.**
 6. **`tf-cnn-benchmarks-api`** exists to answer "is this GPU working", and on
    this cluster the answer is always no: TensorFlow 2.2 finds the H100 slice and
    never finishes a matrix multiplication on it. On CPU its "predict" is a full
    benchmark that runs past five minutes. **Recommended: remove it.**
+   **Decided: the same — dimmed. Step 5.**
 *Asked 2026-09-27, before deciding 5 to 7: can the modules be fixed to run on
 the GPU instead?* Answered in the step log, "Can the modules run on the GPU?".
 Short version: yes, but only by rebuilding their images on a newer base — no
@@ -367,8 +387,21 @@ setting does it — and it is cheap only for the PyTorch ones.
    CPU-only for modules** — `gpu_num` fixed at 0 in `modules-user.yaml`, with a
    sentence saying why; GPUs stay offered where they work: the LLM, the
    development environment, federated learning.
+   **Decided: CPU-only now (done in step 4, D-83); rebuild YOLO and Faster
+   R-CNN on a GPU-capable base after the demo** — see "After the demo".
 
 ---
+
+## After the demo
+
+Work that is decided and deliberately not before the recording:
+
+- **GPU modules.** Rebuild `ai4os-yolo-torch` and `ai4os-fasterrcnn-torch` on a
+  PyTorch 2 / CUDA 12 base, host them where PAPI reads tags from (a CAIOS
+  organisation on Docker Hub), pin their tags (gotcha 28), point the catalogue
+  mirror at them, and raise `gpu_num` for those two. Proven feasible
+  2026-09-27 (step log, "Can the modules run on the GPU?").
+- **The certificate**, `docs/certificate-plan.md` C2 and C3.
 
 ## Step log
 
@@ -629,3 +662,45 @@ on CPU, and the GPU story is the LLM's. After the demo, if GPU modules matter,
 rebuild YOLO and Faster R-CNN first — cheap and proven — and leave the
 TensorFlow 1 family on CPU: 20 GB images buy little on 12 GB GPU slices.
 Until something is rebuilt, the honest form offers modules no GPU.
+
+### Step 4 — serverless answers with its result · done 2026-09-27
+
+Patch `0022` changes the script every OSCAR service runs. Verified with fresh
+services created through PAPI exactly as the serverless form sends them, with
+its defaults (2 CPUs, 3000 MB), then deleted:
+
+| | Synchronous | Upload to the bucket |
+|---|---|---|
+| YOLO | **262 bytes of JSON**, 5.8 s after creation, 5.5 s after that | JSON result in 9.1 s |
+| image classification | **plain JSON**, 9.6–10.3 s | JSON result in 12.2 s — **used to be lost** |
+
+It took three rounds on the cluster, and the two that failed each taught
+something no document said:
+
+1. The synchronous result was written where uploads write theirs, and came back
+   **base64-encoded** (`W1t7Im5hbWUiOi…`): OSCAR answers a synchronous call
+   with any file it finds in the output folder, encoded. It is now written to
+   `/tmp`, and the answer is the script's stdout.
+2. The version lines were moved to stderr, and still opened every answer:
+   **OSCAR's synchronous answer includes stderr.** They are now printed for
+   uploads only.
+
+`tests/test_oscar_service_script.py` runs the script's closing block with bash,
+in both modes, against a log coloured exactly as DEEPaaS 2.6 colours it.
+
+Also in this step:
+
+- **Modules are offered CPU only** (decision 7, D-83): `gpu_num` is `[0, 0]`
+  with the reason as the form's hint, and PAPI itself answers a module asking
+  for a GPU with `400: The parameter gpu_num should smaller or equal to 0`.
+- **`scripts/oscar-submit.sh` sends the image now** and prints the answer; until
+  today it wrapped the image and printed instructions. It reads either kind of
+  answer, so it also works against a service created before `0022`.
+- **The staging script picks the newest YOLO service**, so the notebook talks to
+  one that answers in JSON when one exists.
+- The three services from 2026-08-26 are untouched, as asked, and still answer
+  the old way.
+
+The GUI half is the rehearsal's first job, and it is short: marketplace → YOLO
+→ *Deploy* ▾ → *Inference API (serverless)* → the form's defaults → *Inference*
+→ the service → its endpoint.

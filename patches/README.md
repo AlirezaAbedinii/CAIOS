@@ -905,6 +905,43 @@ It cannot be configuration: the environment of the `main` task is a literal
 block in `etc/modules/nomad.hcl`, and `modules-user.yaml` offers no field that
 reaches it.
 
+### `ai4-papi/0022-oscar-returns-the-result.patch` — pinned to `e80a2b7`
+
+**Serverless inference answered with a log, and sometimes threw the answer
+away.** `etc/oscar/service.yaml` carries the script every OSCAR service runs.
+Measured 2026-09-24 against real services:
+
+- **A synchronous call's response was the job's log.** For such a call stdout
+  *is* the response, and the script printed two version lines, the input's
+  file name, and then `cat service.log` — the detections buried in it as one
+  Python-repr line (`return: [[{'name': 'person', …}]]`): line 14 of 16 for
+  YOLO, line 221 of about 230 for the image classifier.
+- **The classifier's bucket result was discarded.** DEEPaaS 2.6 colours its
+  log, so the line naming the result file ends `…tmp-file-mwkea.json^[[00m`.
+  Upstream's `cut` kept the escape in the filename and the `mv` that should
+  have saved the result found no such file; `outputs/` got a log and nothing
+  else. YOLO's DEEPaaS 2.5.2 does not colour, which is the only reason it
+  worked.
+
+The patch prints the version lines for uploads only, writes a synchronous call's result
+to a file like an upload's, answers with that file — the log only when there is
+no result, so a failure still explains itself — and strips ANSI escapes before
+reading the result's path.
+
+That file is written to `/tmp`, **not** to the output folder, and the first
+version of this patch learned why on the cluster: OSCAR answers a synchronous
+call with any file it finds in `TMP_OUTPUT_DIR`, base64-encoded — the answer
+came back as `W1t7Im5hbWUiOi…` rather than `[[{"name": …`. Outside it, the
+answer is the script's stdout, which is the result as plain JSON. And that
+stdout includes stderr — sending the version lines to stderr, the patch's first
+attempt, left them opening every answer — so they are not printed at all for a
+synchronous call. `tests/test_oscar_service_script.py` runs the
+script's closing block with bash in both modes, against a coloured log.
+
+It cannot be configuration: the script is a literal in the template. It reaches
+**new** services only — an existing service keeps the script it was created
+with.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and

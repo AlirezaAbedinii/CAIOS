@@ -1,0 +1,77 @@
+--- a/etc/oscar/service.yaml
++++ b/etc/oscar/service.yaml
+@@ -18,10 +18,17 @@
+   - storage_provider: minio.default
+     path: ${NAME}/outputs
+ script: |-
+-  echo "[*] Using DEEPaaS version $(deepaas-run --version)"
+-  echo "[*] Using Python version $(python3 --version)"
+   FILE_NAME=`basename "$INPUT_FILE_PATH" | cut -f 1 -d '.' `
+   OUTPUT_FILE="$TMP_OUTPUT_DIR/$FILE_NAME"
++  # [CAIOS] Not for a synchronous call. OSCAR answers one with everything the
++  # script prints, stderr included (measured: sending these to stderr did not
++  # keep them out), so they opened every answer. An upload's job log keeps
++  # them. patches/README.md, 0022.
++  if ! echo "$FILE_NAME" | grep -q event-file
++  then
++    echo "[*] Using DEEPaaS version $(deepaas-run --version)"
++    echo "[*] Using Python version $(python3 --version)"
++  fi
+   python >service.log 2>&1 << EOF
+ 
+   import base64
+@@ -85,7 +92,10 @@
+   FILE_PATH = os.getenv("INPUT_FILE_PATH")
+   SAVE_OUT = True
+   if not FILE_PATH.endswith(".json"):
+-      SAVE_OUT = False
++      # [CAIOS] A synchronous call arrives as event-file-<id>, with no
++      # extension, and still wants its result written to a file: that file
++      # is what the shell below returns as the response, instead of the log.
++      SAVE_OUT = "event-file" in os.path.basename(FILE_PATH)
+       subprocess.run(["mv", "$INPUT_FILE_PATH", "$INPUT_FILE_PATH.json"])
+       FILE_PATH = os.getenv("INPUT_FILE_PATH") + ".json"
+ 
+@@ -95,7 +105,14 @@
+ 
+   # Create the DEEPaaS predict command
+   if SAVE_OUT:
+-      DEEPAAS_CLI_COMMAND = ["deepaas-cli", "--deepaas_method_output", get_rnd_filename(""), "predict"]
++      OUT_PATH = get_rnd_filename("")
++      if "event-file" in os.path.basename(FILE_PATH):
++          # [CAIOS] Synchronous: write the result OUTSIDE the output folder. OSCAR
++          # answers a synchronous call with any file it finds there, base64-
++          # encoded; outside it, the answer is the script's stdout — the result
++          # as plain JSON, which is what a caller can read.
++          OUT_PATH = os.path.join("/tmp", os.path.basename(OUT_PATH))
++      DEEPAAS_CLI_COMMAND = ["deepaas-cli", "--deepaas_method_output", OUT_PATH, "predict"]
+   else:
+       DEEPAAS_CLI_COMMAND = ["deepaas-cli", "predict"]
+ 
+@@ -129,14 +146,19 @@
+     exit(1)
+   EOF
+ 
+-  if grep -q 'New output is' "service.log"
++  # [CAIOS] Strip ANSI escapes before reading the result's path. DEEPaaS 2.6
++  # colours this line, upstream's cut kept the escape in the filename, and the
++  # mv that should have saved the result found no such file.
++  RESULT_FILE=`sed 's/\x1b\[[0-9;]*m//g' service.log | grep 'New output is' | tail -n 1 | cut -f 5 -d ' '`
++  if echo "$FILE_NAME" | grep -q event-file
+   then
+-    FILE_NAME_2=`cat service.log | grep 'New output is' | cut -f 5 -d ' '`
+-    mv $FILE_NAME_2 $OUTPUT_FILE.json
+-    mv service.log  $OUTPUT_FILE.log
+-  elif echo "$FILE_NAME" | grep event-file
++    # [CAIOS] Synchronous: return the result, not the log it was buried in.
++    # The log only when there is no result, so a failure still explains itself.
++    if [ -n "$RESULT_FILE" ] && [ -f "$RESULT_FILE" ]; then cat "$RESULT_FILE"; else cat service.log; fi
++  elif [ -n "$RESULT_FILE" ] && [ -f "$RESULT_FILE" ]
+   then
+-    cat service.log
++    mv "$RESULT_FILE" $OUTPUT_FILE.json
++    mv service.log  $OUTPUT_FILE.log
+   else
+     mv service.log  $OUTPUT_FILE.log
+   fi
+\ No newline at end of file

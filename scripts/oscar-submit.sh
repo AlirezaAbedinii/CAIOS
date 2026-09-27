@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Submit an image to an OSCAR inference service and wait for the result.
+# Send an image to an OSCAR inference service and print its answer.
 #
 #   bash scripts/oscar-submit.sh <service-name> <image-file>
 #   bash scripts/oscar-submit.sh --list
@@ -84,23 +84,35 @@ open(dst, "w").write(json.dumps(doc))
 print(f"  {dst}  ({len(json.dumps(doc))} bytes)")
 PY
 
-# Credentials come from the per-user secret OSCAR creates on the K3s cluster,
-# not from MinIO's root account — the service is owned by the OIDC subject and
-# only that identity should be writing to its bucket.
-echo "=== uploading to $SERVICE/inputs/$NAME.json ==="
-echo "  (this is the trigger — nothing is running until the object lands)"
-cat <<EOF
+# The synchronous endpoint, as the service's owner. Since patch 0022 a service
+# answers with its result as plain JSON; one created before 2026-09-27 answers
+# with its job's log, and the result is the line starting "return:".
+SVC_JSON="$(api "$API/v1/inference/oscar/services/$SERVICE?vo=$VO")"
+ENDPOINT="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("endpoint", ""))' <<<"$SVC_JSON" 2>/dev/null)"
+SVC_TOKEN="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("token", ""))' <<<"$SVC_JSON" 2>/dev/null)"
+[[ -n "$ENDPOINT" && -n "$SVC_TOKEN" ]] || { echo "PAPI gave no endpoint for $SERVICE — check the name with --list"; exit 1; }
 
-  On the OSCAR node:
-    mc cp /tmp/$NAME.json caiosuser/$SERVICE/inputs/$NAME.json
-
-  Or in a browser, at
-    https://minio-console.${CAIOS_OSCAR_NODE_IP:-192.168.104.69}.sslip.io
-  upload the file into  $SERVICE/inputs/
-
-  Then collect the result from
-    $SERVICE/outputs/$NAME.json
-
-EOF
-echo "Measured: ~13 s upload-to-result once the image is cached on the node;"
-echo "the first run of a service also pulls its image (YOLO took 3m12s)."
+echo "=== calling $ENDPOINT ==="
+T0=$(date +%s.%N)
+ANSWER="$(curl -sS -m 420 --cacert compose/certs/caios-ca.pem \
+    -H "Authorization: Bearer $SVC_TOKEN" -H "Content-Type: application/json" \
+    --data @"/tmp/$NAME.json" "$ENDPOINT")"
+T1=$(date +%s.%N)
+python3 - "$ANSWER" <<'PY2'
+import ast, json, re, sys
+text = sys.argv[1]
+try:
+    result = json.loads(text)
+except ValueError:
+    line = next((l for l in text.splitlines() if "return:" in l), "")
+    if not line:
+        print(text[-2000:]); raise SystemExit(1)
+    print("  (a service created before patch 0022: this was its log)")
+    result = ast.literal_eval(re.sub(r"\x1b\[[0-9;]*m", "", line).split("return:", 1)[1].strip())
+print(json.dumps(result, indent=2)[:3000])
+PY2
+echo "  answered in $(python3 -c "print(round($T1 - $T0, 1))") s"
+echo
+echo "Many files, or results you want kept: upload them instead, into"
+echo "  $SERVICE/inputs/   at   https://minio-console.${CAIOS_OSCAR_NODE_IP:-192.168.104.69}.sslip.io"
+echo "and collect  $SERVICE/outputs/<name>.json  (docs/oscar-gui-guide.md, Route B)."

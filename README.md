@@ -1,7 +1,10 @@
 # CAIOS
 
-**Canadian Artificial Intelligence Operating System** — a research platform for medical
-and neuroscience AI, running on five GPU nodes on Compute Canada's Arbutus cloud.
+**Canadian Artificial Intelligence Operating System** — a private AI platform for medical
+and neuroscience research, running on a seven-node cluster on Compute Canada's Arbutus
+cloud. Researchers deploy a private language model with no code, run a model as a
+serverless service with little code, and write their own in JupyterLab notebooks — and
+the data stays in Canada.
 
 Built on the open-source [AI4OS](https://docs.ai4os.eu/) stack. We deploy it and brand
 it; we do not fork it. Every change to upstream behaviour is either configuration in
@@ -12,12 +15,30 @@ simulated hospital sites where the data never leaves each site.
 
 ---
 
+## The cluster
+
+Seven nodes on Arbutus, measured 2026-09-27. Six carry one slice of an NVIDIA H100
+(`H100L-1-12C`, 12 GB); four of those run user work.
+
+| Node | vCPU | RAM | GPU | Role |
+|---|---|---|---|---|
+| `caios_server` | 3 | 34 GB | 1 slice | Control plane: Nomad and Consul servers, Keycloak, Vault, PAPI, dashboard |
+| `caios_edge` | 3 | 34 GB | 1 slice | Ingress: Traefik, one subdomain per deployment |
+| `caios_site_a`, `_b`, `_c` | 3 each | 34 GB each | 1 slice each | GPU compute — the three "hospital sites" |
+| `caios_llm` | 3 | 34 GB | 1 slice | GPU compute — private language models |
+| `caios_oscar` | 16 | 58 GB | — | Serverless inference: Kubernetes (K3s), OSCAR, MinIO |
+
+A separate proxy VM holds the public address. How it all fits together, and why:
+[docs/infrastructure.md](docs/infrastructure.md).
+
+---
+
 ## Start here
 
 | If you want to | Read |
 |---|---|
-| Understand the five nodes and how they fit together | [docs/infrastructure.md](docs/infrastructure.md) |
-| Know what we are building and in what order | [docs/mvp-plan.md](docs/mvp-plan.md) |
+| Understand the seven nodes and how they fit together | [docs/infrastructure.md](docs/infrastructure.md) |
+| Know what we are working on now | [docs/demo-plan.md](docs/demo-plan.md) |
 | Know why something is the way it is | [docs/decisions.md](docs/decisions.md) |
 | Know exactly what is in MVP and what is V1 | [docs/scope.md](docs/scope.md) |
 | See what has actually been done so far | [docs/progress.md](docs/progress.md) |
@@ -29,8 +50,7 @@ simulated hospital sites where the data never leaves each site.
 
 ## Getting from here to a running cluster
 
-Everything below the first step is written and committed. The first step is the only
-thing blocking.
+The sequence that built this cluster, and rebuilds it from scratch.
 
 ```bash
 # 0. One-time: give caios_server SSH access to the others (docs/ssh-setup.md)
@@ -73,10 +93,10 @@ cd compose && docker compose --env-file ../configs/env/caios.env up -d
 ansible/       Inventory, group_vars and playbook entrypoints for the cluster
 compose/       Docker Compose control plane: Keycloak, Vault, PAPI, dashboard, Caddy
 configs/       Config we own, copied out of upstream and edited: PAPI, dashboard, Keycloak
-patches/       The four upstream source edits that cannot be configuration
+patches/       Upstream source edits that cannot be configuration, each one explained
 nomad-jobs/    Hand-written jobs, starting with the Stage 1 smoke test
 catalog/       Curated medical module list
-demo/          Federated learning scripts, dataset partitioning, comparison chart
+demo/          The federated learning demo, the high-code notebook, module test results
 docs/          Infrastructure, plan, decisions, runbook
 scripts/       Re-runnable helpers — pinning, patching, rendering, certs, verification
 vendor/        Upstream clones. Read-only, gitignored. Never edit anything here.

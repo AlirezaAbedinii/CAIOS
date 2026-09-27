@@ -694,6 +694,30 @@ at the top of the script; change both.
 
 ---
 
+## The high-code notebook
+
+`demo/high-code/README.md` is the full story; the recording-day version:
+
+```bash
+# the YOLO workspace (Jupyter mode) and an LLM, both deployed as researcher
+bash scripts/stage-high-code.sh <workspace-uuid> <llm-uuid>
+```
+
+It fetches the serverless service's and the LLM's endpoints and secrets from
+PAPI, writes them into the workspace as hidden files beside the notebook, and
+runs the notebook once. Every cell prints its time and result; a cell that
+errors, or a run that returns nothing at all, exits non-zero.
+
+**If the warm-up returns nothing**, run it again. `nomad alloc exec` ends its
+session when its stdin reaches EOF and can drop the output that had not arrived
+yet; the script holds stdin open to prevent exactly that, and fails rather
+than reporting an empty run as a pass.
+
+**If cell 3 raises `SSLError`**, the workspace has no `.caios-ca.pem`: re-stage.
+**If cell 4 answers something odd**, it is a 2B model — the call pins
+temperature 0, so the answer is at least the same every take, and a rehearsal
+shows it before the camera does.
+
 ## Deploying an LLM
 
 **Tools → Deploy your LLM.** Pick a model, fill in an email and a password for

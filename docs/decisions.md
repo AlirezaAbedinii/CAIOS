@@ -1308,3 +1308,18 @@ fails if any module fails either mode without an open decision recorded
 against it by name. An option that crashes is still worse than no option — the
 difference is that "crashes" is now a measurement per module, not an inference
 from one.
+
+**2026-09-27** — Step 3 of `docs/demo-plan.md`: the high-code notebook.
+Recorded D-82.
+
+**D-82 — The demo notebook holds no endpoint and no secret; they are staged
+into the workspace, hidden.** The notebook is recorded, so it is public the day
+the video is. `scripts/stage-high-code.sh` fetches the serverless service's
+token and the LLM's key from PAPI with their owners' own tokens and writes them
+into the workspace as `.caios.json` (mode 600) and `.caios-ca.pem`, which
+JupyterLab's file browser does not list, so nothing sensitive is one click away
+on camera. Pasting them into a cell was the alternative, and would have put a
+live key in every copy of the notebook and in the video. The two calls verify
+TLS against the CAIOS CA (D-43), and the model is asked at temperature 0 so a
+retaken recording gets the same answer. `tests/test_high_code_notebook.py`
+holds all of it.

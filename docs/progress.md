@@ -49,6 +49,43 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-27 — Step 3: the high-code notebook, and whether modules can use the GPU
+
+### The notebook
+
+Four cells in the YOLO module's own JupyterLab: detect and draw (1.4 s, CPU),
+count, call the same model as the serverless service (5.2 s), and ask the
+private LLM to describe what was found (0.3 s). Three runs, identical, the last
+answer always *"A street photo captures a bus and a stop sign alongside four
+pedestrians walking along the sidewalk."*
+
+`scripts/stage-high-code.sh` puts it into a deployed workspace with the
+endpoints and secrets it needs, fetched from PAPI with the owners' tokens and
+written as hidden files, then runs it once as test and warm-up. The notebook
+contains no endpoint and no secret, and a test says so.
+
+Three things it took to get there: `temperature: 0`, after the 2B model called
+the photo "created by an AI" on one wording and invented a missing stop sign on
+another; a stdin held open for `nomad alloc exec`, which drops output when its
+stdin closes and once turned a whole warm-up into silence the first version
+counted as a pass; and nothing else — the workspace reached both the LLM
+through the public proxy and OSCAR on its private address without any routing
+work.
+
+### Can the modules run on the GPU?
+
+Yes, by rebuilding their images; no setting does it. Measured on a MIG slice
+with PyTorch 2.6 — what a rebuilt image would carry: first matmul 1.2 s cold
+where the module's PyTorch 1.13 was still compiling after 25 minutes; the YOLO
+module's own package installs and predicts; one YOLO training epoch in 4.7 s on
+the H100 slice. Cheap for YOLO and Faster R-CNN; porting for
+`obj-detection-torch`; NVIDIA's last TensorFlow 1 build (23.03, CUDA 12.1) is a
+route for the other four, at about 20 GB on disk each. The full table and the
+recommendation are in `docs/demo-plan.md`. The decisions on the two modules
+and on GPUs for modules are the next conversation.
+
+---
+
 ## 2026-09-25 — Step 2: every module, both modes
 
 `scripts/check-modules.sh` deploys each marketplace module through PAPI, with

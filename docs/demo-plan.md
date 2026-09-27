@@ -177,14 +177,14 @@ What it changes about the steps:
 | 0 | Clean slate | the stale deployments gone, gpu-1 and gpu-3 free | **done 2026-09-24** |
 | 1 | Module deploys stop depending on Europe | `obj-detection-torch` deploys with no pull of `ui`, predicts, UI loads | **done 2026-09-24** |
 | 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **done 2026-09-25**; 14 of 16 pass, two catalogue decisions open |
-| 3 | High code | a notebook that runs from a marketplace deployment | spike done 2026-09-24; **the notebook is next** |
-| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24 |
+| 3 | High code | a notebook that runs from a marketplace deployment | **done 2026-09-27** — four cells, 10 s, three runs identical |
+| 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | services tested 2026-09-24; **next** |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API | |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
-step-3 spike, 2, **the rest of 3**, 4, 5, 6, 7. Step 2 moved up because the
+step-3 spike, 2, the rest of 3, **4**, 5, 6, 7. Step 2 moved up because the
 high-code beat needs JupyterLab offered on modules again, and that should not
 be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
@@ -356,6 +356,11 @@ Opened by step 2, 2026-09-25:
    this cluster the answer is always no: TensorFlow 2.2 finds the H100 slice and
    never finishes a matrix multiplication on it. On CPU its "predict" is a full
    benchmark that runs past five minutes. **Recommended: remove it.**
+*Asked 2026-09-27, before deciding 5 to 7: can the modules be fixed to run on
+the GPU instead?* Answered in the step log, "Can the modules run on the GPU?".
+Short version: yes, but only by rebuilding their images on a newer base — no
+setting does it — and it is cheap only for the PyTorch ones.
+
 7. **Should modules be offered a GPU at all?** None of the eight can use one
    (step log). Offering it holds a GPU nobody else can then use, counts against
    the researcher's two-GPU limit, and runs on CPU anyway. **Recommended:
@@ -540,3 +545,87 @@ modules simply predate the hardware. Decision 7.
 Side effects, as expected: every module image was pulled onto whichever node
 Nomad chose, so docuum has evicted some older images. Step 6 re-pulls the
 demo's.
+
+### Step 3 — the notebook · done 2026-09-27
+
+`demo/high-code/high-code.ipynb`, four code cells, run inside the YOLO module
+deployed in Jupyter mode as `researcher`, staged by `scripts/stage-high-code.sh`
+and run by it once, headless:
+
+```
+[1.4s] YOLO on bus.jpg, boxes drawn             -> an image
+[0.0s] what it found                            -> bus 1, person 4, stop sign 1
+[5.2s] the same model, as the serverless service -> person 4, bus 1, stop sign 1
+[0.3s] the private LLM describes it             -> "A street photo captures a bus and a stop
+                                                    sign alongside four pedestrians walking
+                                                    along the sidewalk."
+```
+
+Three consecutive runs, identical. The notebook opens from the workspace's own
+file browser beside the module's code, reached through the public proxy with
+the deployment password.
+
+**No secret is in the notebook.** Endpoints, the service token and the LLM key
+come from PAPI with the owners' own tokens and are staged as `.caios.json`
+(mode 600) and `.caios-ca.pem` — dotfiles, which JupyterLab's file browser does
+not list, so nothing sensitive is one click away on camera. Both calls verify
+TLS against the CAIOS CA (D-43). `tests/test_high_code_notebook.py`.
+
+What building it found:
+
+- **The prompt matters more than the model.** The first wording made the model
+  call the image "created by an AI"; another sampling "found" a missing stop
+  sign. The call now pins `temperature: 0`, and the wording that won was
+  checked against the model before it went into the notebook.
+- **`nomad alloc exec` loses output when its stdin closes.** 1.28 MB of a
+  1.73 MB file arrived with stdin at `/dev/null`, and one warm-up's entire
+  summary vanished — which the first version of the script reported as a pass.
+  It now holds stdin open for the length of the command, summarises the
+  executed notebook inside the workspace rather than copying 1.7 MB out, and
+  fails on an empty result.
+- **The workspace reaches the LLM through the public proxy** — the node
+  resolves the deployment hostname to the floating IP and the hairpin works —
+  and OSCAR on its private address. No special routing needed.
+
+The serverless cell is the only slow one, and only after the service has
+scaled to zero (Knative holds it about 30 s). On camera: run it once just
+before the take, or cut.
+
+### Can the modules run on the GPU? · 2026-09-27
+
+Asked before deciding what to do with the modules. **Yes, but not by any
+setting: the fix is rebuilding each module's image on a newer base.** The GPU
+and its driver are fine; what is old is the software inside the images.
+
+Measured on `caios-wn-gpu-1`, one MIG slice, in the development environment's
+`pytorch2.6` image — the software a rebuilt module image would carry:
+
+```
+torch 2.6.0+cu126, compiled for sm_80, sm_86, sm_90
+first 4096x4096 matmul, cold    1.2 s      (the module's PyTorch 1.13: unfinished after 25 min)
+the YOLO module's own package   installs, and deepaas-cli predict returns its detections
+one YOLO training epoch, coco8  4.7 s on "CUDA:0 (NVIDIA H100L-1-12C MIG 1g.12gb)"
+```
+
+The only extra it needed was OpenCV's system libraries (`libgl1`,
+`libglib2.0-0`), which the module's own Dockerfile already installs.
+
+| Module | Route | Effort |
+|---|---|---|
+| ai4os-yolo-torch | same Dockerfile, `--build-arg tag=` a PyTorch 2.x / CUDA 12 base | **low** — hours; proven above |
+| ai4os-fasterrcnn-torch | same, same base as YOLO | **low–medium** — its training pipeline is untested on PyTorch 2 |
+| obj-detection-torch | same, but its requirements pin 2019-era packages (Pillow 7, OpenCV 4.2, pandas 1.0) | **medium** — porting, for a module Faster R-CNN already covers |
+| four TensorFlow 1.x modules | NVIDIA's last TensorFlow 1 build, `nvcr.io/nvidia/tensorflow:23.03-tf1-py3` (TF 1.15.5, CUDA 12.1, Python 3.8) | **medium–high each** — Python 3.6 to 3.8, and an 8.1 GB compressed base, about 20 GB on disk per module against docuum's 80 GB per node |
+| tf-cnn-benchmarks-api | NVIDIA TensorFlow 2 `25.02-tf2-py3` (TF 2.17, CUDA 12.8) | **uncertain** — the benchmark code is archived and was written for TF 2.2 |
+
+Plumbing every route shares: the rebuilt images need a home PAPI can read tags
+from — PAPI lists a module's tags from Docker Hub, so a CAIOS organisation there
+is the path of least resistance — a pinned tag rather than `latest` (gotcha 28),
+the catalogue mirror's `docker_image` pointed at it, and for YOLO, whose licence
+is AGPL-3.0, the Dockerfile published with the image.
+
+**Recommendation.** Not for the five-minute demo: the notebook answers in 1.4 s
+on CPU, and the GPU story is the LLM's. After the demo, if GPU modules matter,
+rebuild YOLO and Faster R-CNN first — cheap and proven — and leave the
+TensorFlow 1 family on CPU: 20 GB images buy little on 12 GB GPU slices.
+Until something is rebuilt, the honest form offers modules no GPU.

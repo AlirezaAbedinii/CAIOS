@@ -95,10 +95,11 @@ def _conf(root, path):
 RESULTS = "demo/modules/check-results.tsv"
 KEEP = "catalog/keep.txt"
 
-# Measured failures that are waiting on a decision about the catalogue, not on
-# a fix — docs/demo-plan.md, step 2. Each one is either fixed, or its module
-# leaves catalog/keep.txt; either way the entry comes out of this dict, and the
-# tests below fail until it does. Anything failing that is NOT listed here
+# Measured failures, and what was decided about them — docs/demo-plan.md,
+# step 2. Decided 2026-09-27: both modules stay in the marketplace dimmed, as
+# "Not included in the Demo Version" (caios.json demoUnavailable, step 5).
+# An entry leaves this dict when its module is fixed or leaves the catalogue;
+# the tests below fail until it does. Anything failing that is NOT listed here
 # fails them too.
 OPEN_DECISIONS = {
     ("obj-detection-torch", "jupyter"):
@@ -165,6 +166,17 @@ def test_every_marketplace_module_deploys_as_an_api(root):
     assert failing == open_, (
         f"not passing DEEPaaS mode: {sorted(failing)}; awaiting a decision: {sorted(open_)}"
     )
+
+
+def test_modules_are_offered_no_gpu_until_their_images_can_use_one(root):
+    """D-83. No module image in the marketplace can use this cluster's H100
+    slices: five cannot see a MIG slice, and the three that can compile for
+    longer than anyone would wait. A GPU given to one is held, unusable, and
+    counted against the owner's two-GPU cap. Raise the range for a module the
+    day a rebuilt image of it is in the catalogue."""
+    gpu = _conf(root, MODULES_CONF)["hardware"]["gpu_num"]
+    assert gpu["range"] == [0, 0] and gpu["value"] == 0, gpu
+    assert "cpu" in gpu["description"].lower(), "the form should say why there is no GPU"
 
 
 def test_the_module_service_description_says_what_each_mode_is(root):

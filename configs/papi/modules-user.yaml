@@ -38,7 +38,7 @@ general:
   docker_tag:
     name: Docker tag
     value: 'latest'
-    description: Docker tag to use. Tags are module dependent. You should choose the appropriate tag for your selected hardware (eg. use a `gpu`-like tag if you plan to run on GPUs).
+    description: Docker tag to use. Tags are module dependent. Modules run on CPU here, so a `gpu` tag gains nothing.
     options: ['latest']
 
   # [CAIOS] Modules offer DEEPaaS and JupyterLab. Not VS Code: never tested here.
@@ -87,10 +87,23 @@ hardware:
     value: 1
     range: [1, 2]
 
+  # [CAIOS] Modules run on CPU. Decided 2026-09-27 (D-83), on measurement.
+  #
+  # Every module image predates the H100 this cluster has. Five are on CUDA
+  # 9-10, which cannot see a MIG slice at all; YOLO and Faster R-CNN (CUDA
+  # 11.6) spent 25+ minutes compiling at their first GPU call; the benchmark
+  # module (CUDA 11.0) never finished a matmul. So a GPU given to a module is
+  # held, unusable, counted against the owner's two-GPU cap, and the module
+  # runs on CPU anyway. The fix is rebuilding images on a newer base — measured
+  # to work for YOLO (docs/demo-plan.md, "Can the modules run on the GPU?") and
+  # planned for after the demo. Raise this range for a module the day its
+  # rebuilt image is in the catalogue. GPUs stay offered where they work: the
+  # LLM, the development environment, federated learning.
   gpu_num:
     name: Number of GPUs
     value: 0
-    range: [0, 1]
+    range: [0, 0]
+    description: Modules run on CPU on this platform. Their images were built before this cluster's GPUs and cannot use them; the language models, the development environment and federated learning use the GPUs.
 
   gpu_type:
     name: GPU model

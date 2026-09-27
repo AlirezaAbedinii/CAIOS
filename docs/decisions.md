@@ -1323,3 +1323,18 @@ live key in every copy of the notebook and in the video. The two calls verify
 TLS against the CAIOS CA (D-43), and the model is asked at temperature 0 so a
 retaken recording gets the same answer. `tests/test_high_code_notebook.py`
 holds all of it.
+
+**D-83 — Modules are offered no GPU until their images can use one.**
+Decided 2026-09-27. Measured the day before: no module image in the
+marketplace can use this cluster's H100 slices — five cannot see a MIG slice
+(CUDA 9–10), and the three that can spend longer compiling than anyone would
+wait (CUDA 11.0–11.6). A GPU given to a module was held, unusable, counted
+against the owner's two-GPU cap, and the module ran on CPU anyway. So
+`gpu_num` is `[0, 0]` in `configs/papi/modules-user.yaml`, the form's hint says
+why, and PAPI refuses a module GPU with a 400 even if the form is bypassed.
+
+It is not permanent. Rebuilding a module on a PyTorch 2 / CUDA 12 base works —
+YOLO's own package predicted, and trained an epoch in 4.7 s on a slice — and is
+planned for YOLO and Faster R-CNN after the demo. The range is raised per
+module the day its rebuilt image is in the catalogue. GPUs stay offered where
+they work: the LLM, the development environment, federated learning.

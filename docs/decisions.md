@@ -1338,3 +1338,22 @@ YOLO's own package predicted, and trained an epoch in 4.7 s on a slice — and i
 planned for YOLO and Faster R-CNN after the demo. The range is raised per
 module the day its rebuilt image is in the catalogue. GPUs stay offered where
 they work: the LLM, the development environment, federated learning.
+
+**2026-09-28** — Step 5 of `docs/demo-plan.md`: names and labels. Recorded D-84.
+
+**D-84 — Upstream's metadata values stay upstream's; what a visitor reads is
+changed at display time.** Tried the other way first, and it broke the live
+marketplace for about five minutes: the category values "AI4 trainable",
+"AI4 pre trained" and "AI4 inference" were renamed in the catalogue mirror,
+and PAPI — which validates every entry against the AI4OS metadata schema, where
+categories are an enumeration — rejected all eight modules and served them with
+their ids for titles and an error for a description. The dashboard also decides
+tool-or-module on the value "AI4 tools".
+
+So the mirror only changes what the schema leaves free: `vo.*` tags are
+dropped, and the development environment's title loses "AI4OS". The category
+chips drop their "AI4 " prefix in the dashboard's templates (patch `0017`),
+with the values untouched. `tests/test_catalogue_mirror.py` keeps the mirror's
+categories to the schema's, and `check-branding.sh` now fails on any served
+entry marked "invalid metadata" — the symptom that went unnoticed for five
+minutes because nothing looked for it.

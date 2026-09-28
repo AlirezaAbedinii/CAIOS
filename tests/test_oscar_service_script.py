@@ -93,3 +93,15 @@ def test_a_synchronous_result_is_written_outside_the_output_folder(script):
     `[[{"name": …`. Written elsewhere, the answer is the script's stdout: the
     result as plain JSON."""
     assert 'OUT_PATH = os.path.join("/tmp", os.path.basename(OUT_PATH))' in script
+
+
+def test_users_are_shown_a_minio_address_they_can_open(root):
+    """Patch 0023. The Inference detail page showed the in-cluster address
+    OSCAR's jobs use — http://minio.minio.svc.cluster.local:9000 — found in a
+    browser walk on 2026-09-28. PAPI now replaces it in both the listing and
+    the detail with CAIOS_OSCAR_MINIO_URL, and compose passes that through."""
+    patch = (root / "patches/ai4-papi/0023-oscar-minio-url-for-users.patch").read_text()
+    assert patch.count("_minio_for_users(client_conf[\"minio_provider\"])") == 2
+    assert 'os.getenv("CAIOS_OSCAR_MINIO_URL", "")' in patch
+    compose = (root / "compose/docker-compose.yml").read_text()
+    assert "CAIOS_OSCAR_MINIO_URL: ${CAIOS_OSCAR_MINIO_URL:-}" in compose

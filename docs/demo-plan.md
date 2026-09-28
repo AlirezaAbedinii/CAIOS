@@ -161,7 +161,7 @@ What it changes about the steps:
   buried in it.
 - **Step 5 narrows to the screens above.** The Gradio page is not among them.
   The Keycloak sign-up form and the YOLO module page are, and the second
-  carries `vo.imagine-ai.eu` and "AI4 …" chips today.
+  carried `vo.imagine-ai.eu` and "AI4 …" chips until step 5 removed them.
 - **Step 2 still runs**, because test users can click any module, but after
   step 3: its Jupyter column only exists if step 3 finds JupyterLab works on
   modules.
@@ -179,12 +179,12 @@ What it changes about the steps:
 | 2 | Every marketplace module tested | `scripts/check-modules.sh` green for all eight, or the failures removed — DEEPaaS **and** Jupyter mode | **done 2026-09-25**; 14 of 16 pass, two catalogue decisions open |
 | 3 | High code | a notebook that runs from a marketplace deployment | **done 2026-09-27** — four cells, 10 s, three runs identical |
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | **done 2026-09-27** — answers are JSON now; the browser walk is the rehearsal's |
-| 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **next** |
-| 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | |
+| 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **done 2026-09-28** — what the demo's screens say is ours, checked in a browser |
+| 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | **next** |
 | 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
-step-3 spike, 2, the rest of 3, 4, **5**, 6, 7. Step 2 moved up because the
+step-3 spike, 2, the rest of 3, 4, 5, **6**, 7. Step 2 moved up because the
 high-code beat needs JupyterLab offered on modules again, and that should not
 be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
@@ -317,6 +317,10 @@ it. Optionally a locally built `caios/deepaas_ui` with a CAIOS footer, loaded
 onto the nodes and never pulled from anywhere — worth it only if the Gradio page
 appears on camera or test users will click it.
 
+*As done: the categories could not be renamed in the data. The schema owns
+them, and trying broke the live marketplace for five minutes — see the step
+log and D-84. They are relabelled at display instead.*
+
 ### Step 6 — The script
 
 **First, the pre-pull list, split by node role.** Measured 2026-09-24 in step 1:
@@ -401,6 +405,11 @@ Work that is decided and deliberately not before the recording:
   organisation on Docker Hub), pin their tags (gotcha 28), point the catalogue
   mirror at them, and raise `gpu_num` for those two. Proven feasible
   2026-09-27 (step log, "Can the modules run on the GPU?").
+- **The Gradio page's footer.** `deepaas_ui` renders an AI4EOSC logo, fetched
+  from `raw.githubusercontent.com` by the viewer's browser, for any namespace
+  but `imagine` (finding 6). A locally built `caios/deepaas_ui`, pinned by
+  digest like the image it replaces (gotcha 28). Off camera in the five-minute
+  cut; test users clicking a module's UI will see it.
 - **The certificate**, `docs/certificate-plan.md` C2 and C3.
 
 ## Step log
@@ -704,3 +713,87 @@ Also in this step:
 The GUI half is the rehearsal's first job, and it is short: marketplace → YOLO
 → *Deploy* ▾ → *Inference API (serverless)* → the form's defaults → *Inference*
 → the service → its endpoint.
+
+### Step 5 — names and labels · done 2026-09-28
+
+Every screen in the five-minute cut was walked in a browser against the live
+platform. The walk found three faults no script had looked for, and each is now
+behind a check.
+
+| Where | Was | Now | By |
+|---|---|---|---|
+| module tags | `vo.imagine-ai.eu` on five modules | gone | mirror sanitiser |
+| Tools list | "AI4OS Development Environment" | "Development Environment" | mirror sanitiser |
+| category chips and filter | "AI4 trainable", "AI4 pre trained", "AI4 inference" | "trainable", "pre trained", "inference" | dashboard `0017`, display only |
+| deploy form heading | "Configure training", on every form | "Configure deployment" | string |
+| Deploy menu | "Inference API + UI (dedicated)" | "Dedicated deployment", described as an API or a notebook | string |
+| creation times | Paris time, from a timestamp read as the viewer's local time | UTC, as every label says | dashboard `0016` |
+| Inference detail | "MINIO URL": `http://minio.minio.svc.cluster.local:9000` | "MinIO console": the console users sign in to | PAPI `0023` and a string |
+| `obj-detection-torch`, `tf-cnn-benchmarks-api` | clickable, failing | dimmed, labelled "Not included in the Demo Version" | tenant config, dashboard `0018` |
+
+**What went wrong on the way.** The first attempt renamed the category values
+in the catalogue mirror. PAPI validates every entry against the AI4OS metadata
+schema, and that schema *enumerates* the categories, so all eight modules
+served as "invalid metadata" with their ids for titles for about five minutes
+before the mirror was reverted and PAPI restarted. Nothing had noticed.
+`check-branding.sh` now fails on any entry marked invalid,
+`tests/test_catalogue_mirror.py` keeps the mirror's categories to the schema's,
+and the chips are relabelled in the dashboard instead (D-84).
+
+**What the browser walk found:**
+
+- **Creation times were wrong under a "UTC" label.** Upstream parses PAPI's
+  zone-less timestamp as the browser's local time and formats it in
+  Europe/Paris. That is right only for a viewer in Central Europe. A service
+  created at 00:36 UTC read 06:36 in the list and 00:36 in its own detail
+  dialog.
+- **The Inference detail page offered an address nobody can open**, the one
+  OSCAR's jobs use inside the cluster. PAPI now returns
+  `CAIOS_OSCAR_MINIO_URL` in its place, and the services keep the in-cluster
+  address.
+- **A dimmed card's tooltip could never appear.** It sat on the element whose
+  `pointer-events: none` makes the card unclickable, so no mouse reached it.
+  This had been true of CVAT and NVFLARE since T4. It was found on the first
+  step-5 build, and fixed in a second: a label on the card, and the full
+  sentence as a tooltip on an undimmed wrapper.
+
+**Checked in the browser, on the build that is serving:**
+
+- the YOLO page's chips and tags
+- the Deploy menu, and the form heading "Configure deployment: YOLO models"
+- Deepaas and Jupyter offered, and the GPU field capped at 0 with the reason
+  as its hint
+- "Development Environment" in Tools, and the category filter's options
+- the LLM's creation time
+- a serverless service created from the form: its list time matched its
+  detail's (00:55:36), with the "MinIO console" field. The service was
+  deleted afterwards.
+- all four dimmed cards (two modules, CVAT, NVFLARE) showing the label, with
+  the tooltip opening
+
+**Tests:** 336 unit. The smoke checks all pass against the live platform:
+
+| Check | Result |
+|---|---|
+| `check-branding` | 26 ok |
+| `check-dashboard` | 19 ok |
+| `check-catalogue` | 10 ok |
+| `check-home-page` | 13 ok |
+| `check-public-path` | passed |
+
+`check-branding` gained two sections: 2b covers what the demo's screens say,
+and 4b covers the marketplace's own words.
+
+**Deliberately left:**
+
+- **"AI4life model loader"** names where its models come from, as the Modules
+  page's AI4Life tab does.
+- **The Gradio page's AI4EOSC footer** is not in the five-minute cut. It stays
+  on the after-the-demo list.
+- **The Keycloak sign-up and login pages** are the stock Keycloak theme with a
+  "CAIOS" wordmark. The sign-up beat puts them on camera. They are legible and
+  say nothing wrong, so theming them is polish, for step 7 to judge on the
+  recording.
+
+Rollback: `rollback/papi-pre-0023.tar` and `rollback/dashboard-pre-step5.tar`.
+The catalogue half is a `git checkout` of the mirror and a PAPI restart.

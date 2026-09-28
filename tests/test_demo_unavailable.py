@@ -52,6 +52,10 @@ EXPECTED_UNAVAILABLE = {
     "snapshots",
     "ai4os-cvat",
     "ai4os-nvflare",
+    # Modules measured failing by scripts/check-modules.sh on 2026-09-25 and
+    # kept visible but dimmed by decision on 2026-09-27 (docs/demo-plan.md).
+    "obj-detection-torch",
+    "tf-cnn-benchmarks-api",
 }
 
 
@@ -265,3 +269,18 @@ def test_the_toy_module_is_off_the_marketplace(root):
         / "catalog/mirror/AlirezaAbedinii/caios-modules-catalog/master/.gitmodules"
     ).read_text(encoding="utf-8")
     assert "ai4os-demo-app" not in gm, "the mirror still serves it"
+
+
+def test_a_dimmed_card_says_why_without_a_hover(root):
+    """0018. The tooltip used to live on the dimmed element, whose
+    pointer-events:none meant it could never be hovered: a dimmed card said
+    nothing. The notice is now text on the card, and the tooltip sits on a slot
+    a mouse can reach."""
+    patch = (root / "patches/ai4-dashboard/0018-demo-unavailable-says-so.patch").read_text()
+    added = "\n".join(l[1:] for l in patch.splitlines() if l.startswith("+"))
+    assert 'class="demo-unavailable-label"' in added
+    assert "'DEMO.UNAVAILABLE-SHORT' | translate" in added
+    assert 'class="demo-unavailable-slot"' in added
+    assert "pointer-events: none;" in added.split(".demo-unavailable-label")[1], (
+        "the label itself must not catch clicks either"
+    )

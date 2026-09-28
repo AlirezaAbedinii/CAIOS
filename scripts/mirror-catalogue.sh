@@ -237,6 +237,16 @@ fi
 repo_info
 echo
 
+# What a visitor reads should name this platform, not another project: no
+# vo.<other-project> tags, no "AI4 …" category chips, no "AI4OS" title. Edits
+# the fetched files in place — inode-safe, like everything else here — and
+# verifies each one still parses to exactly the intended metadata.
+echo "=== sanitising metadata ==="
+mapfile -t META < <(find "$OUT" -name ai4-metadata.yml | sort)
+python3 scripts/lib/sanitize-metadata.py "${META[@]}" || bad "could not sanitise the metadata"
+echo "# metadata sanitised by scripts/lib/sanitize-metadata.py: see that file" >> "$MANIFEST"
+echo
+
 echo "=== summary ==="
 printf '  %s files, %s\n' \
     "$(find "$OUT" -type f ! -name MANIFEST.txt | wc -l)" \

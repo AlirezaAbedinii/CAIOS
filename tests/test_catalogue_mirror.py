@@ -269,3 +269,33 @@ def test_mirror_script_does_not_fetch_from_the_flaky_host(root):
         line for line in s.splitlines() if not line.lstrip().startswith("#")
     )
     assert "raw.githubusercontent.com" not in code
+
+
+# The AI4OS metadata schema's categories. PAPI validates every entry against
+# the schema and serves a failing one as "invalid metadata", titled by its id.
+SCHEMA_CATEGORIES = {"AI4 pre trained", "AI4 trainable", "AI4 inference", "AI4 tools"}
+
+
+def test_the_mirror_keeps_the_schema_categories(root):
+    """2026-09-28: renaming "AI4 trainable" and friends in the mirror made
+    PAPI reject all eight modules for five minutes on the live marketplace.
+    The labels are changed on screen by dashboard patch 0017; the data keeps
+    the schema's values."""
+    import yaml
+    for f in sorted((root / "catalog" / "mirror").rglob("ai4-metadata.yml")):
+        cats = set(yaml.safe_load(f.read_text()).get("categories") or [])
+        assert cats <= SCHEMA_CATEGORIES, f"{f}: {sorted(cats - SCHEMA_CATEGORIES)}"
+
+
+def test_the_mirror_names_this_platform(root):
+    """No other project's VO tag, and no AI4OS title (sanitize-metadata.py)."""
+    import yaml
+    for f in sorted((root / "catalog" / "mirror").rglob("ai4-metadata.yml")):
+        doc = yaml.safe_load(f.read_text())
+        assert not [t for t in doc.get("tags") or [] if str(t).startswith("vo.")], f
+        assert "AI4OS" not in (doc.get("title") or ""), f
+
+
+def test_the_sanitiser_leaves_categories_alone(root):
+    src = (root / "scripts" / "lib" / "sanitize-metadata.py").read_text()
+    assert "CATEGORIES = {}" in src

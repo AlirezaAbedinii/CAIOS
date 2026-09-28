@@ -142,6 +142,10 @@ come from module metadata or upstream vocabulary rather than from `en.json`:
 - **`vo.imagine-ai.eu`** — another project's VO, rendered as a tag on our modules
 - The Modules page's own tab strip reads **"AI4EOSC"** and "AI4Life"
 
+*2026-09-28: the dev-env title, the category chips and the VO tags are fixed —
+step 5 of `docs/demo-plan.md`. The chips are relabelled at display, not in the
+data: the schema owns those values (D-84).*
+
 Not visible, verified: `SIDENAV.AI4OS` and the "powered by" block are gated to
 the `imagine`/`ai4life` VOs; `status.ai4eosc.eu` is gated on `deployedInNomad`
 (false); the AI4EOSC chatbot component is referenced by no template;

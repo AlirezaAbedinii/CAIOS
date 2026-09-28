@@ -633,6 +633,31 @@ tidy; it is no longer what changes the marketplace.
 Then re-run `bash scripts/check-modules.sh`, and check the home page still
 states the right count (`tests/test_home_page.py`).
 
+### Modules show their ids as titles, and "invalid metadata"
+
+PAPI validated a module's `ai4-metadata.yml` against the AI4OS schema and
+rejected it. The schema enumerates `categories`, so the usual cause is a
+category value that was edited — it happened on 2026-09-28, to all eight
+modules at once (D-84). Put the mirror back and restart PAPI:
+
+```bash
+git checkout -- catalog/mirror/
+sudo docker restart caios_papi
+bash scripts/check-branding.sh      # section 4b fails while any entry is invalid
+```
+
+The mirror may drop `vo.*` tags and change titles
+(`scripts/lib/sanitize-metadata.py`), and nothing else. How a category *reads*
+is dashboard patch `0017`'s business.
+
+### A dimmed card, and what it says
+
+Anything in `demoUnavailable` in `configs/dashboard/caios.json` is dimmed in
+the catalogue, labelled "Not included in the Demo Version", and explains itself
+in a tooltip. The label and tooltip are patch `0018`. Remove an id the day the
+thing works. It needs a dashboard rebuild, because the tenant config is
+baked into the image.
+
 ### Testing every module in the marketplace
 
 ```bash

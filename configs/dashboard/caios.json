@@ -26,7 +26,7 @@
             "url": "https://docs.ai4os.eu/"
         }
     ],
-    "_comment_demo_unavailable": "T4. Features this deployment does not run. Profile tabs get a panel saying so; buttons and sidenav entries are disabled with the same sentence as a tooltip. Each was MEASURED on 2026-09-02, not assumed: apikeys proxies to AI4EOSC's LiteLLM and 401s (it used to eject the user to /forbidden); storage needs a Nextcloud and services an MLflow (D-15); tryme needs a node tagged meta.type=tryme and PAPI answers 503 without one; batch needs a storage backend and PAPI refuses without one; snapshots push an image to a Harbor registry; ai4os-cvat needs ~71 GB on one node (gotcha 9) and ai4os-nvflare needs TCP 8002-8003 open (gotcha 8), and we demonstrate federated learning with Flower instead. Catalogue ids dim their card and make it unclickable rather than hiding it. Remove an id the day the service exists - nothing else needs changing.",
+    "_comment_demo_unavailable": "T4. Features this deployment does not run. Profile tabs get a panel saying so; buttons and sidenav entries are disabled with the same sentence as a tooltip. Each was MEASURED on 2026-09-02, not assumed: apikeys proxies to AI4EOSC's LiteLLM and 401s (it used to eject the user to /forbidden); storage needs a Nextcloud and services an MLflow (D-15); tryme needs a node tagged meta.type=tryme and PAPI answers 503 without one; batch needs a storage backend and PAPI refuses without one; snapshots push an image to a Harbor registry; ai4os-cvat needs ~71 GB on one node (gotcha 9) and ai4os-nvflare needs TCP 8002-8003 open (gotcha 8), and we demonstrate federated learning with Flower instead. Catalogue ids dim their card and make it unclickable rather than hiding it. Remove an id the day the service exists - nothing else needs changing. Modules obj-detection-torch and tf-cnn-benchmarks-api added 2026-09-27 (docs/demo-plan.md, decisions 5 and 6), measured by scripts/check-modules.sh on 2026-09-25: the first cannot run JupyterLab (pip will not replace a distutils-installed PyYAML), the second's prediction is a CPU benchmark running past five minutes and the GPU it exists to benchmark cannot be used by its TensorFlow 2.2.",
     "demoUnavailable": [
         "apikeys",
         "storage",
@@ -35,6 +35,8 @@
         "batch",
         "snapshots",
         "ai4os-cvat",
-        "ai4os-nvflare"
+        "ai4os-nvflare",
+        "obj-detection-torch",
+        "tf-cnn-benchmarks-api"
     ]
 }

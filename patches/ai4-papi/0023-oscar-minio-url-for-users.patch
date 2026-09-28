@@ -1,0 +1,43 @@
+--- a/ai4papi/routers/v1/inference/oscar.py
++++ b/ai4papi/routers/v1/inference/oscar.py
+@@ -398,7 +398,7 @@
+ 
+         # Info for async calls
+         # Replace MinIO info with the one retrieved from client (which is the correct one)
+-        s["storage_providers"]["minio"]["default"] = client_conf["minio_provider"]
++        s["storage_providers"]["minio"]["default"] = _minio_for_users(client_conf["minio_provider"])
+ 
+         services.append(s)
+ 
+@@ -415,6 +415,22 @@
+     return sorted_services
+ 
+ 
++def _minio_for_users(provider):
++    """
++    [CAIOS] The MinIO provider as a user should see it.
++
++    OSCAR's cluster config carries the address its JOBS reach MinIO on — here
++    the in-cluster http://minio.minio.svc.cluster.local:9000 (D-36) — and
++    upstream shows that on the Inference detail page as "MINIO URL". Nobody
++    outside the cluster can open it. CAIOS_OSCAR_MINIO_URL replaces it in what
++    PAPI returns, with the MinIO console users actually upload to; the
++    services themselves keep the in-cluster address. Unset behaves as upstream.
++    patches/README.md, 0023.
++    """
++    public = os.getenv("CAIOS_OSCAR_MINIO_URL", "")
++    return {**provider, "endpoint": public} if public else provider
++
++
+ @router.get("/services/{service_name}")
+ def get_service(
+     vo: str,
+@@ -440,7 +456,7 @@
+ 
+     # Retrieve cluster config for MinIO info
+     client_conf = client.get_cluster_config().json()
+-    service["storage_providers"]["minio"]["default"] = client_conf["minio_provider"]
++    service["storage_providers"]["minio"]["default"] = _minio_for_users(client_conf["minio_provider"])
+ 
+     # [CAIOS] Same warm/cold annotation as the listing.
+     service["warm"], service["replicas"] = _warm_state(

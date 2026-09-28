@@ -942,6 +942,24 @@ It cannot be configuration: the script is a literal in the template. It reaches
 **new** services only — an existing service keeps the script it was created
 with.
 
+### `ai4-papi/0023-oscar-minio-url-for-users.patch` — pinned to `e80a2b7`
+
+**The Inference detail page offered users an address only the cluster can
+reach.** Its "MINIO URL" is whatever OSCAR's cluster config says MinIO is, and
+that is the address OSCAR's *jobs* use — here the in-cluster
+`http://minio.minio.svc.cluster.local:9000`, deliberately (D-36). Found in a
+browser walk on 2026-09-28; nobody outside the cluster can open it, and the
+async route in `docs/oscar-gui-guide.md` starts by opening MinIO.
+
+The patch replaces the endpoint in what PAPI *returns* — the service list and
+the service detail — with `CAIOS_OSCAR_MINIO_URL`, the MinIO console users
+upload to. The services themselves keep the in-cluster address; nothing OSCAR
+runs is changed. Unset behaves as upstream. The dashboard labels the field
+"MinIO console" to match.
+
+It cannot be configuration: PAPI copies OSCAR's provider into the response
+verbatim, with no setting in between.
+
 ### `ai4-dashboard/0001-pacslab-logo.patch`
 
 The sidenav footer renders two images side by side: upstream's `eu-flag.jpg` and
@@ -961,6 +979,58 @@ everything else visible in a walkthrough is tenant configuration.
 `scripts/build-dashboard.sh` applies dashboard patches itself, because it stages
 `vendor/` into `build/` and would otherwise overwrite whatever
 `apply-patches.sh` had put there.
+
+### `ai4-dashboard/0016-creation-times-in-utc.patch` — pinned to `c360f20`
+
+**Every creation time in the dashboard was wrong, under a label saying UTC.**
+`src/app/shared/utils/formatDate.ts` formats the creation-time column of the
+Deployments, Inference, Try-me and Batch lists, all labelled "Creation time
+(UTC)". It hardcodes `timeZone: 'Europe/Paris'` — AI4EOSC's clock — and first
+parses PAPI's zone-less timestamps (`2026-09-28 00:36:14`, UTC) as the
+*browser's* local time. Found in a browser walk on 2026-09-28: a service created
+at 00:36 UTC read **06:36** in the Inference list and **00:36** in its own
+detail dialog, which prints PAPI's string as it is. Checked in Node with a
+Toronto timezone before building: upstream turns 00:36 into 06:36, and the
+running LLM's 17:42 into 23:42.
+
+The patch reads a zone-less timestamp as UTC and formats in UTC, which is what
+every label already says; strings that carry a zone are read as they are. It
+cannot be configuration — the zone is a literal in the function.
+
+### `ai4-dashboard/0017-category-labels.patch` — pinned to `c360f20`
+
+**The category chips said "AI4 …", and the data is not ours to rename.** Every
+module page carries platform categories — "AI4 trainable", "AI4 pre trained",
+"AI4 inference" — as chips, and the catalogue's filter lists them.
+
+Renaming them in the catalogue mirror was tried first, on 2026-09-28, and it
+broke the live marketplace for five minutes: the AI4OS metadata schema
+enumerates the categories, PAPI validates every entry against it, and one
+renamed value made **all eight modules** fail validation and serve with their
+ids for titles. The dashboard also tells a tool from a module by the value
+`AI4 tools`. So the values stay exactly as upstream spells them.
+
+The patch changes only what is displayed, in the three places a category is
+shown: the module page's chips, the category filter's options and its selected
+value, and the filter-configuration dialog. Each drops the `AI4 ` prefix from
+the label; the value — used for filtering, validation and the tool check — is
+untouched. `tests/test_catalogue_mirror.py` keeps the mirror's categories to
+the schema's.
+
+### `ai4-dashboard/0018-demo-unavailable-says-so.patch` — pinned to `c360f20`
+
+**A dimmed catalogue card never said why it was dimmed.** Patch `0009` put the
+"Not included in the Demo Version" tooltip on the same element it dims, and
+that element carries `pointer-events: none` so the card cannot be clicked —
+which also means no mouse can ever reach the tooltip. Measured in a browser on
+2026-09-28: `elementFromPoint` at the centre of a dimmed card returns what is
+behind it, and the sentence appears nowhere on the page. It had been true of
+the CVAT and NVFLARE cards since T4.
+
+The patch wraps the dimmed card in a slot that keeps pointer events: the slot
+carries the tooltip, now with the full sentence, and shows the short one —
+"Not included in the Demo Version" — as a label over the card's lower edge,
+undimmed. Only the card inside is grey and inert.
 
 ### `ai4-dashboard/0006-no-cache-runtime-assets.patch` — pinned to `c360f20`
 

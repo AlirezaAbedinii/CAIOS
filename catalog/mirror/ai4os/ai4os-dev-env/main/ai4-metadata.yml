@@ -1,5 +1,5 @@
 metadata_version: 2.0.0
-title: AI4OS Development Environment
+title: Development Environment
 summary: This is a Docker image for developing new modules
 description: |-
   This is a Docker image for developing new modules. It comes preinstalled

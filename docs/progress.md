@@ -49,6 +49,58 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-28 — Step 5: what the demo's screens say is ours
+
+Every screen in the five-minute cut was walked in a browser on the live
+platform:
+
+- The VO tags and the "AI4OS" title are gone from the catalogue mirror, and the
+  category chips drop "AI4 " where they are displayed.
+- The deploy form says "Configure deployment", and the Deploy menu offers a
+  "Dedicated deployment".
+- The two modules step 2 found failing are dimmed, and labelled "Not included
+  in the Demo Version".
+
+### Three faults the walk found
+
+- **Creation times were upstream's Paris clock under a "UTC" label**, and wrong
+  for anyone outside Central Europe. Dashboard patch `0016`.
+- **The Inference detail page showed the in-cluster MinIO address**, which only
+  OSCAR's jobs can reach. PAPI patch `0023` puts the console there.
+- **No dimmed card had ever shown its tooltip.** `pointer-events: none` kept the
+  mouse off it, and had done so for CVAT and NVFLARE since T4. Dashboard patch
+  `0018` puts a visible label on the card.
+
+### One mistake, and the check it left behind
+
+Renaming the category values in the mirror broke the live marketplace for about
+five minutes: the metadata schema enumerates them, and PAPI served all eight
+modules as "invalid metadata". It was reverted, and the chips are now relabelled
+at display (D-84). `check-branding.sh` fails on that symptom now, and a unit
+test keeps the mirror's categories to the schema's.
+
+### Verified
+
+336 unit tests. Against the live build, the smoke checks all pass:
+
+| Check | Result |
+|---|---|
+| `check-branding` | 26 ok, with two new sections |
+| `check-dashboard` | 19 ok |
+| `check-catalogue` | 10 ok |
+| `check-home-page` | 13 ok |
+| `check-public-path` | passed |
+
+A test service created from the serverless form showed matching times and the
+MinIO console, and was then deleted. The rollback images for both halves are
+saved. The rollback README also lists every image now, and its restore commands
+all carry `--no-deps`.
+
+Left: the Gradio footer (after the demo), and the stock Keycloak theme on the
+sign-up page, for the recording to judge. **Next: step 6**, the script.
+
+---
+
 ## 2026-09-27 — Step 4: serverless answers with its result; modules run on CPU
 
 **Decided today:** `obj-detection-torch` and `tf-cnn-benchmarks-api` stay in the

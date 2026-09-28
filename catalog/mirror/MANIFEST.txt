@@ -20,3 +20,4 @@ ai4os/ai4os-llm/master/ai4-metadata.yml bdbb9cb3f84820f95c683579ef47d5d7501cea45
 ai4os/ai4os-nvflare/main/ai4-metadata.yml d66e7e0bbbb3d0ae9ab2b90b355cdbde722238fe
 ai4os/ai4os-ai4life-loader/refs/heads/main/models/filtered_models.json bb5617364ed4238e2d2e8e5294547dd4ba8fb5ad
 repo-info.json (from api.github.com)
+# metadata sanitised by scripts/lib/sanitize-metadata.py: see that file

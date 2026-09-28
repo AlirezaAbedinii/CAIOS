@@ -114,6 +114,60 @@ PY
 fi
 
 echo
+echo "=== 2b. what the demo's screens say (docs/demo-plan.md step 5) ==="
+curl -k -sS --max-time 20 "$DASH/assets/i18n/en.json" -o "$TMP/en.json"
+python3 - "$TMP/config.json" "$TMP/en.json" <<'PY'
+import json
+import sys
+
+conf = json.load(open(sys.argv[1]))
+en = json.load(open(sys.argv[2]))
+problems = []
+
+# Modules shown dimmed as "Not included in the Demo Version" (decided
+# 2026-09-27; scripts/check-modules.sh measured why).
+for module in ("obj-detection-torch", "tf-cnn-benchmarks-api"):
+    if module not in (conf.get("demoUnavailable") or []):
+        problems.append(f"{module} is not dimmed (demoUnavailable)")
+
+def get(path):
+    node = en
+    for k in path.split("."):
+        node = node.get(k, {}) if isinstance(node, dict) else {}
+    return node
+
+for path, want in (
+    ("CATALOG.MODULE-TRAIN.TITLE", "Configure deployment"),
+    ("CATALOG.MODULE-DETAIL.DEPLOY.API-PLATFORM", "Dedicated deployment"),
+    ("INFERENCE.INFERENCE-DETAIL.MINIO-URL", "MinIO console"),
+):
+    if get(path) != want:
+        problems.append(f"{path} is {get(path)!r}, expected {want!r}")
+
+for p in problems:
+    print(f"  [FAIL] {p}")
+if not problems:
+    print("  [ ok ] two modules dimmed; the deploy form, the dedicated option and the MinIO field say what they are")
+raise SystemExit(1 if problems else 0)
+PY
+[[ $? -eq 0 ]] || fail=1
+
+# The bundle, not the source: dashboard patch 0016 took Europe/Paris out of the
+# function that formats every "Creation time (UTC)" column.
+MAIN_JS="$(curl -k -sS --max-time 20 "$DASH/" | grep -o 'main-[A-Za-z0-9]*\.js' | head -1)"
+if [[ -n "$MAIN_JS" ]]; then
+    curl -k -sS --max-time 30 "$DASH/$MAIN_JS" -o "$TMP/main.js"
+    paris="$(grep -c 'Europe/Paris' "$TMP/main.js")"
+    if [[ "$paris" == "0" ]]; then
+        ok "no Europe/Paris clock in the bundle: creation times are UTC, as labelled"
+    else
+        bad "the bundle still formats times in Europe/Paris (dashboard patch 0016 not deployed)"
+    fi
+else
+    warn "could not find the main bundle to check the clock"
+fi
+
+echo
 echo "=== 3. branding artwork is really artwork ==="
 for asset in dashboard-logo.png favicon.ico forbidden.png not-found.png pacslab-logo.png; do
     ctype="$(curl -k -sS --max-time 20 -o "$TMP/$asset" -w '%{content_type}' "$DASH/assets/images/$asset")"
@@ -304,6 +358,37 @@ PY
         ok "every module returns a deployable configuration"
     fi
 
+    echo
+    echo "=== 4b. the marketplace's own words (docs/demo-plan.md step 5) ==="
+    curl -k -sS --max-time 30 "$API/v1/catalog/modules/detail" -o "$TMP/modules-detail.json"
+    curl -k -sS --max-time 30 "$API/v1/catalog/tools/detail" -o "$TMP/tools-detail.json"
+    python3 - "$TMP/modules-detail.json" "$TMP/tools-detail.json" <<'PY'
+import json
+import sys
+
+entries = json.load(open(sys.argv[1])) + json.load(open(sys.argv[2]))
+problems = []
+for e in entries:
+    # First, and loudest: an entry PAPI's validator rejected is served with its
+    # id for a title and an error for a description. Measured 2026-09-28, all
+    # eight modules, after the category values were renamed in the mirror.
+    if "invalid metadata" in (e.get("tags") or []):
+        problems.append(f"{e['id']}: PAPI rejected its metadata")
+    for tag in e.get("tags") or []:
+        if str(tag).startswith("vo."):
+            problems.append(f"{e['id']}: tag {tag!r} names another project's VO")
+    # Categories are NOT checked for an "AI4 " prefix: the schema enumerates
+    # them and they must stay as upstream spells them. Dashboard patch 0017
+    # drops the prefix from their labels on screen.
+    if any(s in (e.get("title") or "") for s in ("AI4OS", "AI4EOSC")):
+        problems.append(f"{e['id']}: title {e['title']!r}")
+for p in problems:
+    print(f"  [FAIL] {p}")
+if not problems:
+    print(f"  [ ok ] {len(entries)} entries, all valid: no other project's VO tags or titles")
+raise SystemExit(1 if problems else 0)
+PY
+    [[ $? -eq 0 ]] || fail=1
     echo
     echo "=== 5. neuroscience is actually on offer ==="
     curl -k -sS --max-time 30 -H "Authorization: Bearer $TOKEN" \

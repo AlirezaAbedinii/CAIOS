@@ -1,0 +1,53 @@
+--- a/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
++++ b/src/app/modules/catalog/components/modules-detail/ai4eosc-module-detail/ai4eosc-module-detail.component.html
+@@ -518,12 +518,13 @@
+                             {{ 'CATALOG.MODULE-DETAIL.CATEGORIES' | translate }}
+                         </div>
+                         <div class="box-content">
++                            <!-- [CAIOS] Display only. The AI4OS metadata schema enumerates categories as "AI4 trainable", "AI4 inference" and so on; renaming them in the data makes PAPI reject the whole entry (measured 2026-09-28), and the card tells tool from module by the value "AI4 tools". So the value is untouched and only its label drops the other project's prefix. patches/README.md, 0017. -->
+                             @for (
+                                 category of module.categories;
+                                 track category
+                             ) {
+                                 <app-chip-with-icon
+-                                    text="{{ category }}"
++                                    text="{{ category.replace('AI4 ', '') }}"
+                                     chipStyle="default"
+                                 ></app-chip-with-icon>
+                             }
+--- a/src/app/modules/catalog/components/filters/filter-component/filter-component.component.html
++++ b/src/app/modules/catalog/components/filters/filter-component/filter-component.component.html
+@@ -74,8 +74,9 @@
+       (selectionChange)="categoriesChange()"
+       multiple
+       >
++      <!-- [CAIOS] Display only. The AI4OS metadata schema enumerates categories as "AI4 trainable", "AI4 inference" and so on; renaming them in the data makes PAPI reject the whole entry (measured 2026-09-28), and the card tells tool from module by the value "AI4 tools". So the value is untouched and only its label drops the other project's prefix. patches/README.md, 0017. -->
+       <mat-select-trigger>
+-        {{ selectedCategories[0] || '' }}
++        {{ (selectedCategories[0] || '').replace('AI4 ', '') }}
+         @if ((selectedCategories.length || 0) > 1) {
+           <span
+             class="additional-selection"
+@@ -89,7 +90,7 @@
+       @for (category of categories; track category) {
+         <mat-option
+           [value]="category"
+-          >{{ category }}</mat-option
++          >{{ category.replace('AI4 ', '') }}</mat-option
+           >
+         }
+       </mat-select>
+--- a/src/app/modules/catalog/components/filters/filters-configuration-dialog/filters-configuration-dialog.component.html
++++ b/src/app/modules/catalog/components/filters/filters-configuration-dialog/filters-configuration-dialog.component.html
+@@ -32,9 +32,10 @@
+                 chipStyle="default"
+               ></app-chip-with-icon>
+             }
++            <!-- [CAIOS] Display only. The AI4OS metadata schema enumerates categories as "AI4 trainable", "AI4 inference" and so on; renaming them in the data makes PAPI reject the whole entry (measured 2026-09-28), and the card tells tool from module by the value "AI4 tools". So the value is untouched and only its label drops the other project's prefix. patches/README.md, 0017. -->
+             @for (category of filter.categories; track category) {
+               <app-chip-with-icon
+-                text="{{ category }}"
++                text="{{ category.replace('AI4 ', '') }}"
+                 chipStyle="default"
+               ></app-chip-with-icon>
+             }

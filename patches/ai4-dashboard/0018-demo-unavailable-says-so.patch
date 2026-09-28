@@ -1,0 +1,84 @@
+--- a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html
++++ b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.html
+@@ -127,19 +127,38 @@
+                                        demonstrate federated learning with
+                                        Flower instead.
+                     -->
++                    <!--
++                      [CAIOS] The notice is text on the card, not only a tooltip.
++                      The tooltip used to sit on the dimmed element itself, whose
++                      pointer-events:none meant no mouse could ever reach it: a
++                      dimmed card said nothing at all (measured 2026-09-28,
++                      elementFromPoint at its centre returned what was behind it).
++                      Now the slot carries the tooltip and the label; only the
++                      card inside is dimmed and inert. patches/README.md, 0018.
++                    -->
+                     <div
+-                        [class.demo-unavailable-card]="
+-                            isDemoUnavailable(element.id)
+-                        "
++                        class="demo-unavailable-slot"
++                        [class.is-unavailable]="isDemoUnavailable(element.id)"
+                         [matTooltip]="
+                             isDemoUnavailable(element.id)
+-                                ? ('DEMO.UNAVAILABLE-SHORT' | translate)
++                                ? ('DEMO.UNAVAILABLE' | translate)
+                                 : ''
+                         "
+                     >
+-                        <app-ai4eosc-module-card
+-                            [module]="element"
+-                        ></app-ai4eosc-module-card>
++                        <div
++                            [class.demo-unavailable-card]="
++                                isDemoUnavailable(element.id)
++                            "
++                        >
++                            <app-ai4eosc-module-card
++                                [module]="element"
++                            ></app-ai4eosc-module-card>
++                        </div>
++                        @if (isDemoUnavailable(element.id)) {
++                            <span class="demo-unavailable-label">{{
++                                'DEMO.UNAVAILABLE-SHORT' | translate
++                            }}</span>
++                        }
+                     </div>
+                 </span>
+             }
+--- a/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss
++++ b/src/app/modules/catalog/components/lists/catalog-list/catalog-list.component.scss
+@@ -93,5 +93,32 @@
+     opacity: 0.45;
+     filter: grayscale(1);
+     pointer-events: none;
+-    cursor: not-allowed;
++}
++
++/* [CAIOS] 0018. The slot around a dimmed card: it keeps pointer events, so its
++   tooltip can be reached, and it carries the notice as text, undimmed, so the
++   card says why it is grey without anyone hovering. */
++.demo-unavailable-slot {
++    position: relative;
++    height: 100%;
++
++    &.is-unavailable {
++        cursor: not-allowed;
++    }
++}
++
++.demo-unavailable-label {
++    position: absolute;
++    left: 50%;
++    bottom: 14px;
++    transform: translateX(-50%);
++    padding: 3px 12px;
++    border: 1px solid rgba(0, 0, 0, 0.18);
++    border-radius: 999px;
++    background: #ffffff;
++    color: #37474f;
++    font-size: 12px;
++    font-weight: 500;
++    white-space: nowrap;
++    pointer-events: none;
+ }

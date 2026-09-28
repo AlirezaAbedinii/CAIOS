@@ -101,7 +101,14 @@
         "MODULE-DETAIL": {
             "METADATA": {
                 "TITLE": "Metadata"
+            },
+            "DEPLOY": {
+                "API-PLATFORM": "Dedicated deployment",
+                "NOMAD": "An inference API with a web interface, or a JupyterLab notebook, running on the cluster"
             }
+        },
+        "MODULE-TRAIN": {
+            "TITLE": "Configure deployment"
         }
     },
     "_comment_admin": "T6. The registration console at /admin, and the waiting room a newly-registered account sees. SIDENAV.ADMINISTRATION and SIDENAV.ADMIN extend upstream's SIDENAV block; PENDING and ADMIN are ours. Written for the same audience as everything else here: a researcher who has just signed up and wants to know what happens next, and an administrator who wants to know who is waiting.",
@@ -140,6 +147,12 @@
         "OVERVIEW-TAB": {
             "UNAUTHORIZED": "Your account is not yet approved",
             "UNAUTHORIZED-DESC": "A CAIOS administrator reviews new accounts by hand. Once yours is approved, sign in again and the platform will be open to you."
+        }
+    },
+    "_comment_step5": "docs/demo-plan.md step 5, 2026-09-28. The deploy form's heading said 'Configure training' for every deployment, including a serverless inference nobody trains; the dedicated option only named an API and UI, and it also opens JupyterLab now (D-81); the Inference detail page labelled the MinIO console 'MINIO URL', which was the in-cluster address until PAPI patch 0023.",
+    "INFERENCE": {
+        "INFERENCE-DETAIL": {
+            "MINIO-URL": "MinIO console"
         }
     }
 }

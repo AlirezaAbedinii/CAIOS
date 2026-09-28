@@ -33,7 +33,7 @@ None of that is your misreading. It is how the platform works.
         │  click a model
   2  Module detail
         │  Deploy ▾  ->  Inference API (serverless)
-  3  Configure training  (the form)
+  3  Configure deployment  (the form)
         │  submit
   4  Inference           (the list)
         │  click your service
@@ -74,11 +74,11 @@ normal, always-running deployment — that is *not* what you want here.
 
 ---
 
-## Step 3 — The form, confusingly titled "Configure training"
+## Step 3 — The form, "Configure deployment"
 
-The page header says **`Configure training`**. Ignore that — it is upstream's
-wording and the same form is reused for everything. You are configuring an
-inference service.
+The page header says **`Configure deployment`**. It said *Configure training*
+until 2026-09-28, upstream's wording for a form it reuses for everything; the
+string is ours now. You are configuring an inference service.
 
 Two steps:
 
@@ -137,7 +137,7 @@ Knative.)*
 | Field on screen | What it is |
 |---|---|
 | **MINIO bucket** | your service's bucket, `ai4papi-…` |
-| **MINIO URL** | the MinIO address |
+| **MinIO console** | where you sign in for Route B, `https://minio-console.192.168.104.69.sslip.io` |
 | **MINIO access key** | username for the next step |
 | **MINIO secret key** | password for the next step (click the eye to reveal) |
 

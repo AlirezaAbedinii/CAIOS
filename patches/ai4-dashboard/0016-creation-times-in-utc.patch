@@ -1,0 +1,27 @@
+--- a/src/app/shared/utils/formatDate.ts
++++ b/src/app/shared/utils/formatDate.ts
+@@ -1,8 +1,22 @@
+ export function formatDate(input: string, showHour = true): string {
+-    const date = typeof input === 'string' ? new Date(input) : input;
++    // [CAIOS] Every column this formats is labelled "(UTC)", and PAPI's
++    // timestamps are UTC with no zone on them ("2026-09-28 00:36:14").
++    // Upstream parsed such a string as the BROWSER's local time and then
++    // formatted it in Europe/Paris, AI4EOSC's clock — so the label was true for
++    // nobody: a service created at 00:36 UTC read 06:36 in a browser in
++    // Toronto, and 00:36 in its own detail dialog. Read a zone-less timestamp
++    // as UTC, and format in UTC, which is what the label says.
++    const date =
++        typeof input === 'string'
++            ? new Date(
++                  /(Z|[+-]\d\d:?\d\d)$/i.test(input.trim())
++                      ? input
++                      : input.trim().replace(' ', 'T') + 'Z'
++              )
++            : input;
+ 
+     const options: Intl.DateTimeFormatOptions = {
+-        timeZone: 'Europe/Paris',
++        timeZone: 'UTC',
+         year: 'numeric',
+         month: '2-digit',
+         day: '2-digit',

@@ -266,6 +266,10 @@ services:
       # Stage O3. Consumed by main.yaml's oscar block through the envsubst
       # the image runs at start. Unset would leave the placeholder literal.
       CAIOS_OSCAR_ENDPOINT: ${CAIOS_OSCAR_ENDPOINT}
+      # Patch 0023: the MinIO address the Inference detail page shows users,
+      # instead of the in-cluster one only OSCAR's jobs can reach. Unset
+      # behaves as upstream.
+      CAIOS_OSCAR_MINIO_URL: ${CAIOS_OSCAR_MINIO_URL:-}
       # Read-only, for the warm/cold badge only. Unset disables it.
       OSCAR_K8S_API: ${OSCAR_K8S_API:-}
       OSCAR_K8S_TOKEN_PATH: ${OSCAR_K8S_TOKEN_PATH:-}

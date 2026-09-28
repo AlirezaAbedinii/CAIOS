@@ -27,6 +27,7 @@ half is `scripts/check-deployments.sh`.
 """
 
 from pathlib import Path
+import json
 import re
 
 import pytest
@@ -95,20 +96,20 @@ def _conf(root, path):
 RESULTS = "demo/modules/check-results.tsv"
 KEEP = "catalog/keep.txt"
 
-# Measured failures, and what was decided about them — docs/demo-plan.md,
-# step 2. Decided 2026-09-27: both modules stay in the marketplace dimmed, as
-# "Not included in the Demo Version" (caios.json demoUnavailable, step 5).
-# An entry leaves this dict when its module is fixed or leaves the catalogue;
-# the tests below fail until it does. Anything failing that is NOT listed here
-# fails them too.
-OPEN_DECISIONS = {
-    ("obj-detection-torch", "jupyter"):
-        "JupyterLab is not in the image and pip cannot install it: "
-        "\"Cannot uninstall 'PyYAML'. It is a distutils installed project\"",
-    ("tf-cnn-benchmarks-api", "deepaas"):
-        "predict runs a full CNN benchmark, over five minutes on one CPU core, "
-        "and the GPU it exists to benchmark is unusable to TensorFlow 2.2",
-}
+TENANT = "configs/dashboard/caios.json"
+
+
+def _dimmed(root):
+    """Catalogue entries shown dimmed as "Not included in the Demo Version".
+
+    The one source of truth for which modules may fail check-modules.sh: a
+    module there cannot be deployed from the dashboard, so its failures are
+    known and decided rather than hidden (2026-09-27: obj-detection-torch cannot
+    run JupyterLab; tf-cnn-benchmarks-api's prediction is a CPU benchmark
+    running past five minutes). Take a module out of the list and these tests
+    demand that it passes.
+    """
+    return set(json.loads((root / TENANT).read_text(encoding="utf-8"))["demoUnavailable"])
 
 
 def _latest_results(root):
@@ -148,12 +149,10 @@ def test_jupyter_is_offered_only_while_every_module_passes_it(root):
         pytest.skip("JupyterLab is not offered for modules")
     latest = _latest_results(root)
     missing = [m for m in _marketplace(root) if (m, "jupyter") not in latest]
-    failing = {(m, "jupyter") for m in _marketplace(root) if latest.get((m, "jupyter")) == "fail"}
-    open_ = {k for k in OPEN_DECISIONS if k[1] == "jupyter"}
+    failing = [m for m in _marketplace(root)
+               if latest.get((m, "jupyter")) == "fail" and m not in _dimmed(root)]
     assert not missing, f"never tested in Jupyter mode: {missing}"
-    assert failing == open_, (
-        f"failing in Jupyter mode: {sorted(failing)}; awaiting a decision: {sorted(open_)}"
-    )
+    assert not failing, f"offered in Jupyter mode, not dimmed, and failing it: {failing}"
 
 
 def test_every_marketplace_module_deploys_as_an_api(root):
@@ -161,11 +160,9 @@ def test_every_marketplace_module_deploys_as_an_api(root):
     Deploy without reading the form. A module that fails it should not be in
     the marketplace."""
     latest = _latest_results(root)
-    failing = {(m, "deepaas") for m in _marketplace(root) if latest.get((m, "deepaas")) != "pass"}
-    open_ = {k for k in OPEN_DECISIONS if k[1] == "deepaas"}
-    assert failing == open_, (
-        f"not passing DEEPaaS mode: {sorted(failing)}; awaiting a decision: {sorted(open_)}"
-    )
+    failing = [m for m in _marketplace(root)
+               if latest.get((m, "deepaas")) != "pass" and m not in _dimmed(root)]
+    assert not failing, f"deployable, not dimmed, and not passing DEEPaaS mode: {failing}"
 
 
 def test_modules_are_offered_no_gpu_until_their_images_can_use_one(root):

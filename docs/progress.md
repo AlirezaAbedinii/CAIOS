@@ -49,6 +49,54 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-29 — Step 6: the five-minute script, and images that stay put
+
+### The script
+
+`docs/demo-script.md` is rewritten for the recording: seven beats in five
+minutes, opening on the home page and walking its three tiers. The narration is
+329 words, counted, about 2 min 12 s of speech. The two waits the beats depend
+on were measured today:
+
+- **the chat answer:** 0.3–0.4 s on Qwen3.5-2B
+- **the low-code request:** 6.3–6.8 s, running the script's own command against
+  a service made the way the form makes one, then deleted
+
+It adds a before-you-start list, the browser windows, what never goes on
+camera, and what to do when each beat goes wrong. The live demo's questions are
+carried over, with their facts brought up to date.
+
+### The pre-pull, split and pinned
+
+The measurement for the split found `caios_llm` holding 52 GB of module images
+and **no vLLM**, which docuum had evicted. It also found the one running LLM on
+`caios_site_c`, a hospital. So `playbook-prepull-images.yml` now sends each node
+what its role runs, and pins every image with a container that never runs,
+which docuum never evicts the image of (D-86). The plan prints without touching
+a node, and a fake-docker test covers the pinning. **The playbook itself has not
+been run:** it writes about 70 GB to shared nodes and is waiting for a
+go-ahead.
+
+### Smaller things
+
+- **The home page's tiers now read No code, Low code, High code.** The
+  dashboard was rebuilt and deployed.
+- **The module deploy form's GPU hint no longer says federated learning uses
+  the GPUs.** The demo's federated workspaces are CPU-only.
+- **D-85:** two accounts in the recording, with a cut between them.
+
+### Verified
+
+350 unit tests (14 new). `check-branding`, `check-dashboard`,
+`check-catalogue`, `check-home-page` and `check-public-path` all pass against
+the live platform.
+
+**Next: step 7**, rehearse and record. Its first moves are the pre-pull, and two
+removals the script's checklist names: Platform Administrator's LLM, and
+researcher's three serverless services from August.
+
+---
+
 ## 2026-09-28 — Step 5: what the demo's screens say is ours
 
 Every screen in the five-minute cut was walked in a browser on the live

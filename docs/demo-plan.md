@@ -168,7 +168,8 @@ What it changes about the steps:
 - The sign-up beat is a new account, and the rest is recorded as `researcher`
   (Dana Okafor). The name in the dashboard header changes between beat two and
   beat three; a cut hides it, or the new account records everything and every
-  deployment is created during the session. Decide at step 6.
+  deployment is created during the session. **Decided at step 6: the cut hides
+  it (D-85).**
 
 ## Steps
 
@@ -180,11 +181,11 @@ What it changes about the steps:
 | 3 | High code | a notebook that runs from a marketplace deployment | **done 2026-09-27** — four cells, 10 s, three runs identical |
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | **done 2026-09-27** — answers are JSON now; the browser walk is the rehearsal's |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **done 2026-09-28** — what the demo's screens say is ours, checked in a browser |
-| 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | **next** |
-| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | |
+| 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | **done 2026-09-29** — 329 words, 2:12 of speech; the pre-pull split by node role, and pinned |
+| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | **next** |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
-step-3 spike, 2, the rest of 3, 4, 5, **6**, 7. Step 2 moved up because the
+step-3 spike, 2, the rest of 3, 4, 5, 6, **7**. Step 2 moved up because the
 high-code beat needs JupyterLab offered on modules again, and that should not
 be switched back on for all eight without testing all eight. About four
 working days. Commit and push after each step.
@@ -342,6 +343,9 @@ Then rewrite `docs/demo-script.md` around the three tiers, opening on the home p
 A before-you-start list: pre-pull, the LLM deployed first so it lands on gpu-3,
 one warm-up request to OSCAR, the high-code workspace deployed and its notebook
 staged. A fallback clip for each tier.
+
+*As done: the split alone was not enough, because docuum evicts what was pulled
+weeks ago first. The images are pinned too (D-86). See the step log.*
 
 ### Step 7 — Rehearse, then record
 
@@ -797,3 +801,82 @@ and 4b covers the marketplace's own words.
 
 Rollback: `rollback/papi-pre-0023.tar` and `rollback/dashboard-pre-step5.tar`.
 The catalogue half is a `git checkout` of the mirror and a PAPI restart.
+
+### Step 6 — the script · done 2026-09-29
+
+**`docs/demo-script.md` is rewritten for the five-minute recording.** It has
+seven beats, opens on the home page and uses its three tiers as the spine. Each
+beat has what is on screen, what to say and what to cut. It adds a
+before-you-start list, the three browser windows, what never goes on camera, a
+table of what goes wrong in each beat, and the live demo's questions, corrected.
+
+The narration is 329 words, counted from the script: about 2 min 12 s at
+150 words a minute, which leaves 2 min 48 s for the screens. Two of the
+waits were measured for it today:
+
+- **the LLM beat's note:** 0.3–0.4 s on Qwen3.5-2B, one sentence, no thinking
+  block
+- **the low-code command:** exactly as the script has it, 6.8 s for a new
+  service's first call and 6.3 s after. The service was created as the form
+  does it, then deleted.
+
+**The pre-pull, split by node role, found the nodes in worse shape than step 1
+had:**
+
+| Node | Images | What was wrong |
+|---|---|---|
+| `caios_llm` | 52 GB | module images from step 2's sweeps, and **no vLLM**: docuum had evicted it |
+| `caios_site_c` | 76.5 GB | vLLM and Open WebUI, for the LLM Platform Administrator deployed on 2026-09-24. It landed here, on a hospital, despite its preference for `caios_llm` |
+| `caios_site_b` | 62.7 GB | neither the federated workspace image nor the FL server |
+| `caios_site_a` | 77.7 GB | near the threshold, mostly module images |
+
+So the playbook now sends each node its role's list:
+
+- every node gets the `ui` digest
+- `caios_llm` gets vLLM, Open WebUI and the LLM helper, about 38 GB
+- the three sites get the FL workspace (`tf2.14.0`), the FL server and YOLO,
+  about 34 GB
+
+`--tags plan -c local` prints the split and connects to nothing. Three images
+that nothing in the demo deploys left the list:
+
+- `dev-env:u22.04`
+- `dev-env:pytorch2.1`, which the list had said the FL workspaces use; they
+  use `tf2.14.0`
+- `federated-server:tokens`
+
+Splitting was not enough. docuum evicts the least recently used image first,
+and on `caios_llm` pulling vLLM back crosses 80 GB with Open WebUI, last used
+in August, as the likeliest casualty. So each image is **pinned**: a container
+created from it and never started, which docuum never evicts the image of
+(D-86). The pins go on before the pulls. `ansible/files/caios-pin.sh` does it,
+and `tests/test_prepull_split.py` runs it against a fake docker and checks each
+list against the file the demo deploys from.
+
+**The playbook has not been run.** Against today's nodes it writes about 70 GB
+to shared machines: vLLM to `caios_llm`, the FL images to `caios_site_a` and
+`caios_site_b`, and YOLO to `caios_site_c`. docuum then evicts unpinned module
+images to make room, so it waits for a go-ahead. It is the first line of
+step 7.
+
+**Also in this step:**
+
+- **The home page's tiers read No code, Low code, High code**, the recording's
+  own words. They were *No code, Some code, Full control*. The dashboard was
+  rebuilt and deployed, and `rollback/dashboard-pre-step6.tar` is the undo.
+- **The module deploy form's GPU hint** said federated learning uses the GPUs.
+  The demo's federated workspaces are CPU-only (gotcha 10), so the hint now
+  names the language models and the development environment only. PAPI was
+  restarted to read it.
+- **Decided:** the recording has two accounts, and the cut between beats 2 and
+  3 hides the change of name (D-85).
+- **Left to the person recording:**
+  - Platform Administrator's LLM on `caios_site_c`
+  - researcher's three serverless services from 2026-08-26, one titled
+    "Testing Classification", which beat 4 would show
+
+  The script's checklist says what each is in the way of.
+
+**Tests:** 350 unit (14 new). `check-branding`, `check-dashboard`,
+`check-catalogue`, `check-home-page` and `check-public-path` all pass against
+the live platform.

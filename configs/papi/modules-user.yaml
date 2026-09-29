@@ -103,7 +103,7 @@ hardware:
     name: Number of GPUs
     value: 0
     range: [0, 0]
-    description: Modules run on CPU on this platform. Their images were built before this cluster's GPUs and cannot use them; the language models, the development environment and federated learning use the GPUs.
+    description: Modules run on CPU on this platform. Their images were built before this cluster's GPUs and cannot use them; the language models and the development environment use the GPUs.
 
   gpu_type:
     name: GPU model

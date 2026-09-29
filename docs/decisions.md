@@ -1357,3 +1357,33 @@ with the values untouched. `tests/test_catalogue_mirror.py` keeps the mirror's
 categories to the schema's, and `check-branding.sh` now fails on any served
 entry marked "invalid metadata" — the symptom that went unnoticed for five
 minutes because nothing looked for it.
+
+**2026-09-29** — Step 6 of `docs/demo-plan.md`: the script. Recorded D-85 and
+D-86.
+
+**D-85 — The recording has two accounts, and a cut between them.** Beat 2
+signs up a new, fictional colleague to show registration and approval. Beats 3
+to 7 are `researcher` (Dana Okafor), whose language model, serverless service,
+workspace and federation were deployed and warmed before recording. A new
+account cannot show that: its deployments would take minutes on camera, and
+the language model would land wherever the scheduler put it. The header's name
+changes between beats 2 and 3, and the cut between windows A and C hides it.
+The new account is denied and deleted after the recording.
+
+**D-86 — The demo's images are pinned on their nodes, by containers that never
+run.** docuum evicts least-recently-used images above 80 GB, and it never
+deletes an image a container references (its `vacuum()` filters them out;
+read at its source, 2026-09-29). Pre-pulling alone did not keep the demo's
+images: after step 2's module sweeps, `caios_llm` held 52 GB of module images
+and no vLLM, and pulling vLLM back would push it past 80 GB, where the likeliest
+image to go was Open WebUI, last used in August.
+
+So `playbook-prepull-images.yml` sends each node its role's list, not every
+image to every node, and gives each image one created, never-started container
+named `caios-pin-*`, labelled `caios.pin`. The pins go on before the pulls, are
+moved when a tag moves so an old image is released, and are removed for
+anything no longer listed. Rejected: raising docuum's threshold, because the
+node volumes are 125 GB and module deployments ask for 10 GB of disk each; and
+docuum's own `--keep`, because it is one setting for every node and would
+hold the LLM's 38 GB on any hospital that has ever run the LLM, as
+`caios_site_c` has.

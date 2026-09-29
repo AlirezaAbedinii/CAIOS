@@ -204,10 +204,29 @@ ansible nomad_gpu_clients -b -m shell -a \
 ansible-playbook playbook-prepull-images.yml --limit <node>
 ```
 
-Mind the budget before running the playbook across every node: until
-`docs/demo-plan.md` step 6 splits its list by node role, it sends the 38 GB of
-LLM images to every GPU node, and three of the four are near docuum's 80 GB
-threshold (gotcha 14).
+Since 2026-09-29 the playbook sends each node only what its role runs (the
+LLM images to `caios_llm`; the federated images and YOLO to the three sites;
+the `ui` digest everywhere) and **pins** each one, so docuum cannot evict it
+(D-86). See what it will do first, without touching a node:
+
+```bash
+ansible-playbook playbook-prepull-images.yml --tags plan -c local
+```
+
+Every node must end with *N of N images cached and pinned*; a node that does
+not fails the play.
+
+**Pins** are containers created from an image and never started, named
+`caios-pin-*` and labelled `caios.pin`. docuum never evicts an image a
+container references. To see them, and to free a node of them when its disk
+matters more than the demo:
+
+```bash
+ansible nomad_gpu_clients -b -m shell -a 'docker ps -a --filter label=caios.pin'
+ansible <node> -b -m shell -a 'docker ps -aq --filter label=caios.pin | xargs -r docker rm'
+```
+
+The next playbook run puts them back.
 
 If the events show a *Downloading image* on `ui`, the running PAPI predates
 `0020`: `bash scripts/apply-patches.sh`, then rebuild PAPI. Is Europe stalling
@@ -678,8 +697,9 @@ each is deleted as soon as it has been tested. Results are appended to
 offered on modules while every marketplace module passes it on its latest run.
 
 It pulls every module image onto whichever node Nomad picks — tens of
-gigabytes — and docuum evicts older images to make room. Re-run the pre-pull
-for the demo's images afterwards (`docs/demo-plan.md` step 6).
+gigabytes — and docuum evicts older images to make room. The demo's images
+are pinned and survive it (D-86); re-run the pre-pull afterwards anyway and
+check every node reports all of its images.
 
 **On demo day: a fresh module's Gradio page can answer 502 for a few
 seconds.** The UI sidecar waits for the API and then builds itself from the

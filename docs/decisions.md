@@ -1387,3 +1387,28 @@ node volumes are 125 GB and module deployments ask for 10 GB of disk each; and
 docuum's own `--keep`, because it is one setting for every node and would
 hold the LLM's 38 GB on any hospital that has ever run the LLM, as
 `caios_site_c` has.
+
+**2026-09-29** — Step 7 of `docs/demo-plan.md`: the rehearsal. Recorded D-87.
+
+**D-87 — The hospitals reach the federated server by its name, at Traefik's
+private address.** The first federated run through the cluster since the
+deployment domain became public failed. Every client's gRPC stream was reset
+(`RST_STREAM`, error code 1), and the server waited for ever. The server's name
+resolves in public DNS to the proxy VM, from inside the cluster as well, and
+that proxy has no `grpc_pass`; `proxy_pass` cannot carry gRPC.
+`docs/nginx-proxy.md` had said the clients never come through it. That was
+never measured.
+
+The hospital bootstrap now takes the server's name, as it always could, and
+writes it into the workspace's `/etc/hosts` against `CAIOS_EDGE_IP`, baked in by
+`scripts/build-fl-bundles.sh`. The name is unchanged, so SNI, Traefik's routing
+and the certificate check against the CAIOS CA all work as before. Only the
+address changes, to the private one the design always assumed. Measured after
+the change: ten rounds in 32 s, three hospitals on three machines.
+
+Rejected, for now: `grpc_pass` on the proxy VM. It is the right fix for a client
+outside the cluster, and the proxy is configured by hand from outside this
+repository (D-77). The demo's clients are inside the cluster, and the pin needs
+nothing from that machine. Rejected too: a hosts entry in the dev-env job
+template, because the server's name is different for every deployment and the
+template cannot know it.

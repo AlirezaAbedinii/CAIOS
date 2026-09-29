@@ -107,9 +107,14 @@ EOF
     echo "  built caios-fl-$site.tar.gz  ($(du -h "$DIST/caios-fl-$site.tar.gz" | cut -f1))"
 done
 
-sed "s|@@FL_BASE_URL@@|$BASE_URL|g" demo/fl/bootstrap.sh > "$DIST/bootstrap.sh"
+# CAIOS_EDGE_IP is Traefik's private address. The bootstrap pins the federated
+# server's name to it, because the public name leads to a proxy that cannot
+# carry gRPC (demo/fl/bootstrap.sh, "WHY /etc/hosts").
+[[ -n "${CAIOS_EDGE_IP:-}" ]] || { echo "CAIOS_EDGE_IP is unset in $ENV_FILE"; exit 1; }
+sed -e "s|@@FL_BASE_URL@@|$BASE_URL|g" -e "s|@@FL_EDGE_IP@@|$CAIOS_EDGE_IP|g" \
+    demo/fl/bootstrap.sh > "$DIST/bootstrap.sh"
 chmod +x "$DIST/bootstrap.sh"
-echo "  built bootstrap.sh          (base $BASE_URL)"
+echo "  built bootstrap.sh          (base $BASE_URL, router $CAIOS_EDGE_IP)"
 
 cat > "$DIST/index.html" <<EOF
 <!doctype html>

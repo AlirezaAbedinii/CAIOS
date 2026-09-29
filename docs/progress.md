@@ -49,6 +49,50 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-29 — Step 7: the platform is rehearsed and staged for recording
+
+Everything in the script's checklist was done for real, as `researcher`:
+
+- **The pre-pull** reported 4 of 4 images cached and pinned on every node, and
+  vLLM is back on `caios_llm`.
+- **The two removals you approved**: Platform Administrator's LLM, and
+  researcher's three August services.
+- **Deployed and staged:** the language model on `caios_llm`, the serverless
+  service (warmed), the federation with three hospitals on three machines, and
+  the YOLO notebook.
+
+The federated beat is decided: kept.
+
+### Two faults the rehearsal found
+
+**The checklist's deploy order put two hospitals on one machine.** The
+notebook went in first, and spread counted its node as the busiest. The order
+is now: the LLM, then the federation, then the rest.
+
+**The federation could not run through the cluster.** Every client's gRPC
+stream was reset, because the server's public name leads to the proxy VM,
+which cannot carry gRPC. The proxy doc had said the clients bypass it; it was
+never measured. The hospital bootstrap now pins the name to Traefik's private
+address (D-87). Three runs after the fix: ten rounds in about 32 s, accuracy
+0.842–0.852.
+
+`scripts/check-fl-cluster.sh` runs that federation headless through the
+cluster, in about a minute. Nothing checked the path before.
+
+### Verified
+
+354 unit tests. `check-fl-cluster` passed. The home page's tiers switch
+correctly in a browser.
+
+**Left for a person:**
+
+- a clean browser profile with the CAIOS CA
+- the two logins
+- two timed read-throughs
+- the takes
+
+---
+
 ## 2026-09-29 — Step 6: the five-minute script, and images that stay put
 
 ### The script

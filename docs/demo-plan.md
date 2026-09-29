@@ -148,7 +148,7 @@ Proposed 2026-09-24, **to be confirmed**:
 | 0:50–1:50 | **No code**: a private language model | LLMs → a model's card → the deploy form → the running deployment → a clinical note summarised in the chat window | deployed before recording; the 1–3 min load is a cut |
 | 1:50–2:40 | **Low code**: serverless inference | YOLO → *Deploy* ▾ → *Inference API (serverless)* → the Inference list → one request → detections | service created and warmed beforehand |
 | 2:40–4:00 | **High code**: the notebook | YOLO → *Deploy* ▾ dedicated, JupyterLab → a notebook of four or five short cells: detections drawn on an image, then the same model's serverless endpoint and the private LLM called from the same notebook. **CPU** — see step 3's spike; the GPU is the LLM beat's to show | workspace deployed and notebook staged beforehand |
-| 4:00–4:40 | Federated learning *(decided later)* | three hospital workspaces training, rounds at 2×, then the chart: 0.853 against 0.806 and 0.865 | pre-bootstrapped |
+| 4:00–4:40 | Federated learning *(kept, 2026-09-29)* | three hospital workspaces training, rounds at 2×, then the chart: 0.853 against 0.806 and 0.865 | pre-bootstrapped |
 | 4:40–5:00 | Close | Statistics: live usage on Compute Canada; one roadmap line | — |
 
 If federated learning is cut, its 40 seconds go to the notebook.
@@ -182,7 +182,7 @@ What it changes about the steps:
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | **done 2026-09-27** — answers are JSON now; the browser walk is the rehearsal's |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **done 2026-09-28** — what the demo's screens say is ours, checked in a browser |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | **done 2026-09-29** — 329 words, 2:12 of speech; the pre-pull split by node role, and pinned |
-| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | **next** |
+| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | **in progress** — the platform rehearsed end to end and staged for recording, 2026-09-29; the read-throughs and the takes are a person's |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
 step-3 spike, 2, the rest of 3, 4, 5, 6, **7**. Step 2 moved up because the
@@ -361,6 +361,7 @@ Answered 2026-09-24:
 
 1. **Federated learning: decided later.** In if it fits as high code, and it
    probably does. It keeps a provisional 40 seconds in the cut.
+   **Decided 2026-09-29: kept**, at step 7.
 2. **High code is YOLO.** `ai4os-yolo-torch`, in Jupyter mode if step 3's spike
    finds that works, else the dev-env fallback (B).
 3. **The OSCAR services stay**, and were tested with real requests instead —
@@ -880,3 +881,60 @@ step 7.
 **Tests:** 350 unit (14 new). `check-branding`, `check-dashboard`,
 `check-catalogue`, `check-home-page` and `check-public-path` all pass against
 the live platform.
+
+### Step 7 — the rehearsal, the platform half · 2026-09-29
+
+Everything in the script's *Before you start* was done for real, as
+`researcher`, and every beat's machinery was exercised.
+
+**The pre-pull ran.** Every node reported *4 of 4 images cached and pinned*.
+vLLM is back on `caios_llm`.
+
+**Removed, as decided:**
+
+- Platform Administrator's LLM on `caios_site_c`
+- researcher's three serverless services from 2026-08-26
+
+**Deployed and staged, where they will be recorded:**
+
+| What | Where | Measured |
+|---|---|---|
+| Private language model, Qwen3.5-2B | `caios-wn-gpu-3`, the LLM node | running within 4 min 20 s |
+| Object detection, serverless | the OSCAR node | first answer 7.0 s: a person and a tie |
+| Federated server and three hospitals | server on `gpu-1`; `site_a` on `gpu-2`, `site_b` on `gpu-0`, `site_c` on `gpu-1` | deployed in 28 s; ten rounds in 32 s |
+| YOLO notebook | `caios-wn-gpu-0` | staged; cells 1.9 s, instant, 8.1 s, 0.2 s |
+
+**Two things the rehearsal found that no earlier step could have:**
+
+1. **The deploy order in step 6's checklist was wrong.** With the notebook
+   deployed before the federation, spread put `site_a` and `site_c` on the same
+   machine. The scheduler was on `spread`, as it should be; the notebook's 8 GB
+   made its node look busiest. The checklist now deploys the LLM, then the
+   federation, then the rest, and `deploy-fl-demo.sh` says so.
+2. **The federation could not run through the cluster at all.** Every client
+   died with `RST_STREAM`, because the server's public name leads to the proxy
+   VM and that proxy cannot carry gRPC. `docs/nginx-proxy.md` had said the
+   clients never come through it. The hospital bootstrap now pins the name to
+   Traefik's private address (D-87). Three runs after the fix: ten rounds in
+   31.6–32.2 s, final accuracy 0.842–0.852, against 0.853 on the chart.
+   `scripts/check-fl-cluster.sh` is new, and checks this path in a minute. Its
+   first run passed.
+
+**Also:**
+
+- `deploy-fl-demo.sh` printed a wrong path for `server.py`.
+- The home page's tiers were checked in a browser; they switch correctly.
+- The chat login for the recording's LLM is `CAIOS_DEMO_UI_EMAIL` and
+  `CAIOS_DEMO_UI_PASSWORD` in `configs/env/caios.env`.
+- The workspaces' password is `CAIOS_FL_IDE_PASSWORD`.
+
+**What is left is a person's:**
+
+- a clean browser profile with the CAIOS CA imported
+- logging in to the chat and to JupyterLab
+- two timed read-throughs
+- the takes
+- deleting beat 2's account afterwards
+
+The script is `docs/demo-script.md`, with its checklist already done except for
+those.

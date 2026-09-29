@@ -520,7 +520,10 @@ server (service **jupyter**, min clients **3**), then three dev environments,
 nine form fields from memory.
 
 **Check `--status` shows the three sites on three different nodes.** That is the
-whole claim. If two share a node, the scheduler is still on `binpack`.
+whole claim. If two share a node, either the scheduler is still on `binpack`,
+or another workspace was deployed first: on 2026-09-29 the high-code notebook,
+deployed before the federation, made spread put two sites on one machine.
+Deploy the LLM, then this, then anything else.
 
 ### Start the server
 
@@ -547,6 +550,24 @@ Add `--quiet` to `run.sh`'s command for a clean projector terminal; leave it off
 if anything is going wrong, because Flower's per-message logging is the first
 useful thing to read.
 
+**Always give the bootstrap the server's address.** With it, the bootstrap
+pins that name to Traefik's private address in the workspace's `/etc/hosts`.
+Without it, the name resolves to the public proxy, which cannot carry gRPC
+(D-87). A workspace that restarts loses the pin, so bootstrap it again.
+
+### Check the whole path, headless
+
+```bash
+bash scripts/check-fl-cluster.sh               # as deployed
+bash scripts/check-fl-cluster.sh --bootstrap   # bootstrap the three sites first
+```
+
+It runs the same commands the demo types into four terminals, through the
+cluster. It checks three machines, the private path and ten rounds, then
+leaves nothing running, so a take can follow straight away. About a minute.
+`scripts/fl-rehearse.sh` runs the federation on this machine alone and cannot
+see the network.
+
 Training starts the moment the third client connects. Each site prints its own
 accuracy on the shared test set as the rounds land.
 
@@ -559,6 +580,14 @@ bash scripts/deploy-fl-demo.sh --delete    # asks for confirmation
 ```
 
 ### When it goes wrong
+
+**Every client dies with `StatusCode.INTERNAL … RST_STREAM … error code 1`,
+and the server sits at *Requesting initial parameters*.** The clients went
+through the public proxy, which resets gRPC. Their workspaces were bootstrapped
+without the server's address, from a bundle older than 2026-09-29, or they
+restarted since. From inside a site, `getent hosts <fedserver-host>` must print
+`CAIOS_EDGE_IP`, not `134.87.8.230`. Rerun the bootstrap with the address, or
+`bash scripts/check-fl-cluster.sh --bootstrap`. D-87.
 
 **Clients connect but nothing happens.** The server needs all three. Check
 `--status` says `running` for every site, and that each client printed

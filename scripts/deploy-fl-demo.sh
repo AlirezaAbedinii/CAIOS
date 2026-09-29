@@ -40,6 +40,11 @@
 # genuinely federated across three separate machines, but the node names in
 # --status stop matching the story on screen.
 #
+# And BEFORE any other workspace, measured 2026-09-29: with the high-code
+# notebook (8 GB) already on one hospital node, spread counted that node as the
+# busiest and put two of the three sites on another. The order that works is
+# the LLM, then this, then anything else (docs/demo-script.md).
+#
 # Nothing here pins a workspace to a node. The cluster scheduler is in "spread"
 # mode (ansible/playbook-scheduler-config.yml), so each deployment goes to the
 # least-allocated node and the three land one per site. --status prints where
@@ -252,10 +257,16 @@ bash "$0" --status
 echo "=== next ==="
 echo
 echo "  1. Open the federated server's IDE, then in a terminal:"
-echo "       cd federated-server/fedserver && python3 server.py"
+echo "       cd /srv/ai4os-federated-server/fedserver && python3 server.py"
 echo
 echo "  2. In each hospital workspace's terminal:"
 echo "       curl -k -sSL ${SCHEME}://${CAIOS_DASHBOARD_HOST}/fl/bootstrap.sh | bash -s <site> <fedserver-host>"
-echo "       ./run.sh"
+echo "       cd ~/caios-fl && ./run.sh"
+echo
+echo "     The <fedserver-host> argument matters: the bootstrap pins that name to the"
+echo "     cluster's router, because the public proxy cannot carry gRPC."
+echo
+echo "  3. Or check the whole path headless first, in about a minute:"
+echo "       bash scripts/check-fl-cluster.sh --bootstrap"
 echo
 echo "  Full walkthrough: docs/runbook.md, 'Running the federated demo'."

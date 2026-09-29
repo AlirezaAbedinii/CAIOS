@@ -108,3 +108,52 @@ def test_caddy_still_serves_the_directory_the_build_writes(root):
     assert 'DIST="demo/fl/dist"' in build, (
         "the build writes somewhere other than the directory compose mounts"
     )
+
+
+# --- the federated server is reached on the private path -------------------
+#
+# Measured 2026-09-29: the server's public name resolves to the proxy VM, which
+# cannot carry gRPC, and every client's stream was reset (RST_STREAM, error
+# code 1). Pinned to Traefik's private address, the same run finished ten rounds
+# in 32 s at 0.852. The bootstrap does the pinning; these hold it there.
+
+import subprocess
+
+
+def _pin_block(bootstrap, hosts):
+    start = bootstrap.index('EDGE_IP="${CAIOS_FL_EDGE_IP:-@@FL_EDGE_IP@@}"')
+    end = bootstrap.index("\nfi\n", start) + len("\nfi\n")
+    return bootstrap[start:end].replace("/etc/hosts", str(hosts))
+
+
+def _run_pin(bootstrap, tmp_path, server, edge_ip="192.0.2.5", hosts_text="127.0.0.1 localhost\n"):
+    hosts = tmp_path / "hosts"
+    hosts.write_text(hosts_text)
+    script = f'SERVER="{server}"\nCAIOS_FL_EDGE_IP="{edge_ip}"\n' + _pin_block(bootstrap, hosts)
+    out = subprocess.run(["bash", "-euo", "pipefail", "-c", script], capture_output=True, text=True, check=True).stdout
+    return out, hosts.read_text()
+
+
+def test_the_build_bakes_in_the_private_router(root):
+    build = (root / "scripts/build-fl-bundles.sh").read_text(encoding="utf-8")
+    assert '"s|@@FL_EDGE_IP@@|$CAIOS_EDGE_IP|g"' in build
+
+
+def test_the_server_is_pinned_to_the_private_router(bootstrap, tmp_path):
+    out, hosts = _run_pin(bootstrap, tmp_path, "fedserver-abc.pacs-deployments.example")
+    assert "192.0.2.5 fedserver-abc.pacs-deployments.example" in hosts.splitlines()
+    assert "pinned" in out
+
+
+def test_pinning_twice_adds_one_line(bootstrap, tmp_path):
+    line = "192.0.2.5 fedserver-abc.pacs-deployments.example\n"
+    out, hosts = _run_pin(bootstrap, tmp_path, "fedserver-abc.pacs-deployments.example",
+                          hosts_text="127.0.0.1 localhost\n" + line)
+    assert hosts.count("fedserver-abc") == 1 and "already pinned" in out
+
+
+def test_nothing_is_pinned_without_a_server_or_a_built_address(bootstrap, tmp_path):
+    _, hosts = _run_pin(bootstrap, tmp_path, "")
+    assert "fedserver" not in hosts
+    _, hosts = _run_pin(bootstrap, tmp_path, "fedserver-abc.example", edge_ip="@@FL_EDGE_IP@@")
+    assert "fedserver" not in hosts, "an unbuilt bootstrap must not write its placeholder"

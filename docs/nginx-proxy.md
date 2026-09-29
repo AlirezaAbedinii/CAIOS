@@ -189,13 +189,26 @@ both server blocks at the same `fullchain.pem`.
 ### gRPC is not proxied here
 
 There is no `grpc_pass` anywhere in this config, and `proxy_pass` cannot carry
-gRPC. The federated demo works because its three clients run inside the
-cluster and reach Traefik directly across the private subnet — they never come
-through this machine.
+gRPC.
 
-**Test the federated round trip on a public hostname before changing
-anything**, so a pre-existing limitation is not mistaken for damage done by the
-cutover. nginx 1.18 supports `grpc_pass grpcs://...` if it turns out to matter.
+**This page used to say the federated demo was unaffected**, because its three
+clients run inside the cluster and reach Traefik directly. That was not
+measured, and it was wrong. The server's name is
+`fedserver-<uuid>.pacs-deployments.134.87.8.230.sslip.io`, and public DNS
+resolves it to this machine from everywhere, the hospital workspaces included.
+On 2026-09-29, the first federated run through the cluster since the
+deployment domain became public, every client came through here and had its
+stream reset (`RST_STREAM`, error code 1). The server waited for ever.
+
+Fixed without touching this machine (D-87). The hospital bootstrap pins the
+server's name to Traefik's private address inside each workspace, which is the
+path the design always intended. The same run then finished ten rounds in 32 s.
+`bash scripts/check-fl-cluster.sh` checks that path.
+
+A client **outside** the cluster, such as a real hospital's own machine, still
+cannot reach the server through here. nginx 1.18 supports
+`grpc_pass grpcs://...`, and that is the fix when it matters. It is not needed
+for the demo.
 
 ---
 

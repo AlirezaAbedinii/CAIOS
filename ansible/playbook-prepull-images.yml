@@ -1,9 +1,41 @@
 ---
-# Pull the container images every deployment needs, onto every compute node.
+# Pull the images the demo deploys onto the compute nodes that will run them,
+# and pin them there so docuum cannot evict them before they are used.
 #
 #   cd ansible && ansible-playbook playbook-prepull-images.yml
+#   cd ansible && ansible-playbook playbook-prepull-images.yml --tags plan -c local
 #
-# Safe and re-runnable. Pulls only; never removes anything.
+# The second prints what each node would get and connects to nothing.
+#
+# Safe and re-runnable. Never removes an image. It creates and removes only its
+# own pin containers (below), which are never started.
+#
+# BY NODE ROLE (docs/demo-plan.md step 6)
+# ---------------------------------------
+# This used to send every image to every GPU node: 38 GB of LLM images to the
+# three hospitals, which never run them in the demo, against docuum's 80 GB
+# (gotcha 14). Measured 2026-09-29 after step 2's module sweeps: caios_llm held
+# 52 GB of module images and NO vLLM, which docuum had evicted; caios_site_b had
+# neither the federated workspace image nor the FL server. Now:
+#
+#   every compute node   the module "ui" sidecar, by digest       ~2.6 GB
+#   role llm (caios_llm) vLLM, Open WebUI, the LLM helper          ~38 GB
+#   the three sites      the FL workspace and server, YOLO         ~34 GB
+#
+# The role is meta.role in the node's nomad_client_meta: `llm` for caios_llm
+# (host_vars/caios_llm.yml), and unset, meaning a site, for the other three.
+#
+# PINS
+# ----
+# docuum evicts least-recently-used images above its threshold, and an image
+# it has not seen used for weeks goes first: pulling vLLM back onto caios_llm
+# takes it past 80 GB, and the likeliest casualty is Open WebUI, last used in
+# August. docuum never deletes an image a container references (its vacuum()
+# filters them out; checked against its source, 2026-09-29). So each image
+# here gets one container, created and never started, named caios-pin-* and
+# labelled caios.pin=<reference>. Pins go on before the pulls, so nothing
+# already present can be evicted by them, and are moved when a tag moves, so
+# an old image is released rather than kept forever. D-86.
 #
 # WHY THIS IS NOT JUST A DEMO-DAY OPTIMISATION
 # --------------------------------------------
@@ -49,45 +81,63 @@
   gather_facts: false
 
   vars:
-    # Keep in step with what PAPI's job templates reference. Sidecars first:
-    # they are the ones whose failure takes an allocation down.
-    caios_images:
-      # --- module and tool sidecars (AI4EOSC registry, the slow one) ---
-      # The module "ui" task, pinned exactly as patch 0020 pins it.
+    # Keep in step with what PAPI's job templates and the demo reference;
+    # tests/test_prepull_split.py checks each list against its source.
+    #
+    # Every compute node: a module can land on any of them.
+    caios_images_every_node:
+      # The module "ui" task, pinned exactly as patch 0020 pins it. This is the
+      # AI4EOSC registry, the slow one.
       - registry.cloud.ai4eosc.eu/ai4os/deepaas_ui@sha256:31f35b28582b516b42a118a7467f6e264d2fc6013dc3300b6d7806855c1712b3
       # docker-storage and docker-zenodo are gone from this list. They serve
       # the storage_mount and dataset_download tasks, which PAPI removes from
       # every deployment here because no storage is ever configured (D-15),
       # and pulling their `latest` tags made this playbook fail whenever
       # AI4EOSC's registry stalled.
-      # --- the demo workloads themselves (Docker Hub) ---
-      # ai4os-demo-app left the marketplace on 2026-09-02 and nothing deploys
-      # it; it was 2.8 GB of every node's docuum budget (gotcha 14).
-      # The dev environment has NO `latest` tag — it publishes one tag per
-      # framework (u22.04, pytorch2.1, tf2.14.0, cuda12.3.2 ...). Asking for
-      # latest fails with "not found", which reads like a network error.
-      # u22.04 is the plain base. NOTE: the FL workspaces deploy tf2.14.0
-      # (scripts/deploy-fl-demo.sh), not pytorch2.1 as this used to say;
-      # docs/demo-plan.md step 6 matches this list to what the demo deploys.
-      - ai4oshub/ai4os-dev-env:u22.04
-      - ai4oshub/ai4os-dev-env:pytorch2.1
-      - ai4oshub/ai4os-federated-server:latest
-      # `tokens` is the image that issues per-client credentials — the beat
-      # where each hospital gets its own revocable key.
-      - ai4oshub/ai4os-federated-server:tokens
-      # --- the LLM tool (Stage 6) ---
-      # vLLM is 10.5 GB. Pulling it during a demo is a very long silence, and
-      # our job template sets force_pull = false precisely so this pull is the
-      # only one that ever happens. Tags are pinned to match
-      # configs/papi/tools/ai4os-llm/nomad.hcl — if you change one, change both,
-      # or the deployment pulls at run time and the point is lost.
-      - vllm/vllm-openai:v0.27.1
-      - ghcr.io/open-webui/open-webui:v0.11.0
-      # The LLM tool's two helper tasks. Upstream references a bare
-      # `python:slim-bullseye`, which is a moving tag; ours is pinned.
-      - python:3.12-slim-bullseye
+
+    caios_images_by_role:
+      # --- caios_llm: the LLM tool (Stage 6) ---
+      # vLLM is 10.5 GB compressed and 30.8 GB on disk. Pulling it during a
+      # demo is a very long silence, and our job template sets
+      # force_pull = false precisely so this pull is the only one that ever
+      # happens. Tags are pinned to match configs/papi/tools/ai4os-llm/nomad.hcl
+      # — change one, change both, or the deployment pulls at run time.
+      llm:
+        - vllm/vllm-openai:v0.27.1
+        - ghcr.io/open-webui/open-webui:v0.11.0
+        # The LLM tool's helper task. Upstream references a bare
+        # `python:slim-bullseye`, which is a moving tag; ours is pinned.
+        - python:3.12-slim-bullseye
+
+      # --- the three hospital sites ---
+      # What the demo deploys there: the three federated workspaces
+      # (scripts/deploy-fl-demo.sh deploys the dev-env at tf2.14.0), the FL
+      # server (the form's default tag), and the YOLO module the high-code
+      # tier opens as JupyterLab (the form's default tag). The last two are
+      # `latest`, which Nomad re-checks with Docker Hub at every deployment
+      # (gotcha 28): a manifest request, not a download, if the tag has not
+      # moved since this ran — so run this on the day.
+      #
+      # Gone, and why: dev-env u22.04 and pytorch2.1 (nothing in the demo
+      # deploys them; this list said pytorch2.1 for the FL workspaces, which
+      # deploy tf2.14.0), and federated-server:tokens (offered in the form,
+      # deployed by nothing).
+      site:
+        - ai4oshub/ai4os-dev-env:tf2.14.0
+        - ai4oshub/ai4os-federated-server:latest
+        - ai4oshub/ai4os-yolo-torch:latest
+
+    caios_node_role: "{{ (nomad_client_meta | default({})).role | default('site') }}"
+    caios_images: "{{ caios_images_every_node + caios_images_by_role[caios_node_role] }}"
 
   tasks:
+
+    - name: Plan
+      # Runs on the controller, so `--tags plan -c local` shows the split
+      # without touching a node.
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} ({{ caios_node_role }}): {{ caios_images | join(', ') }}"
+      tags: [plan, always]
 
     # Bind-mounted by the vLLM task so model weights survive a redeploy instead
     # of being pulled from Hugging Face again. Created here rather than left to
@@ -99,6 +149,18 @@
         path: "{{ (mount_dir if inventory_hostname in (groups['nomad_volume'] | default([])) else '/mnt') }}/hf-cache"
         state: directory
         mode: "0777"
+
+    - name: Release pins for images no longer on this node's list
+      # A pin outliving its entry would hold that image on the node forever.
+      ansible.builtin.script: "files/caios-pin.sh release {{ caios_images | map('quote') | join(' ') }}"
+      register: caios_unpin
+      changed_when: "'released' in caios_unpin.stdout"
+
+    - name: Pin what is already here, before any pull can push docuum over
+      ansible.builtin.script: "files/caios-pin.sh pin {{ item | quote }}"
+      loop: "{{ caios_images }}"
+      register: caios_pin_before
+      changed_when: "'pinned' in caios_pin_before.stdout"
 
     - name: Pull images
       # Retries because the failure being worked around is a timeout, not a
@@ -132,23 +194,23 @@
         - "'not found' not in (caios_pull.stderr | default(''))"
         - "'manifest unknown' not in (caios_pull.stderr | default(''))"
 
-    - name: Count what is now cached locally
+    - name: Pin what was pulled, and move any pin whose tag moved
+      ansible.builtin.script: "files/caios-pin.sh pin {{ item | quote }}"
+      loop: "{{ caios_images }}"
+      register: caios_pin_after
+      changed_when: "'pinned' in caios_pin_after.stdout"
+
+    - name: Count what is now cached and pinned
       # By reference, not by listing `docker images`: that prints a
       # digest-pinned image under whatever tag it arrived with, or <none>,
       # so a listing would report the pinned "ui" image as missing.
-      ansible.builtin.shell: |
-        n=0
-        for ref in {{ caios_images | map('quote') | join(' ') }}; do
-          docker image inspect "$ref" >/dev/null 2>&1 && n=$((n+1))
-        done
-        echo "$n"
-      args:
-        executable: /bin/bash
+      ansible.builtin.script: "files/caios-pin.sh count {{ caios_images | map('quote') | join(' ') }}"
       register: caios_local
       changed_when: false
 
     - name: Report
       ansible.builtin.debug:
         msg: >-
-          {{ inventory_hostname }}:
-          {{ caios_local.stdout }} of {{ caios_images | length }} images cached
+          {{ inventory_hostname }} ({{ caios_node_role }}):
+          {{ caios_local.stdout | trim }} of {{ caios_images | length }} images cached and pinned
+      failed_when: caios_local.stdout | trim | int != caios_images | length

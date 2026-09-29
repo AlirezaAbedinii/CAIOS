@@ -29,7 +29,7 @@ camera does not list them. `tests/test_high_code_notebook.py` holds all of that.
 ## Staging it
 
 1. Deploy the workspace from the dashboard, as `researcher`: Marketplace →
-   YOLO → *Deploy* ▾ → the dedicated option → **Service: JupyterLab**, one CPU,
+   YOLO → *Deploy* ▾ → the dedicated option → **Service: Jupyter**, one CPU,
    no GPU, and a password you will type on camera.
 2. Have a running LLM deployment and a YOLO serverless service for the same
    account.

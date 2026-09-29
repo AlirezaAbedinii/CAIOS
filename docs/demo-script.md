@@ -1,423 +1,489 @@
-# Demo script
+# Demo script — the five-minute recording
 
-The walkthrough, beat by beat, with what to say, what to click, and what to do
-when something misbehaves.
+What is recorded, beat by beat: what is on screen, what to say, and what to do
+when a take goes wrong. **About five minutes**, recorded as one clip per beat
+and cut together. Nothing waits on camera: everything slow is deployed and
+warmed before recording starts, and every load is a cut.
 
-**Total: ~25 minutes**, leaving time for questions in a 35-minute slot. Timings
-are measured, not estimated — the sources are noted where they matter.
+The three tiers use the home page's own words, under *How you work with it*:
+**No code**, **Low code**, **High code**. The recording shows each in turn,
+then federated learning, then where it all runs.
 
-Setup and rehearsal live in `docs/runbook.md`. This file is the performance.
+Setup that is not specific to the recording lives in `docs/runbook.md`. The
+25-minute live walkthrough this replaces is in git history:
+`git show 2370f10:docs/demo-script.md`. Its questions section is carried over
+at the end, corrected.
+
+---
+
+## The cut
+
+| Time | Beat | On screen | Words |
+|---|---|---|---|
+| 0:00–0:20 | 1. What CAIOS is | the home page, its three tiers | 38 |
+| 0:20–0:50 | 2. A new researcher gets in | sign-up, the waiting room, `/admin` approves, the platform opens | 35 |
+| 0:50–1:50 | 3. **No code**: a private language model | LLMs, a card, the deploy form, the running model summarising a radiology note | 50 |
+| 1:50–2:40 | 4. **Low code**: serverless inference | YOLO, *Deploy* ▾ serverless, the Inference list, one request, detections | 59 |
+| 2:40–4:00 | 5. **High code**: the notebook | YOLO as JupyterLab, four cells: detect, count, the serverless call, the LLM | 62 |
+| 4:00–4:40 | 6. Federated learning *(to confirm)* | three hospitals training, then the chart | 53 |
+| 4:40–5:00 | 7. Close | Statistics | 32 |
+| | | | **329** |
+
+329 words is about 2 min 12 s of speech at 150 words a minute, which leaves
+the other 2 min 48 s for the screens to be read. The timing sheet at the end
+does this beat by beat. Step 7 of `docs/demo-plan.md` replaces these estimates
+with two timed read-throughs.
 
 ---
 
 ## Before you start
 
-Run these in order. The last one is not optional — a cold image pull mid-demo
-is the most reliable way to make a working platform look broken.
+### The day before, or the morning of
+
+**1. The platform checks.**
 
 ```bash
-bash scripts/check-branding.sh                 # 30s — is it still CAIOS?
-bash scripts/verify-cluster.sh                 # 10s — are all nodes schedulable?
-bash scripts/check-llm-config.sh               # 20s — is the LLM tool deployable?
-bash scripts/deploy-fl-demo.sh --status        # is the federation already up?
-cd ansible && ansible-playbook playbook-prepull-images.yml
+bash scripts/check-branding.sh        # is it still CAIOS, as served?
+bash scripts/verify-cluster.sh        # are the four compute nodes schedulable?
+bash scripts/check-llm-config.sh      # is the LLM tool deployable?
 ```
 
-**Deploy the language model FIRST, before the federated workspaces.** Two
-reasons, and both of them cost you if you get the order wrong:
-
-- It takes **one to three minutes** to load, and the badge stays yellow the
-  whole time. Started first, that disappears behind beats 1 to 6.
-- With four compute nodes and spread scheduling, a workspace deployed first can
-  land on the LLM node — and then the LLM has nowhere to go (R-14). Deploying
-  the LLM first puts it on its own node and pushes the three workspaces onto the
-  three hospital machines, which is what makes it a three-site demo.
-
-Use the dashboard, exactly as beat 7 describes, and **write down the endpoint
-and the API key** — you want both pasted into the notebook before anyone is
-watching.
-
-Then bring up the federation, and check the bootstrap URL actually serves, since
-that is what each hospital pastes:
+**2. Clear the stage.** Only the recording's own deployments should be
+running:
 
 ```bash
-curl -k -sS -o /dev/null -w '%{http_code}\n' https://<dashboard>/fl/bootstrap.sh
+nomad job status -namespace=caios < /dev/null
 ```
 
-**Have these open in tabs, in this order:**
+On 2026-09-29 two things were in the way, and both are yours to remove:
 
-1. The dashboard, logged out
-2. `demo/fl/results/federated-vs-baselines.png` — the closing chart
-3. A terminal per hospital site, already bootstrapped (see beat 5)
-4. The chat interface of the running LLM, **already logged in** — the login
-   screen is thirty seconds of typing that shows nothing
-5. A notebook in the site_a workspace with beat 7's four lines pasted in,
-   endpoint and key filled, unrun
+- **Platform Administrator's "demo no code" LLM**, on `caios-wn-gpu-2`, which
+  is `caios_site_c`, a hospital. While the federated demo is up the cluster
+  fits exactly one LLM (gotcha 19), and it has to be researcher's.
+- **researcher's three serverless services from 2026-08-26.** They answer with
+  their job's log, because they predate patch `0022`, and one is titled
+  "Testing Classification". Beat 4 shows the Inference list.
 
-**Have this ready but hidden:** the recording of a completed federated run. If
-a round hangs, you cut to it rather than debugging in front of people.
-
-> **Say once, at the top, and then stop apologising for it:** "You'll see a
-> certificate warning — this is on a private research network with a
-> self-signed certificate. A real deployment uses a real domain." Then click
-> through and never mention it again.
-
-**Two things about the LLM that will bite if you forget them.**
-
-*Only one fits while the federation is up.* An LLM deployment wants two
-exclusive CPU cores, 16.3 GB and a GPU. The LLM node holds whichever one is
-already running, and the three hospital nodes have a free GPU each but only
-three cores — one of which a workspace is using. A second deployment therefore
-sits at an orange `queued` badge until something is deleted. That is correct
-behaviour and the badge names the resource that ran out, but do not discover it
-on camera. Beat 7 shows the deploy *form* and then switches to the running one.
-
-*A deployment takes one to three minutes before you can open it,* and the
-default model is the slowest of the nine. The badge goes yellow `starting` and
-*Quick access* stays greyed out for the whole of it. That is honest and it is
-dead air — which is why it goes first, before beat 1.
-
----
-
-## Beat 1 — Log in, and see a catalogue that speaks your language (2 min)
-
-**Click:** Log in as `researcher`. Land on the Marketplace.
-
-**Say:** "This is CAIOS — the same platform stack the EU runs for AI4EOSC,
-deployed on Compute Canada hardware and pointed at medical imaging."
-
-**The point of this beat is the catalogue, so let them read it.** Nine modules:
-retinopathy, image and object classification you retrain on your own data,
-body pose. Scroll slowly.
-
-**Say:** "Upstream ships forty-six modules. About two thirds are marine biology
-and remote sensing — good models, wrong audience. We curated it down to what a
-clinical or neuroscience group would actually deploy."
-
-> **If asked "is that all?"** — that is the right question and the answer is
-> the strongest thing here: "Deliberately. A researcher scanning nine modules
-> that could all apply to their work forms a better impression than one
-> scrolling past thirty they never will. And the number is not the ceiling —
-> next beat."
-
----
-
-## Beat 2 — Real neuroscience, deployed by ID (3 min)
-
-**Click:** Tools → AI4Life loader. Open the model dropdown.
-
-**Say:** "This is a loader for bioimage.io, the community model zoo. Any model
-in it deploys here by ID, with no code."
-
-The dropdown opens on **`zealous-snail`** — "Circuit reconstruction for electron
-microscopy". Let that sit for a second.
-
-**Say:** "That's connectomics — tracing neurons through electron microscopy
-volumes. Below it, two more architectures on the same task, so you can compare
-them; mitochondria segmentation; CellPose; nucleus segmentation with seventy
-thousand downloads."
-
-**Click:** Deploy it. While it starts, move on — do not watch a progress bar.
-
-> **Honest framing, and use it if the audience is technical:** "We didn't build
-> these. That's the point — the platform makes a published model deployable in
-> a click, so the lab's effort goes into their own models rather than
-> infrastructure."
-
----
-
-## Beat 3 — A real GPU workspace (3 min)
-
-**Click:** Tools → Development environment. JupyterLab, 1 GPU. Deploy.
-
-**Say, while it starts:** "Every deployment gets its own address and its own
-resources, scheduled onto whichever node has room."
-
-**Click:** open the workspace when it is running (~90 seconds, measured), open a
-terminal, run:
+**3. Pre-pull, by node role, and pin.**
 
 ```bash
-nvidia-smi
+cd ansible
+ansible-playbook playbook-prepull-images.yml --tags plan -c local   # what each node gets; connects to nothing
+ansible-playbook playbook-prepull-images.yml
 ```
 
-**Say:** "An H100 slice, inside a container the researcher got from a web page.
-No ticket, no sysadmin."
+Every node must end reporting **4 of 4 images cached and pinned**. A node that
+does not fails the play and says so. Do it on the day: two of the images are
+`latest` tags, which a deployment re-checks with Docker Hub (gotcha 28), and a
+tag that moved overnight is a download on camera.
 
-> **If it is slow to start:** talk over it — the nodes are 3-core machines and
-> this is the honest cost of a small cluster. Do not sit in silence.
+### Deploy, in this order, as researcher
 
----
+The order matters twice. The LLM goes first, so it lands on its own node. The
+serverless service comes before the workspace, because staging the notebook
+needs both.
 
-## Beat 4 — The problem federated learning solves (2 min)
-
-No clicking. This is the setup for the headline, and it is worth doing properly.
-
-**Say:** "Three hospitals. Each has brain MRI with tumour labels. None of them
-can send it anywhere — not to us, not to each other. Ethics, privacy,
-provincial law."
-
-**Show:** the chart, but **cover the teal line** — physically, or have a second
-image ready.
-
-**Say:** "Each hospital can train alone. The grey lines are what they get: high
-seventies. Pool everything and you get 0.865 — the dashed line. That is the
-thing they're not allowed to do."
-
-**Then:** "So the question is how close you can get to the dashed line without
-anybody's data moving."
-
----
-
-## Beat 5 — Federated learning across three hospitals (8 min)
-
-The headline. Everything so far exists to make this land.
-
-**Show first, so nobody thinks it is a simulation:**
+**1. The language model.** Marketplace → LLMs → **Qwen3.5-2B**, the default →
+deploy. Set the Open WebUI email and password; you log in with them before
+recording. It takes one to three minutes. Then check where it landed:
 
 ```bash
-bash scripts/deploy-fl-demo.sh --status
+nomad job allocs -namespace=caios -json <llm-uuid> < /dev/null \
+  | python3 -c 'import json,sys; print([a["NodeName"] for a in json.load(sys.stdin)])'
 ```
 
-**Say:** "Three workspaces, on three separate physical machines — gpu-0, gpu-1,
-gpu-2. Each holds one hospital's slices and nothing else."
+It must say `caios-wn-gpu-3`. If it names a hospital (`gpu-0`, `-1` or `-2`),
+delete it and deploy again before anything else is running. Its preference
+for `caios_llm` is soft, and the one deployed on 2026-09-24 landed on
+`caios_site_c`.
 
-**Click:** Open the federated server's IDE. In its terminal:
+**2. The serverless service.** YOLO models → **Deploy** ▾ → **Inference API
+(serverless)** → the form's defaults, title `Object detection` → submit. Then
+warm it, which also shows you the answer beat 4 will get:
 
 ```bash
-cd /srv/ai4os-federated-server/fedserver && python3 server.py
+bash scripts/oscar-submit.sh --list
+bash scripts/oscar-submit.sh <service-name> tests/fixtures/modules/grace_hopper.jpg
 ```
 
-**Say:** "It's waiting. It will not start until all three hospitals have
-joined — that's the minimum-clients setting."
+If the model image is not on the OSCAR node yet, the first call downloads it,
+which takes about three minutes. With the image there, a new service answers
+its first call in 6.8 s and the next in 6.3 s, in JSON: a person and a tie
+(measured 2026-09-29).
 
-**Then, in each of the three site terminals** (already bootstrapped — see the
-runbook; do the bootstrap *before* the demo, it is a dull 60 seconds of pip):
+**3. The high-code workspace.** YOLO models → **Deploy** ▾ → **Dedicated
+deployment** → *Service* **Jupyter**, one CPU, and a password you will type on
+camera. Then, on `caios_server`:
 
 ```bash
-cd ~/caios-fl && ./run.sh --quiet
+bash scripts/stage-high-code.sh <workspace-uuid> <llm-uuid>
 ```
 
-Start them one at a time and narrate:
+It puts the notebook and its hidden config into the workspace and runs it once.
+That run is the warm-up: YOLO's weights come from GitHub at first use.
 
-- After the first: "One hospital connected. Nothing is happening yet."
-- After the second: "Two. Still waiting."
-- After the third: **it starts immediately.**
+**4. Federated learning, if beat 6 stays.**
+`bash scripts/deploy-fl-demo.sh`, then `--status`: the three sites must be on
+three different hospital nodes. Bootstrap the three sites, and start nothing
+yet (`docs/runbook.md`, *Running the federated demo*). Record one complete run
+before the take, as beat 6's fallback.
 
-**Say, while rounds print:** "Each site is training on its own patients, sending
-only model weights, and getting back an average. Watch the accuracy — that
-number is the shared global model, scored on held-out scans none of the three
-has ever seen."
+### The windows
 
-**Runs in about 30 seconds** for 10 rounds (measured). Let the numbers scroll.
+Record in a **clean browser profile with the CAIOS CA imported**. That way no
+certificate warning appears, and no bookmark, extension or autofill of anybody's
+shows.
 
-**Then reveal the teal line on the chart.**
+| Window | Signed in as | For |
+|---|---|---|
+| A | nobody | beat 1, the home page; then beat 2's sign-up |
+| B | Platform Administrator | beat 2's approval, at `/admin` |
+| C | researcher (Dana Okafor) | beats 3 to 7, one tab per beat, in order |
 
-**Say:** "0.853. The best single hospital got 0.806, pooling everything got
-0.865. Federated closed eighty-one percent of that gap — and no image left the
-machine it started on."
+Window C's tabs, in order:
 
-> **Fallback, in order:**
-> 1. A client fails to connect → restart just that one; the server waits.
-> 2. Two connect and the third will not → say "this is the minimum-clients
->    behaviour, and it's the right behaviour", then cut to the recording.
-> 3. Rounds run but accuracy is poor → **this is not an infrastructure
->    failure and must not be allowed to look like one.** Say: "the mechanism is
->    what matters here; the model is a demo model on downsampled images." Then
->    show the chart from the completed run.
+1. the LLMs page
+2. the LLM's chat, logged in, with a new chat open
+3. the YOLO module page
+4. Deployments → Inference
+5. JupyterLab, with `caios-demo/high-code.ipynb` open and cleared (*Kernel →
+   Restart Kernel and Clear Outputs*)
+6. Statistics
+
+Outside the browser:
+
+- a terminal on `caios_server`, for beat 4
+- four terminals tiled, for beat 6
+- `demo/fl/results/federated-vs-baselines.png`
+
+The header shows who is signed in. Window A shows beat 2's new account and
+window C shows Dana Okafor. The cut between beats 2 and 3 hides that, and
+beats 3 to 7 need a history an account created on camera cannot have (D-85).
+
+### Never on camera
+
+- the Inference detail page's token and MinIO secret key: leave both eye icons
+  alone
+- the LLM's API key
+- any password, except typed into a masked field
+- a terminal's `export` lines, or `configs/env/caios.env`: set everything before
+  the take, then `clear`
 
 ---
 
-## Beat 6 — Serve it as an API (2 min)
+## Beat 1 — What CAIOS is · 0:00–0:20
 
-**Click:** back to the deployed module from beat 2 or 3, open its API endpoint.
+**Window A**, the home page, signed out.
 
-**Say:** "Every deployment exposes the same REST API. So the output of all this
-is not a notebook — it's an endpoint a hospital's own software can call."
+**On screen.** Hold on the headline for a moment, then scroll to *How you work
+with it*. Click **No code**, **Low code** and **High code** as you name them.
 
-Run one prediction through the Swagger UI.
+**Say:**
+
+> This is CAIOS: AI infrastructure for medical and neuroscience research,
+> operated in Canada. Nothing you do here is handed to a commercial service.
+> You can work with it at three depths: no code, low code and high code.
 
 ---
 
-## Beat 7 — A private language model, on your own GPU (3 min)
+## Beat 2 — A new researcher gets in · 0:20–0:50
 
-The same argument as beat 5, escalated: *the platform that trains across
-hospitals without moving data also answers questions without sending them to a
-vendor.*
+**Window A, then B, then A.** Three clips, two cuts.
 
-**Say first, because it is the whole point:** "Everything you've seen so far is
-about training. This is about inference — and it's the question every hospital
-IT department is actually being asked right now, which is 'can we use an LLM
-without sending patient notes to a company in California?'"
+**On screen:**
 
-**Click:** Marketplace → LLMs.
+1. **Sign in** → **Register**. Fill in the form for a fictional colleague: a
+   name, an `example.org` address, a username and a password → **Register**.
+2. The waiting room: *Your account is waiting for approval*.
+3. **Cut** to window B, `/admin`. The new name is under *Waiting for a
+   decision* → **Approve**.
+4. **Cut** to window A. Sign out and sign in again, as the waiting room says.
+   The platform opens.
 
-**Say:** "Nine models, and this page is served by this cluster — the cards, the
-descriptions, the badges. Nothing here calls out to anybody."
+**Say:**
 
-Pick one and click it. The deploy form opens with that model selected.
+> A new colleague signs up with nothing more than an email address. Until
+> someone approves them, they can sign in and see nothing. An administrator
+> approves the request in one click, and the platform opens.
 
-> **You deployed one before you started** (see *Before you start*), so do not
-> deploy a second here — it will queue for a GPU and say so. Show the form,
-> then switch to the one that is already running.
+Typing is dead air. Speed the form up in the edit, or cut from the empty form
+to the filled one.
 
-**Click:** the running LLM deployment → *Quick access* → the chat interface.
+---
 
-Log in with the credentials you set. Ask it something that sounds like the room:
+## Beat 3 — No code: a private language model · 0:50–1:50
 
-> *Summarise this radiology note in one sentence: T2 hyperintense lesion, left
-> periventricular white matter, 8mm, stable versus prior study.*
+**Window C.**
 
-**Say, while it streams:** "That's running on a GPU in this cluster. The prompt
-didn't leave the building, and there's no API bill."
+**On screen:**
 
-### The half that makes it infrastructure
+1. Marketplace → **LLMs** → the **Qwen3.5-2B** card → **Deploy**. The form
+   opens with that model chosen. Show it, and **do not submit**: a second LLM
+   would queue for capacity, and say so (gotcha 19).
+2. **Cut** to Deployments: researcher's language model, green → *Quick access*
+   → the chat.
+3. Paste the note and send:
 
-The chat window is the demo; the endpoint is the product. Switch to the
-**site_a workspace terminal** — the same one that was a hospital in beat 5.
+> Summarise this radiology note in one sentence: T2 hyperintense lesion, left
+> periventricular white matter, 8mm, stable versus prior study.
 
-```python
-import os
-from openai import OpenAI
+Measured 2026-09-29 on Qwen3.5-2B, through its API: one sentence in 0.3–0.4 s,
+with no thinking block:
 
-os.environ["SSL_CERT_FILE"] = os.path.expanduser("~/caios-fl/caios-ca.pem")
-llm = OpenAI(base_url="https://vllm-<uuid>.<domain>/v1", api_key="<from Vault>")
+> An eight-millimeter T2 hyperintense lesion in the left periventricular white
+> matter that is stable compared to a prior study.
 
-print(llm.chat.completions.create(
-    model="LiquidAI/LFM2.5-1.2B-Instruct",
-    messages=[{"role": "user", "content":
-               "Summarise this radiology note in one sentence: T2 hyperintense "
-               "lesion, left periventricular white matter, 8mm, stable versus prior."}],
-).choices[0].message.content)
+The chat window samples, so expect the wording to change between takes.
+
+**Say:**
+
+> No code. Choose an open language model from the catalogue and fill in a short
+> form. A few minutes later it is running on the lab's own GPU, at its own
+> private address.
+>
+> *[the chat]* Here it summarises a radiology note. The note never left this
+> cluster, and nobody bills per question.
+
+---
+
+## Beat 4 — Low code: serverless inference · 1:50–2:40
+
+**Window C, then the `caios_server` terminal.**
+
+**On screen:**
+
+1. The YOLO module page → **Deploy** ▾ → **Inference API (serverless)** → the
+   form. Show it, and **do not submit**.
+2. **Cut** to Deployments → **Inference**: the service you created before
+   recording → open it. The *Endpoint* is under *Synchronous calls*; leave the
+   token hidden.
+3. **Cut** to the terminal:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" --data @portrait.json "$ENDPOINT" | python3 -m json.tool
 ```
 
-Measured, on 2026-08-22, from inside the site_a workspace, against the running
-deployment:
+JSON comes back in about 6 s: a person at 0.909 and a tie at 0.611, each with
+a box. That is this exact command, measured 2026-09-29 against a service made
+the way step 2 above makes one.
 
-> The patient has a stable, 8mm left periventricular white matter
-> hyperintensity on T2 imaging, consistent with prior findings.
+Set up before the take, off camera. The endpoint and token come from the
+detail page: reveal and copy them before recording, never during it.
 
-**The cell returns in about a second.** Both timed parts of this beat are
-effectively instant — the chat reply streams in under two seconds and the
-notebook cell in one — so the three minutes is talking, not waiting. That is
-unusual in this script and worth using: it is the one beat where you can afford
-to let somebody in the room choose the prompt.
+```bash
+export ENDPOINT='<Endpoint>' TOKEN='<Token>'
+export CURL_CA_BUNDLE=/mnt/CAIOS/compose/certs/caios-ca.pem
+python3 -c 'import base64, json, sys; print(json.dumps({"oscar-files": [{"key": "files", "file_format": "jpg", "data": base64.b64encode(open(sys.argv[1], "rb").read()).decode()}]}))' \
+    /mnt/CAIOS/tests/fixtures/modules/grace_hopper.jpg > portrait.json
+clear
+```
 
-**Say:** "That's the standard OpenAI client library, unmodified, pointed at this
-cluster instead of at OpenAI. Any tool that speaks that API — an editor plugin,
-a pipeline, an existing product — works against a model running on the hospital's
-own hardware by changing one URL."
+The service reads JSON with the image inside, not the image itself
+(`docs/oscar-gui-guide.md`, step 6). That is why `portrait.json` exists, and
+why it is made off camera.
 
-**Then, and this is the line to land:** "This is the same workspace that was a
-hospital site ten minutes ago. One platform: it trains across sites without
-moving data, and it serves models without the prompts leaving either."
+**Say:**
 
-> **Where the two values come from.** The endpoint is on the deployment's page
-> in the dashboard. The API key is in Vault — the deployment's own secret, under
-> `/deployments/<uuid>/llm/vllm`. Have both pasted into the notebook **before**
-> the demo; fetching them on camera is a minute of typing that proves nothing.
-
-> **`SSL_CERT_FILE` is not boilerplate to apologise for.** It is the platform's
-> own CA, which the workspace got in its bundle, and it means this request is
-> verified rather than waved through. With a real domain (V1) the line goes
-> away. If somebody asks: the only unverified request in the whole demo is the
-> `curl -k` that fetches that CA in the first place.
-
-### If it goes wrong
-
-> **The model dropdown in the chat window is empty.** The UI cannot reach the
-> engine. Nothing else will work; switch to the API half above, which does not
-> go through the UI. `docs/runbook.md` has the diagnosis.
-
-> **The reply arrives all at once instead of word by word.** Cosmetic. Keep
-> going and do not mention it.
-
-> **The notebook raises `CERTIFICATE_VERIFY_FAILED`.** The workspace was
-> deployed fresh rather than bootstrapped for beat 5, so it has no
-> `caios-fl/caios-ca.pem`. Run the bootstrap one-liner and try again.
+> Low code. The same catalogue, but this time the model is published as a
+> service that costs nothing while nobody is using it. It gets an address and a
+> key.
+>
+> *[the terminal]* One request from a script: an image in, and back come the
+> objects in it, where they are and how sure the model is. Between requests,
+> nothing is running.
 
 ---
 
-## Beat 8 — What it costs and where it runs (2 min)
+## Beat 5 — High code: the notebook · 2:40–4:00
 
-**Click:** Statistics.
+**Window C.**
 
-**Say:** "Live cluster usage — five nodes on Compute Canada's Arbutus cloud,
-with a GPU each. This is running on the allocation, not on a laptop."
+**On screen:**
 
-**Close with the roadmap slide**, not with the platform. Name the deferred
-items honestly: annotation with CVAT, shared storage, a second FL framework,
-and a real certificate.
+1. The YOLO module page → **Deploy** ▾ → **Dedicated deployment** →
+   *Service*: **Jupyter**. Show the choice, and **do not submit**.
+2. **Cut** to Deployments: the workspace → *Quick access* → JupyterLab. Type
+   the password into the masked field.
+3. Open `caios-demo/high-code.ipynb` → *Run → Run All Cells*.
+
+| Cell | On screen | Measured 2026-09-27 |
+|---|---|---|
+| 1 | the bus photograph, its detections drawn | 1.4 s |
+| 2 | the count: four people, a bus, a stop sign | instant |
+| 3 | the same count, from the serverless service | 5.2–8.2 s. Cut or speed up |
+| 4 | *"A street photo captures a bus and a stop sign alongside four pedestrians walking along the sidewalk."* | 0.3 s |
+
+Cell 3 takes 5 to 8 seconds whether or not the service is warm. Once the image
+is on the OSCAR node, a cold start measured about the same as a warm call
+(`docs/oscar-gui-guide.md`, *Warm and cold*). Cut it or speed it up rather than
+wait.
+
+**Say:**
+
+> High code. The same model again, opened as a full JupyterLab workspace, with
+> its own code and environment.
+>
+> *[cell 1]* It finds the bus and the people, and draws them.
+>
+> *[cell 3]* From the same notebook I can call the serverless service from a
+> moment ago,
+>
+> *[cell 4]* and ask our private language model to describe what was found.
+> Three ways in, one platform, and nothing leaves it.
 
 ---
 
-## Questions you will be asked
+## Beat 6 — Federated learning · 4:00–4:40 · *to confirm*
 
-**"Is the data really not moving?"**
-Open `demo/fl/client.py` and point at `fit()`. What is returned is weights, a
-slice count and an accuracy number. Then: "and each site's bundle physically
-contains only its own slices — that's built, not promised."
+Still undecided. It is scripted here because the headline feature is federated
+learning. If it is cut, its 40 seconds go to beat 5.
 
-**"Could a hospital reconstruct another's data from the weights?"**
-Be straight: "Gradient inversion is a real attack and this demo does not defend
-against it. The platform ships differential privacy and secure aggregation as
-options we haven't turned on. For a production deployment you would."
+**On screen:**
 
-**"Why is the accuracy not higher?"**
-"Downsampled to 64×64 so a round finishes while you watch, three thousand
-images, and a deliberately small model. The comparison between the three lines
-is the result — not the absolute number."
+1. Four terminals, tiled: the server and the three sites, already
+   bootstrapped. Start the server, then the three sites; training starts when
+   the third connects.
+2. The rounds, at 2× in the edit. Ten rounds took 34.6 s measured, so about
+   17 s on screen.
+3. **Cut** to the chart, `demo/fl/results/federated-vs-baselines.png`.
 
-**"How much of this did you build?"**
-"Almost none of the platform, deliberately — it's AI4OS, which the EU funds and
-maintains. What we built is the Canadian deployment, the medical curation, and
-the federated demo. The delta is eight small patches."
+**Say:**
 
-**"Can we run our own models on it?"**
-Yes — that is what beat 3's workspace is, and the marketplace is a git
-repository of module definitions.
+> And this is what makes it matter for hospitals. Three sites, each training on
+> scans that never leave its own machine. They share only what they learned.
+>
+> *[the chart]* The shared model reaches 0.853 accuracy. The best hospital on
+> its own reaches 0.806, and pooling everything, which none of them is allowed
+> to do, 0.865.
 
-**"Does the language model know medicine?"**
-No, and do not let this one slide: "These are general-purpose open models —
-Qwen, Mistral, IBM Granite, LiquidAI. The claim is privacy, not clinical
-competence. What the platform gives you is somewhere to run a model where the
-prompts never leave; if you had a medically fine-tuned model, it would be one
-line of configuration to offer it instead."
+---
 
-**"Is the language model actually private, or is it calling out?"**
-"It is a container on a GPU in this cluster with no outbound path in the request
-line at all. The weights were downloaded once, at deployment, from Hugging Face
-— you can see that in the logs — and after that nothing leaves. The chat
-interface talks to the engine over the node's own network, not through the
-public address."
+## Beat 7 — Close · 4:40–5:00
 
-**"How big a model can you run?"**
-Be exact: "About 3 billion parameters on one of these GPU slices — 10.3 GB
-usable. That is a real constraint of the hardware we were given, not of the
-platform: the same deployment on a full H100 or across several would run a much
-larger model. All nine on the list were deployed and answered before this
-demo."
+**Window C**, Statistics.
+
+**Say:**
+
+> All of this runs on a seven-node cluster on Compute Canada's Arbutus cloud,
+> under the lab's own allocation. Next come a public certificate, and models in
+> the catalogue that use its GPUs.
+
+---
+
+## When a take goes wrong
+
+Record one clean take of every beat during the rehearsal. That is the fallback
+clip. If a live take goes wrong, record the other beats and splice the fallback
+in.
+
+| Beat | What you see | What it is, and what to do |
+|---|---|---|
+| 3 | the chat's model dropdown is empty | the interface cannot reach the engine (`docs/runbook.md`); use the fallback |
+| 3 | the reply arrives all at once, not word by word | cosmetic; keep going |
+| 3 | the deployment is orange, `queued` | a second LLM is running somewhere; delete it (gotcha 19) |
+| 4 | the request takes minutes | the model image is not on the OSCAR node: the warm-up was skipped. Cut, send one request, retake |
+| 4 | the answer is a log, not JSON | a service created before 2026-09-27; use the new one |
+| 5 | cell 3 takes much more than 8 s | the model image is not on the OSCAR node, or it is busy; send one request from the terminal, then retake |
+| 5 | cell 1 prints a download | the staging run was skipped; run `stage-high-code.sh` |
+| 6 | a site does not connect | restart that site; the server waits for all three. Otherwise, the recorded run |
+| any | a deployment pulls an image | the pre-pull did not report 4 of 4 on that node; see *Before you start* |
+
+---
+
+## After the recording
+
+- **Beat 2's account.** Deny it at `/admin`, which disables it, then delete it
+  in Keycloak's admin console under *Users*.
+- **The federated demo:** `bash scripts/deploy-fl-demo.sh --delete`.
+- **The rest**, meaning the LLM, the workspace and the serverless service,
+  either delete it or leave it up for the questions.
 
 ---
 
 ## Timing sheet
 
-| Beat | What | Minutes |
-|---|---|---|
-| 1 | Log in, curated catalogue | 2 |
-| 2 | Neuroscience by model ID | 3 |
-| 3 | GPU workspace | 3 |
-| 4 | The problem | 2 |
-| 5 | **Federated learning** | **8** |
-| 6 | Model as an API | 2 |
-| 7 | **Private language model** | **3** |
-| 8 | Cluster and roadmap | 2 |
-| | **Total** | **25** |
+Words are counted from the *Say* blocks above, stage directions excluded.
+Speech is estimated at 150 words a minute. Waits are measured, and cut or sped
+up where marked.
 
-If you are running long, cut beat 6 first — beat 7 makes the same "it is an
-endpoint, not a notebook" point with a better example — then beat 2's
-deployment (talk over the dropdown instead of deploying). Inside beat 7, the
-cuttable half is the chat window, not the notebook: the chat window is the part
-they can imagine, and the notebook is the part they cannot get anywhere else.
+| Beat | Slot | Words | Speech | What fills the rest |
+|---|---|---|---|---|
+| 1 | 20 s | 38 | 15 s | the headline, three tab clicks |
+| 2 | 30 s | 35 | 14 s | the form, sped up; two cuts |
+| 3 | 60 s | 50 | 20 s | the card and the form; the reply, 0.3–0.4 s |
+| 4 | 50 s | 59 | 24 s | the menu, the list, the detail; the request, ~6 s |
+| 5 | 80 s | 62 | 25 s | the Service choice, JupyterLab, four cells: 1.4 s, instant, 5–8 s (cut), 0.3 s |
+| 6 | 40 s | 53 | 21 s | ~17 s of rounds at 2×, the chart |
+| 7 | 20 s | 32 | 13 s | Statistics |
+| | **5:00** | **329** | **2:12** | |
 
-**Never cut beat 4** — without the problem stated, beat 5 is just numbers going
-up.
+If it runs long, cut from the top of this list:
+
+1. beat 2's second cut, the sign-out and sign-in, since the approval itself is
+   the point
+2. beat 4's form, going straight from the menu to the Inference list
+3. beat 6, which gives its 40 seconds to beat 5
+
+---
+
+## Questions you will be asked
+
+The recording will be followed by questions. These were the live demo's, and
+the facts in them are updated to 2026-09-29.
+
+**"Is the data really not moving?"**
+Open `demo/fl/client.py` and point at `fit()`. It returns weights, a slice
+count and an accuracy number. Then: "and each site's bundle physically contains
+only its own slices. That's built, not promised."
+
+**"Could a hospital reconstruct another's data from the weights?"**
+Be straight: "Gradient inversion is a real attack, and this demo does not
+defend against it. The platform ships differential privacy and secure
+aggregation as options we haven't turned on. For a production deployment you
+would."
+
+**"Why is the accuracy not higher?"**
+"The images are downsampled to 64×64 so a round finishes while you watch.
+There are three thousand of them, and the model is deliberately small. The
+result is the comparison between the three lines, not the absolute number."
+
+**"How much of this did you build?"**
+"Almost none of the platform, deliberately. It's AI4OS, which the EU funds and
+maintains. What we built is the Canadian deployment, the medical curation, the
+federated demo, and a set of small, documented patches, each with the reason
+it exists."
+
+**"Can we run our own models on it?"**
+Yes. Beat 5's workspace is exactly that, and the marketplace is a git
+repository of module definitions.
+
+**"Why do the catalogue's models run on CPU?"**
+"Their published images were built before this cluster's GPUs existed, and
+cannot use them. We measured what a rebuild on a current base would do: YOLO's
+own code trained an epoch in under five seconds on one of these GPU slices. The
+rebuild comes after this recording." The language models and the development
+environment use the GPUs now. The federated demo runs on CPU by choice: PAPI
+allows one account two GPUs, and there are three hospitals (gotcha 10).
+
+**"Does the language model know medicine?"**
+No, and do not let this one slide: "These are general-purpose open models:
+Qwen, Mistral, IBM Granite, LiquidAI. The claim is privacy, not clinical
+competence. What the platform gives you is somewhere to run a model where the
+prompts never leave. A medically fine-tuned model would be one line of
+configuration to offer."
+
+**"Is the language model actually private, or is it calling out?"**
+"It is a container on a GPU in this cluster. The weights were downloaded once,
+at deployment, from Hugging Face, and after that nothing leaves. The chat
+interface talks to the engine over the node's own network, not through the
+public address."
+
+**"How big a model can you run?"**
+Be exact: "About 3 billion parameters on one of these GPU slices, which have
+10.3 GB usable. That is a limit of the hardware we were given, not of the
+platform. The same deployment on a full H100, or across several, would run a
+much larger model."
+
+**"What does the serverless service cost when nobody is using it?"**
+"Nothing. Between requests no container runs; the first request after an idle
+spell starts one in about the time the request itself takes."

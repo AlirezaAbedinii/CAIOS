@@ -104,12 +104,14 @@ def test_only_removed_tasks_still_name_a_moving_tag_in_europe(template):
 
 def test_the_playbook_prepulls_exactly_what_the_template_runs(template, playbook_vars):
     image = _image(_tasks(template)["ui"])
-    images = playbook_vars["caios_images"]
+    # Every compute node, whatever its role: a module can land on any of them.
+    images = playbook_vars["caios_images_every_node"]
     assert image in images, (
         "the pre-pull playbook does not pull the digest patch 0020 pins, so a "
         "fresh node will pull it at deployment time — from Europe"
     )
-    stale = [i for i in images if "deepaas_ui" in i and i != image]
+    everywhere = images + [i for role in playbook_vars["caios_images_by_role"].values() for i in role]
+    stale = [i for i in everywhere if "deepaas_ui" in i and i != image]
     assert not stale, f"the playbook also pulls a different deepaas_ui: {stale}"
 
 

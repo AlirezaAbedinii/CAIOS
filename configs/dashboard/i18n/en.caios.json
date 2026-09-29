@@ -57,15 +57,16 @@
                 "FIGURE-SUBMIT": "Start"
             },
             "LOW-CODE": {
-                "TAB": "Some code",
+                "TAB": "Low code",
                 "TITLE": "Bring it into the work you already do.",
                 "BODY": "Anything you set up gets its own address and key. Send it a scan, a recording or a passage of text from a script, and read the answer back.",
                 "FIGURE-ALT": "A panel showing an address and a hidden access key.",
                 "FIGURE-ADDRESS": "Address",
                 "FIGURE-KEY": "Access key"
             },
+            "_comment_tiers": "2026-09-29: the three tabs name the demo's three tiers exactly, No code, Low code and High code (docs/demo-script.md), so the page a recording opens on and the recording itself use the same words. They were No code, Some code and Full control.",
             "HIGH-CODE": {
-                "TAB": "Full control",
+                "TAB": "High code",
                 "TITLE": "Or work as deeply as you like.",
                 "BODY": "A full workspace runs beside your data, with the notebooks and tools your group already uses. The study behind this page was written exactly that way.",
                 "FIGURE-ALT": "A notebook with three cells, the middle one running.",

@@ -27,13 +27,14 @@ corrected that day.
 ## What is here
 
 The convention is to keep the image you are replacing, so each file is the
-undo for the deploy that came after it. As of 2026-09-28 the dashboard serving
-is the step-5 build of `docs/demo-plan.md` and PAPI has patches `0001` to
+undo for the deploy that came after it. As of 2026-09-29 the dashboard serving
+is the step-6 build of `docs/demo-plan.md` and PAPI has patches `0001` to
 `0023`; the two **bold** rows undo them.
 
 | File | Image id | Git tag | What it is |
 |---|---|---|---|
-| `dashboard-pre-step5.tar` | `f9383c8bb8b7` | `dashboard-pre-step5` | **Served 2026-09-07 to 2026-09-28; the undo for the dashboard serving now.** See its section below. |
+| `dashboard-pre-step6.tar` | `585bd4d090a4` | `dashboard-pre-step6` | **Served 2026-09-28 to 2026-09-29; the undo for the dashboard serving now.** See its section below. |
+| `dashboard-pre-step5.tar` | `f9383c8bb8b7` | `dashboard-pre-step5` | Served 2026-09-07 to 2026-09-28. The undo for step 5. |
 | `dashboard-t5a-scheme.tar` | `49b2ce97c89a` | — | T5, the scheme switch. The undo for T6. |
 | `dashboard-t4-complete.tar` | `ae8e96ce0cc9` | `t4-complete` | T4 as finished, 2026-09-02. |
 | `dashboard-t4-demo-unavailable.tar` | `8b9a6e0ede73` | `t4-demo-unavailable` | T3/T4's first deploy, 2026-09-02. |
@@ -160,3 +161,21 @@ Either can go back without the other. The old PAPI ignores
 The catalogue text is not in either image: `catalog/mirror/` is served live, so
 undoing that half is a `git checkout` of the mirror and a PAPI restart. Do not
 undo it by hand-editing categories back in: see D-84.
+
+## `dashboard-pre-step6.tar` — saved 2026-09-29
+
+Step 6 of `docs/demo-plan.md` rebuilt the dashboard for one change: the home
+page's tiers read *No code, Low code, High code*, where this image says *No
+code, Some code, Full control*. It is the step-5 build (tag
+`dashboard-pre-step6`, commit `2370f10`), and everything else in it is current.
+
+```bash
+sudo docker load -i rollback/dashboard-pre-step6.tar
+sudo docker tag caios/dashboard:pre-step6 caios/dashboard:latest
+sudo docker compose -f compose/docker-compose.yml \
+     --env-file configs/env/caios.env up -d --no-deps --force-recreate dashboard
+```
+
+The same step changed one PAPI string, the module deploy form's GPU hint, in
+`configs/papi/modules-user.yaml`. That file is bind-mounted, so undoing it is a
+`git checkout` of the file and `sudo docker restart caios_papi`, not an image.

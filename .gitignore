@@ -137,3 +137,6 @@ rollback/*.tar
 # hostnames, account names and endpoints. Once in git history they cannot be
 # taken back.
 docs/screenshots/*/
+
+# Runtime state: the job IDs scripts/deploy-fl-demo.sh deployed, for --status and --delete.
+demo/fl/results/deployment.json

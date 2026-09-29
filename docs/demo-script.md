@@ -25,7 +25,7 @@ at the end, corrected.
 | 0:50–1:50 | 3. **No code**: a private language model | LLMs, a card, the deploy form, the running model summarising a radiology note | 50 |
 | 1:50–2:40 | 4. **Low code**: serverless inference | YOLO, *Deploy* ▾ serverless, the Inference list, one request, detections | 59 |
 | 2:40–4:00 | 5. **High code**: the notebook | YOLO as JupyterLab, four cells: detect, count, the serverless call, the LLM | 62 |
-| 4:00–4:40 | 6. Federated learning *(to confirm)* | three hospitals training, then the chart | 53 |
+| 4:00–4:40 | 6. Federated learning | three hospitals training, then the chart | 53 |
 | 4:40–5:00 | 7. Close | Statistics | 32 |
 | | | | **329** |
 
@@ -55,7 +55,8 @@ running:
 nomad job status -namespace=caios < /dev/null
 ```
 
-On 2026-09-29 two things were in the way, and both are yours to remove:
+On 2026-09-29 two things were in the way, and both were removed for the
+rehearsal. Check for their like again before recording:
 
 - **Platform Administrator's "demo no code" LLM**, on `caios-wn-gpu-2`, which
   is `caios_site_c`, a hospital. While the federated demo is up the cluster
@@ -79,13 +80,25 @@ tag that moved overnight is a download on camera.
 
 ### Deploy, in this order, as researcher
 
-The order matters twice. The LLM goes first, so it lands on its own node. The
-serverless service comes before the workspace, because staging the notebook
-needs both.
+**The order matters three times**, and the third was learned the hard way on
+2026-09-29:
+
+1. **The LLM goes first**, so it lands on its own node.
+2. **The federation goes next, before any other workspace.** With the
+   high-code notebook already on a hospital node, spread scheduling counted
+   that node as the busiest and put two of the three hospitals on another
+   machine. That silently breaks the claim beat 6 makes out loud.
+3. **The serverless service goes before the notebook**, because staging the
+   notebook needs both.
+
+Passwords: the Open WebUI login is `CAIOS_DEMO_UI_EMAIL` and
+`CAIOS_DEMO_UI_PASSWORD` in `configs/env/caios.env`. The workspaces'
+JupyterLab password, typed on camera in beat 5, is `CAIOS_FL_IDE_PASSWORD`.
 
 **1. The language model.** Marketplace → LLMs → **Qwen3.5-2B**, the default →
 deploy. Set the Open WebUI email and password; you log in with them before
-recording. It takes one to three minutes. Then check where it landed:
+recording. It takes one to four minutes (the one for 2026-09-29's rehearsal
+was running within 4 min 20 s). Then check where it landed:
 
 ```bash
 nomad job allocs -namespace=caios -json <llm-uuid> < /dev/null \
@@ -97,7 +110,28 @@ delete it and deploy again before anything else is running. Its preference
 for `caios_llm` is soft, and the one deployed on 2026-09-24 landed on
 `caios_site_c`.
 
-**2. The serverless service.** YOLO models → **Deploy** ▾ → **Inference API
+**2. Federated learning.** `bash scripts/deploy-fl-demo.sh`, then `--status`.
+It prints the server's `fedserver-…` address. Then, in each hospital's
+JupyterLab terminal, with that site's name and that address:
+
+```bash
+curl -k -sSL https://dashboard.134.87.8.230.sslip.io/fl/bootstrap.sh | bash -s site_a <fedserver-host>
+```
+
+**Give it the address.** With it, the bootstrap pins the server's name to the
+cluster's router. Without it, the clients follow public DNS to the proxy VM,
+which cannot carry gRPC, and every one dies with `RST_STREAM` while the server
+waits for ever (D-87). Then check the whole path, headless, in about a minute:
+
+```bash
+bash scripts/check-fl-cluster.sh
+```
+
+It must say the three hospitals are on three machines, each reaching the
+router, ten rounds done. It leaves nothing running. On 2026-09-29: ten rounds
+in 32 s, final accuracy 0.842 to 0.852 across three runs.
+
+**3. The serverless service.** YOLO models → **Deploy** ▾ → **Inference API
 (serverless)** → the form's defaults, title `Object detection` → submit. Then
 warm it, which also shows you the answer beat 4 will get:
 
@@ -107,13 +141,12 @@ bash scripts/oscar-submit.sh <service-name> tests/fixtures/modules/grace_hopper.
 ```
 
 If the model image is not on the OSCAR node yet, the first call downloads it,
-which takes about three minutes. With the image there, a new service answers
-its first call in 6.8 s and the next in 6.3 s, in JSON: a person and a tie
-(measured 2026-09-29).
+which takes about three minutes. With the image there, a new service answered
+its first call in 6.8 s and 7.0 s on 2026-09-29, in JSON: a person and a tie.
 
-**3. The high-code workspace.** YOLO models → **Deploy** ▾ → **Dedicated
-deployment** → *Service* **Jupyter**, one CPU, and a password you will type on
-camera. Then, on `caios_server`:
+**4. The high-code workspace.** YOLO models → **Deploy** ▾ → **Dedicated
+deployment** → *Service* **Jupyter**, one CPU, and the workspace password.
+Then, on `caios_server`:
 
 ```bash
 bash scripts/stage-high-code.sh <workspace-uuid> <llm-uuid>
@@ -121,12 +154,6 @@ bash scripts/stage-high-code.sh <workspace-uuid> <llm-uuid>
 
 It puts the notebook and its hidden config into the workspace and runs it once.
 That run is the warm-up: YOLO's weights come from GitHub at first use.
-
-**4. Federated learning, if beat 6 stays.**
-`bash scripts/deploy-fl-demo.sh`, then `--status`: the three sites must be on
-three different hospital nodes. Bootstrap the three sites, and start nothing
-yet (`docs/runbook.md`, *Running the federated demo*). Record one complete run
-before the take, as beat 6's fallback.
 
 ### The windows
 
@@ -306,14 +333,14 @@ why it is made off camera.
    the password into the masked field.
 3. Open `caios-demo/high-code.ipynb` → *Run → Run All Cells*.
 
-| Cell | On screen | Measured 2026-09-27 |
+| Cell | On screen | Measured 2026-09-27 and 2026-09-29 |
 |---|---|---|
-| 1 | the bus photograph, its detections drawn | 1.4 s |
+| 1 | the bus photograph, its detections drawn | 1.4–2.3 s |
 | 2 | the count: four people, a bus, a stop sign | instant |
-| 3 | the same count, from the serverless service | 5.2–8.2 s. Cut or speed up |
-| 4 | *"A street photo captures a bus and a stop sign alongside four pedestrians walking along the sidewalk."* | 0.3 s |
+| 3 | the same count, from the serverless service | 5.2–9.3 s. Cut or speed up |
+| 4 | *"A street photo captures a bus and a stop sign alongside four pedestrians walking along the sidewalk."* | 0.2–0.3 s |
 
-Cell 3 takes 5 to 8 seconds whether or not the service is warm. Once the image
+Cell 3 takes 5 to 9 seconds whether or not the service is warm. Once the image
 is on the OSCAR node, a cold start measured about the same as a warm call
 (`docs/oscar-gui-guide.md`, *Warm and cold*). Cut it or speed it up rather than
 wait.
@@ -333,19 +360,29 @@ wait.
 
 ---
 
-## Beat 6 — Federated learning · 4:00–4:40 · *to confirm*
+## Beat 6 — Federated learning · 4:00–4:40
 
-Still undecided. It is scripted here because the headline feature is federated
-learning. If it is cut, its 40 seconds go to beat 5.
+Kept, decided 2026-09-29: it is the headline feature. If a take runs long, it
+is still the last thing to cut, and its 40 seconds would go to beat 5.
 
 **On screen:**
 
 1. Four terminals, tiled: the server and the three sites, already
    bootstrapped. Start the server, then the three sites; training starts when
    the third connects.
+
+   ```bash
+   cd /srv/ai4os-federated-server/fedserver && python3 server.py   # the server
+   cd ~/caios-fl && ./run.sh --quiet                                # each hospital
+   ```
 2. The rounds, at 2× in the edit. Ten rounds took 34.6 s measured, so about
    17 s on screen.
 3. **Cut** to the chart, `demo/fl/results/federated-vs-baselines.png`.
+
+The narration's numbers are the chart's, the study the home page reports.
+The live run's last line lands close to them but not on them: 0.842 to 0.852
+across three runs on 2026-09-29. Cut to the chart before the last round is
+read, or let it show and say nothing about the difference.
 
 **Say:**
 
@@ -385,6 +422,8 @@ in.
 | 4 | the answer is a log, not JSON | a service created before 2026-09-27; use the new one |
 | 5 | cell 3 takes much more than 8 s | the model image is not on the OSCAR node, or it is busy; send one request from the terminal, then retake |
 | 5 | cell 1 prints a download | the staging run was skipped; run `stage-high-code.sh` |
+| 6 | every site dies with `RST_STREAM`, the server stuck at *Requesting initial parameters* | the sites were bootstrapped without the server's address, so they went through the public proxy. Rerun the bootstrap with it, or `bash scripts/check-fl-cluster.sh --bootstrap` (D-87) |
+| 6 | `check-fl-cluster` says two hospitals share a machine | the federation was deployed after another workspace. Delete both, deploy the federation first |
 | 6 | a site does not connect | restart that site; the server waits for all three. Otherwise, the recorded run |
 | any | a deployment pulls an image | the pre-pull did not report 4 of 4 on that node; see *Before you start* |
 
@@ -412,7 +451,7 @@ up where marked.
 | 2 | 30 s | 35 | 14 s | the form, sped up; two cuts |
 | 3 | 60 s | 50 | 20 s | the card and the form; the reply, 0.3–0.4 s |
 | 4 | 50 s | 59 | 24 s | the menu, the list, the detail; the request, ~6 s |
-| 5 | 80 s | 62 | 25 s | the Service choice, JupyterLab, four cells: 1.4 s, instant, 5–8 s (cut), 0.3 s |
+| 5 | 80 s | 62 | 25 s | the Service choice, JupyterLab, four cells: 1.4–2.3 s, instant, 5–9 s (cut), 0.2–0.3 s |
 | 6 | 40 s | 53 | 21 s | ~17 s of rounds at 2×, the chart |
 | 7 | 20 s | 32 | 13 s | Statistics |
 | | **5:00** | **329** | **2:12** | |

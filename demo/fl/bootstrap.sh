@@ -93,6 +93,34 @@ python3 -c "import flwr, openai" || {
     exit 1
 }
 
+# WHY /etc/hosts
+#
+# The server's name, fedserver-<uuid>.<deployments domain>, resolves in public
+# DNS to the proxy VM in front of the platform (docs/nginx-proxy.md). That proxy
+# cannot carry gRPC: it has no grpc_pass, and proxy_pass speaks HTTP/1.1 to its
+# upstream. A client that follows DNS has its stream reset (RST_STREAM, error
+# code 1) and never joins; the server waits for it for ever. Measured on
+# 2026-09-29, the first federated run through the cluster since the deployment
+# domain became public.
+#
+# These workspaces are inside the cluster, one hop from Traefik on the private
+# subnet, and that is the path the design intends. So this workspace, and only
+# this one, pins the name to Traefik's private address. The name itself is
+# unchanged, so TLS is exactly as strict as before: SNI, routing and the
+# certificate check all still use it, against the CAIOS CA.
+EDGE_IP="${CAIOS_FL_EDGE_IP:-@@FL_EDGE_IP@@}"
+if [[ -n "$SERVER" && -n "$EDGE_IP" && "$EDGE_IP" != @@* ]]; then
+    if grep -qE "^[^#]*[[:space:]]$SERVER([[:space:]]|\$)" /etc/hosts; then
+        echo "==> $SERVER is already pinned in /etc/hosts"
+    elif [[ -w /etc/hosts ]]; then
+        echo "$EDGE_IP $SERVER" >> /etc/hosts
+        echo "==> pinned $SERVER to the cluster's router, $EDGE_IP"
+    else
+        echo "    WARNING: /etc/hosts is not writable, so this client will go through"
+        echo "    the public proxy, which cannot carry gRPC. Run this as root."
+    fi
+fi
+
 RUN="python3 client.py --site $SITE --ca caios-ca.pem --server ${SERVER:-<FEDSERVER_HOST>}:443"
 printf '#!/usr/bin/env bash\ncd "$(dirname "$0")"\nexec %s "$@"\n' "$RUN" > "$WORKDIR/run.sh"
 chmod +x "$WORKDIR/run.sh"

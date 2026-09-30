@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Refuse a push that would publish a secret. Enable once per clone:
+#   git config core.hooksPath .githooks
+exec bash "$(git rev-parse --show-toplevel)/scripts/check-secrets.sh"

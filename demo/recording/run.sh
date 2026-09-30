@@ -7,6 +7,7 @@
 #   bash demo/recording/run.sh setup             # sign the browser profiles in
 #   bash demo/recording/run.sh record [clip ...] # all clips, or just these
 #   bash demo/recording/run.sh assemble          # cut, voice, captions -> out/final
+#   bash demo/recording/run.sh readme-media      # the README's preview GIF and 720p video
 #   python3 demo/recording/terminals.py down
 #   bash demo/recording/accounts.sh delete-all   # the account beat 2 created
 #
@@ -49,6 +50,14 @@ case "${1:-}" in
     setup)    recorder python3 record.py setup ;;
     record)   recorder python3 record.py record "${@:2}" ;;
     assemble) recorder python3 assemble.py "${@:2}" ;;
+    readme-media)
+        recorder python3 readme_media.py "${@:2}"
+        mkdir -p "$ROOT/docs/assets"
+        for f in demo-preview.gif caios-logo-light.png caios-logo-dark.png; do
+            [[ -f "$HERE/out/final/$f" ]] && cp "$HERE/out/final/$f" "$ROOT/docs/assets/"
+        done
+        true
+        ;;
     shell)    recorder bash ;;
     *) sed -n '2,14p' "$0"; exit 2 ;;
 esac

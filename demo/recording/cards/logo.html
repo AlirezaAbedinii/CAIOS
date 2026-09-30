@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CAIOS logo</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  /* Rendered to docs/assets/caios-logo-{light,dark}.png by readme_media.py.
+     ?theme=dark swaps to the console palette. Transparent background. */
+  html, body { background: transparent; }
+  body { display: flex; align-items: center; gap: 26px; padding: 18px 20px; width: max-content; }
+  .mark { width: 104px; height: 104px; }
+  .mark line { stroke: var(--fg); stroke-width: 5; stroke-linecap: round; }
+  .mark circle { fill: var(--bg-dot); stroke: var(--fg); stroke-width: 5; }
+  .mark circle.lit { fill: var(--acc); stroke: var(--acc); }
+  h1 { font-size: 92px; font-weight: 600; line-height: 0.95; letter-spacing: -0.005em; color: var(--fg); }
+  p { margin-top: 10px; font-family: var(--mono); font-size: 13.5px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--cap); }
+  body.light { --fg: #0b2027; --acc: #0b6c7c; --cap: #6e858a; --bg-dot: #ffffff; }
+  body.dark  { --fg: #e4edef; --acc: #37cfe4; --cap: #a3c0c6; --bg-dot: #0d1117; }
+</style>
+</head>
+<body>
+  <svg class="mark" viewBox="0 0 104 104" aria-hidden="true">
+    <line x1="52" y1="18" x2="16" y2="84"/><line x1="52" y1="18" x2="88" y2="84"/><line x1="16" y1="84" x2="88" y2="84"/>
+    <circle class="lit" cx="52" cy="18" r="12"/><circle cx="16" cy="84" r="12"/><circle cx="88" cy="84" r="12"/>
+  </svg>
+  <div>
+    <h1>CAIOS</h1>
+    <p>Canadian Artificial Intelligence Operating System</p>
+  </div>
+  <script>document.body.className = new URLSearchParams(location.search).get('theme') || 'light';</script>
+</body>
+</html>

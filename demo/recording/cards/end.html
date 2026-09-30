@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CAIOS</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  body { background: var(--console); color: var(--ink-lit); display: grid; place-items: center; }
+  .wrap { text-align: center; }
+  .mark { width: 120px; height: 120px; margin: 0 auto 28px; display: block; }
+  .mark line { stroke: var(--ink-lit-2); stroke-width: 3; stroke-linecap: round; }
+  .mark circle { fill: var(--console); stroke: var(--ink-lit-2); stroke-width: 3; }
+  .mark circle.lit { fill: var(--accent-lit); stroke: var(--accent-lit); }
+  h1 { font-size: 96px; font-weight: 600; line-height: 1; letter-spacing: -0.01em; }
+  .tag { margin-top: 22px; font-size: 26px; font-weight: 300; color: var(--ink-lit-2); }
+  .tiers { margin-top: 46px; display: flex; gap: 14px; justify-content: center; }
+  .tiers span { font-family: var(--mono); font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;
+                color: var(--ink-lit); border: 1px solid rgba(163, 214, 224, 0.34); padding: 9px 16px; }
+  .credit { margin-top: 54px; font-family: var(--mono); font-size: 13px; letter-spacing: 0.16em;
+            text-transform: uppercase; color: var(--ink-lit-3); line-height: 2; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <svg class="mark rise" viewBox="0 0 120 120" aria-hidden="true">
+      <line x1="60" y1="20" x2="18" y2="96"/><line x1="60" y1="20" x2="102" y2="96"/>
+      <line x1="18" y1="96" x2="102" y2="96"/>
+      <circle class="lit" cx="60" cy="20" r="11"/><circle cx="18" cy="96" r="11"/><circle cx="102" cy="96" r="11"/>
+    </svg>
+    <h1 class="rise" style="animation-delay: 150ms">CAIOS</h1>
+    <p class="tag rise" style="animation-delay: 350ms">Private AI infrastructure for medical and neuroscience research, built in Canada.</p>
+    <div class="tiers rise" style="animation-delay: 650ms">
+      <span>No code</span><span>Low code</span><span>High code</span><span>Federated learning</span>
+    </div>
+    <p class="credit fade" style="animation-delay: 1200ms">Built on the open-source AI4OS stack<br>Running on Compute Canada's Arbutus cloud</p>
+  </div>
+</body>
+</html>

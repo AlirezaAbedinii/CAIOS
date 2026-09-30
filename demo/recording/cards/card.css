@@ -1,0 +1,31 @@
+/* Shared by the recording's own pages. The palette and type are the home
+   page's (configs/dashboard/home/components/home/home.component.scss), so the
+   cards read as the same product as the screens between them. */
+:root {
+    --paper: #f7f5f2;
+    --paper-sunk: #efece7;
+    --console: #0a2129;
+    --ink: #0b2027;
+    --ink-2: #3d545a;
+    --ink-3: #6e858a;
+    --ink-lit: #e4edef;
+    --ink-lit-2: #a3c0c6;
+    --ink-lit-3: #6f939c;
+    --rule: rgba(11, 32, 39, 0.16);
+    --accent: #0b6c7c;
+    --accent-lit: #37cfe4;
+    --boundary: #a8452c;
+    --sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+    --mono: 'IBM Plex Mono', 'DejaVu Sans Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans);
+       -webkit-font-smoothing: antialiased; }
+.eyebrow { font-family: var(--mono); font-size: 13px; letter-spacing: 0.22em;
+           text-transform: uppercase; color: var(--ink-3); }
+.rise { opacity: 0; transform: translateY(14px);
+        animation: rise 900ms cubic-bezier(0.2, 0, 0.2, 1) forwards; }
+@keyframes rise { to { opacity: 1; transform: none; } }
+.fade { opacity: 0; animation: fade 1200ms ease forwards; }
+@keyframes fade { to { opacity: 1; } }

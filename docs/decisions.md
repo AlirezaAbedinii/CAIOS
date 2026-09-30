@@ -1412,3 +1412,25 @@ repository (D-77). The demo's clients are inside the cluster, and the pin needs
 nothing from that machine. Rejected too: a hosts entry in the dev-env job
 template, because the server's name is different for every deployment and the
 template cannot know it.
+
+**2026-09-30**: Step 7 of `docs/demo-plan.md`, the recording. Recorded D-88.
+
+**D-88: The recording is made by a script, and narrated by a synthetic voice
+run on our own machine.** `demo/recording/` records each beat as its own clip
+in a real browser on the live platform, paced by the narration: the words come
+first, as timed audio, and each take waits on them. Retaking one beat is one
+command, and the whole video is rebuilt from the clips in about seven minutes.
+
+The voice is Kokoro-82M (Apache 2.0) on CPU, on `caios_server`. The script's
+text never goes to a speech service, which is the story the video tells, and
+it costs nothing to change a line. Rejected: a hosted voice (ElevenLabs and
+the like sound warmer, and remain the upgrade if the panel wants one; the edit
+takes any WAV per line); a person recording by hand (the request was an AI
+voice, and a scripted take can be repeated exactly); and the Chrome
+extension's recorder, which makes GIFs, without sound.
+
+Five things are changed on screen for the take only, each listed with its
+reason and its real fix in `demo/recording/README.md`. None changes what the
+platform does; they hide an upstream CI badge, an upstream update banner, a
+harmless notebook warning, real people's names on the admin page, and fit a
+tall image to the screen.

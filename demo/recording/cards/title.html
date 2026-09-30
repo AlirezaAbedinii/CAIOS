@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CAIOS walkthrough</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  body { display: grid; place-items: center; }
+  .wrap { width: 1120px; display: grid; grid-template-columns: 1fr 300px; gap: 72px; align-items: center; }
+  .mark { width: 300px; height: 300px; }
+  .mark line { stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round;
+               stroke-dasharray: 260; stroke-dashoffset: 260; animation: draw 1400ms 300ms ease forwards; }
+  .mark circle { fill: var(--paper); stroke: var(--ink); stroke-width: 2.2; opacity: 0;
+                 animation: fade 600ms ease forwards; }
+  .mark circle.lit { fill: var(--accent); stroke: var(--accent); }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  h1 { font-size: 132px; font-weight: 600; letter-spacing: -0.01em; line-height: 1; margin: 22px 0 22px; }
+  .sub { font-size: 30px; font-weight: 300; color: var(--ink-2); line-height: 1.3; }
+  .lede { margin-top: 30px; padding-left: 22px; border-left: 3px solid var(--boundary);
+          font-size: 22px; font-weight: 300; color: var(--ink); max-width: 700px; line-height: 1.45; }
+  .foot { position: fixed; left: 0; right: 0; bottom: 44px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <p class="eyebrow rise" style="animation-delay: 150ms">Platform walkthrough</p>
+      <h1 class="rise" style="animation-delay: 300ms">CAIOS</h1>
+      <p class="sub rise" style="animation-delay: 500ms">Canadian Artificial Intelligence Operating System</p>
+      <p class="lede rise" style="animation-delay: 750ms">Private AI infrastructure for medical and neuroscience research.</p>
+    </div>
+    <svg class="mark" viewBox="0 0 300 300" aria-hidden="true">
+      <line x1="150" y1="52" x2="48" y2="236"/>
+      <line x1="150" y1="52" x2="252" y2="236"/>
+      <line x1="48" y1="236" x2="252" y2="236"/>
+      <circle class="lit" cx="150" cy="52" r="26" style="animation-delay: 200ms"/>
+      <circle cx="48" cy="236" r="26" style="animation-delay: 500ms"/>
+      <circle cx="252" cy="236" r="26" style="animation-delay: 700ms"/>
+    </svg>
+  </div>
+  <p class="eyebrow foot fade" style="animation-delay: 1100ms">Recorded on the live platform · September 2026</p>
+</body>
+</html>

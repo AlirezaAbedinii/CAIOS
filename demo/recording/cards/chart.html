@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Federated result</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  body { display: grid; place-items: center; background: #ffffff; }
+  .frame { width: 1180px; transform-origin: 62% 42%; animation: push 18s cubic-bezier(0.3, 0, 0.3, 1) forwards; }
+  .frame img { width: 100%; display: block; }
+  @keyframes push { from { transform: scale(1); } to { transform: scale(1.06); } }
+</style>
+</head>
+<body>
+  <!-- demo/fl/results/federated-vs-baselines.svg: the chart the home page
+       and the script quote, drawn by demo/fl/plot_results.py. -->
+  <div class="fade"><div class="frame"><img src="/repo/demo/fl/results/federated-vs-baselines.svg" alt=""></div></div>
+</body>
+</html>

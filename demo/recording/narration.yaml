@@ -1,0 +1,128 @@
+# The recording's narration: one file for the voice, the captions and the
+# transcript. `text` is what the captions and transcript show; `speak`, when
+# present, is what the voice reads instead (numbers as words, mostly).
+#
+# House rules for this file: a natural, professional tone, and no em dashes.
+# tests/test_recording_narration.py checks the second.
+#
+# Beat and line ids are the cues demo/recording/record.py waits on. Renaming
+# one here without renaming it there is a failing take, not a silent one.
+
+voice: af_heart        # Kokoro-82M's highest-rated English voice
+speed: 1.0
+lang: a                # American English G2P; the closest Kokoro has to Canadian
+
+# How the voice says names it would otherwise guess at. Misaki's inline
+# phoneme syntax: [word](/IPA/).
+#
+# CAIOS is spelled out, C-A-I-O-S, which is what the voice does with no entry.
+# KAY-oss, "[CAIOS](/kˈAɑs/)", was tried first: speech recognition heard it
+# as "chaos", and the video opened on "This is chaos". KAI-oss would be
+# "[CAIOS](/kˈIɑs/)". out/samples/ has all three; change it here and rerun
+# `run.sh tts b1a b7b`, then retake b1 and outro, whose cues follow the words.
+lexicon:
+  JupyterLab: "[Jupyter](/ʤˈupəTəɹ/) lab"
+
+beats:
+  - id: b1
+    title: What CAIOS is
+    lines:
+      - id: b1a
+        text: This is CAIOS, the Canadian Artificial Intelligence Operating System.
+      - id: b1b
+        text: >-
+          It is AI infrastructure for medical and neuroscience research. It runs
+          in Canada, and nothing a researcher does here is handed to a
+          commercial service.
+      - id: b1c
+        text: "There are three ways to work with it: no code, low code, and high code."
+
+  - id: b2
+    title: A new researcher gets in
+    lines:
+      - id: b2a
+        text: A new colleague signs up with nothing more than an email address.
+      - id: b2b
+        text: Until someone approves the request, they can sign in, but they cannot see or use anything.
+      - id: b2c
+        text: An administrator reviews the request and approves it with a single click.
+      - id: b2d
+        text: The next time they sign in, the platform is open to them.
+
+  - id: b3
+    title: "No code: a private language model"
+    lines:
+      - id: b3a
+        text: First, no code. The catalogue offers a curated set of open language models.
+      - id: b3b
+        text: A researcher picks one and fills in a short form. There is nothing to install.
+      - id: b3c
+        text: A few minutes later, the model is running on the lab's own GPU, at its own private address.
+      - id: b3d
+        text: Here, it summarises a radiology note in a single sentence.
+      - id: b3e
+        text: The note never left this cluster, and there is no charge per question.
+
+  - id: b4
+    title: "Low code: serverless inference"
+    lines:
+      - id: b4a
+        text: Next, low code. This object detection model comes from the same catalogue.
+      - id: b4b
+        text: This time, it is published as a serverless service. It only runs when a request arrives.
+      - id: b4c
+        text: The service gets its own endpoint and access key.
+      - id: b4d
+        text: One request from a script sends in a photograph.
+      - id: b4e
+        text: Back come the objects the model found, where they are, and how confident it is.
+
+  - id: b5
+    title: "High code: the notebook"
+    lines:
+      - id: b5a
+        text: >-
+          Finally, high code. The same model again, this time opened as a full
+          JupyterLab workspace, with its own code and environment.
+      - id: b5b
+        text: It finds the bus and the people in this photograph, and draws them.
+      - id: b5c
+        text: From the same notebook, we can call the serverless service from a moment ago,
+      - id: b5d
+        text: and ask our private language model to describe what was found.
+      - id: b5e
+        text: Three ways in, one platform, and nothing leaves it.
+
+  - id: b6
+    title: Federated learning
+    lines:
+      - id: b6a
+        text: Federated learning is what makes this matter for hospitals.
+      - id: b6b
+        text: >-
+          Three hospital sites train one shared model. Each one trains on brain
+          MRI scans that never leave its own machine, and shares only what its
+          model has learned.
+      - id: b6c
+        text: A coordinating server combines those updates, round after round.
+      - id: b6d
+        text: The shared model reaches 85.3 percent accuracy.
+        speak: The shared model reaches eighty-five point three percent accuracy.
+      - id: b6e
+        text: >-
+          The best hospital working alone reaches 80.6. Pooling every scan in
+          one place, which no hospital is permitted to do, reaches 86.5.
+        speak: >-
+          The best hospital working alone reaches eighty point six. Pooling
+          every scan in one place, which no hospital is permitted to do,
+          reaches eighty-six point five.
+
+  - id: b7
+    title: Where it runs
+    lines:
+      - id: b7a
+        text: >-
+          All of this runs on a seven-node cluster on Compute Canada's Arbutus
+          cloud, under the lab's own research allocation.
+      - id: b7b
+        text: CAIOS. Private AI infrastructure for medical and neuroscience research, built in Canada.

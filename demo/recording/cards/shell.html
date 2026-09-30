@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Serverless request</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  body { display: grid; grid-template-columns: 1fr 360px; gap: 28px; padding: 36px 40px; }
+  .term { display: flex; flex-direction: column; background: var(--console); border-radius: 4px;
+          box-shadow: 0 18px 50px rgba(11, 32, 39, 0.22); overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+         border-bottom: 1px solid rgba(163, 214, 224, 0.18); }
+  .bar b { font-weight: 500; color: var(--ink-lit); font-size: 15px; }
+  .bar span { font-family: var(--mono); font-size: 13px; color: var(--ink-lit-3); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent-lit); }
+  iframe { flex: 1; border: 0; width: 100%; background: var(--console); padding: 10px 0 0 12px; }
+  .side { align-self: center; }
+  .side img { width: 100%; display: block; border: 1px solid var(--rule); }
+  .side p { margin-top: 14px; font-size: 16px; line-height: 1.45; color: var(--ink-2); }
+  .side .eyebrow { margin-bottom: 12px; }
+</style>
+</head>
+<body>
+  <div class="term">
+    <div class="bar"><i class="dot"></i><b>Terminal</b><span id="where"></span></div>
+    <iframe id="t" title="terminal"></iframe>
+  </div>
+  <div class="side">
+    <p class="eyebrow">The request carries</p>
+    <img src="/repo/tests/fixtures/modules/grace_hopper.jpg" alt="">
+    <p>One photograph, <code>portrait.json</code>, sent to the service's endpoint with its access key.</p>
+  </div>
+  <script>
+    const q = new URLSearchParams(location.search);
+    document.getElementById('t').src = 'http://127.0.0.1:' + q.get('port') + '/';
+    document.getElementById('where').textContent = q.get('where') || '';
+  </script>
+</body>
+</html>

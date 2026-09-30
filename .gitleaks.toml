@@ -1,0 +1,15 @@
+# gitleaks configuration: the default rules, plus the dummy values the unit
+# tests use on purpose. Used by scripts/check-secrets.sh, the pre-push hook and
+# CI. Allow a value here only when it is a fixture, never a real credential.
+
+title = "CAIOS"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Unit-test fixtures"
+regexes = [
+  # tests/render.py renders job templates with this placeholder API token.
+  '''^0123456789abcdef$''',
+]

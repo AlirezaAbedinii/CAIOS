@@ -13,6 +13,7 @@ python3 demo/recording/terminals.py up       # the terminals beats 4 and 6 use
 bash demo/recording/run.sh setup             # sign the browser profiles in, off camera
 bash demo/recording/run.sh record            # all sixteen clips, about 8 minutes
 bash demo/recording/run.sh assemble          # about 7 minutes on this machine
+bash demo/recording/run.sh readme-media      # logo, preview GIF, 720p video for the README
 python3 demo/recording/terminals.py down
 bash demo/recording/accounts.sh delete-all   # the colleague beat 2 created
 ```
@@ -31,6 +32,15 @@ What comes out, in `out/final/` (gitignored, like everything in `out/`):
 | `timeline.json` | where every clip and every line landed |
 
 and `transcript.md` here, committed, with each line's timecode.
+
+`readme-media` also writes `docs/assets/demo-preview.gif` (the README's 20-second
+loop, one labelled moment per tier), the two README logos, and
+`out/final/caios-demo-720p.mp4`: the captioned video under 10 MB. GitHub plays a
+video inline in a README only when it was uploaded through its own editor, and
+caps that upload at 10 MB, so that file is what goes in: drop it into a release's
+notes or an issue comment on github.com, and put the `user-attachments` link it
+produces on a line of its own in the README (D-89). The attachment stays private
+until something public references it, so publish the release first.
 
 ---
 

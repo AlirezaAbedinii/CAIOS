@@ -1434,3 +1434,33 @@ reason and its real fix in `demo/recording/README.md`. None changes what the
 platform does; they hide an upstream CI badge, an upstream update banner, a
 harmless notebook warning, real people's names on the admin page, and fit a
 tall image to the screen.
+
+**2026-09-30**: the public README and the secrets check. Recorded D-89 and D-90.
+
+**D-89: The README shows the demo twice: a silent loop, and the narrated video
+inline.** GitHub strips `<video>` from READMEs and renders a committed `.mp4` as a
+link; it plays a video inline only when it was uploaded through its own editor,
+at most 10 MB. So the top of the README is a 20-second GIF, one labelled moment
+per tier, which moves before anyone presses anything, and the Demo section is
+the narrated walkthrough re-encoded at 720p to 9.3 MB and uploaded as an
+attachment. The 1080p files and captions are assets of the `demo-2026-09`
+release. Rejected: one GIF per tier (four loops of what the video already shows,
+about 12 MB of page, and a longer README), and committing the 1080p video
+(27 MB in history for ever, and it would still only render as a link).
+
+**D-90: A secret in a tracked file blocks a push; a secret only in history is a
+warning.** `scripts/check-secrets.sh` runs gitleaks over every commit, refuses
+tracked env, key and certificate files, and looks for each real value from
+`configs/env/caios.env` in the tracked files and the history, because a password
+is just a string and no pattern finds it. It is the pre-push hook and a CI job.
+A value only in history is already public, so blocking the push fixes nothing;
+the check names the variable and its commits and says to rotate it. That is
+what it found on its first run: `CAIOS_FL_IDE_PASSWORD`, committed in `9bf2441`
+on 2026-08-15, removed from the file the same day in `111d8c9`, never rotated.
+Rotation is scheduled after the 2026-10-01 meeting, because it means redeploying
+the recording's workspaces. History is not rewritten: the docs cite commit
+hashes, and a rotated password is worthless.
+
+The same pass untracked two supervisor-meeting notes,
+`docs/presentation-2026-08-19.md` and `-08-26.md`, that `.gitignore` already says
+are never committed; they predate the rule. They remain in history.

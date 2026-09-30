@@ -35,6 +35,11 @@ def _host_paths(service):
 
 def test_papi_bind_mount_sources_exist(root, compose):
     compose_dir = root / "compose"
+    # The sources are rendered, generated or issued on the machine that runs
+    # compose; a fresh clone (CI) has none of them. Same rule as the tests that
+    # skip without vendor/ or build/.
+    if not (compose_dir / "generated").is_dir():
+        pytest.skip("compose/generated absent: run scripts/render-configs.sh on the compose host")
     missing = []
     for name, service in compose["services"].items():
         for src in _host_paths(service):

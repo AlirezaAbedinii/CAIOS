@@ -153,6 +153,8 @@ def test_every_card_asks_for_a_logo_that_exists(root, catalogue):
         if not (logos / f"{f}_logo.png").is_file()
         and not (upstream / f"{f}_logo.png").is_file()
     ]
+    if missing and not upstream.is_dir():
+        pytest.skip(f"vendor/ai4-dashboard not cloned: cannot check upstream's logos for {missing}")
     assert not missing, (
         f"no card logo for {missing}. Generate them with "
         f"scripts/make-brand-assets.py, or the cards render a broken image."

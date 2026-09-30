@@ -49,6 +49,24 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-30: the repository reads as a product, and checks for secrets
+
+- **README rewritten**, short: what CAIOS is, the demo, how it works (a Mermaid
+  diagram and three lines), a quick start. A 20-second preview loop at the top
+  and the narrated walkthrough playing inline (D-89). Logos in light and dark,
+  drawn in the dashboard's typeface.
+- **`docs/README.md`** indexes the documents. **`SECURITY.md`** and
+  **`CONTRIBUTING.md`** are new.
+- **`scripts/check-secrets.sh`**, the pre-push hook in `.githooks/`, and a CI job
+  (D-90). First run: gitleaks clean over 136 commits, no sensitive file tracked,
+  and one warning: **`CAIOS_FL_IDE_PASSWORD` is in public history and still
+  live.** Rotate after the 2026-10-01 meeting.
+- **CI**: unit tests and the secrets check on every push. Two tests read files
+  only the compose host has, and now skip in a fresh clone the way the others
+  already do without `vendor/`: 285 pass there, all 361 on `caios_server`.
+
+---
+
 ## 2026-09-30, Step 7: the narrated recording is made
 
 **The walkthrough is recorded, narrated and captioned: 4:03.** It is made by a

@@ -1,129 +1,125 @@
-# CAIOS
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/caios-logo-dark.png">
+    <img alt="CAIOS, Canadian Artificial Intelligence Operating System" src="docs/assets/caios-logo-light.png" width="440">
+  </picture>
+</p>
 
-**Canadian Artificial Intelligence Operating System** — a private AI platform for medical
-and neuroscience research, running on a seven-node cluster on Compute Canada's Arbutus
-cloud. Researchers deploy a private language model with no code, run a model as a
-serverless service with little code, and write their own in JupyterLab notebooks — and
-the data stays in Canada.
+<p align="center">
+  <strong>Private AI infrastructure for medical and neuroscience research, operated in Canada.</strong>
+</p>
 
-Built on the open-source [AI4OS](https://docs.ai4os.eu/) stack. We deploy it and brand
-it; we do not fork it. Every change to upstream behaviour is either configuration in
-`configs/` or a reviewable patch in `patches/`.
+<p align="center">
+  <a href="https://github.com/AlirezaAbedinii/CAIOS/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/AlirezaAbedinii/CAIOS/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache_2.0-0b6c7c"></a>
+  <a href="https://github.com/ai4os"><img alt="Built on AI4OS" src="https://img.shields.io/badge/built_on-AI4OS-0b2027"></a>
+  <a href="https://github.com/AlirezaAbedinii/CAIOS/releases/tag/demo-2026-09"><img alt="Demo: four-minute walkthrough" src="https://img.shields.io/badge/demo-4_min_walkthrough-a8452c"></a>
+</p>
 
-The headline capability is **federated learning**: training a model across three
-simulated hospital sites where the data never leaves each site.
+<p align="center">
+  <a href="#demo"><img src="docs/assets/demo-preview.gif" width="880" alt="CAIOS in twenty seconds: a private language model, a serverless model, a JupyterLab workspace, and federated learning across three hospital sites"></a>
+</p>
 
----
+CAIOS gives research groups one place to build, train and use AI models without
+handing their data to a commercial service. It is a Canadian deployment of the
+open-source [AI4OS](https://docs.ai4os.eu/) stack on a GPU cluster on Compute
+Canada's Arbutus cloud, with a curated medical catalogue and federated learning
+across three simulated hospital sites.
 
-## The cluster
-
-Seven nodes on Arbutus, measured 2026-09-27. Six carry one slice of an NVIDIA H100
-(`H100L-1-12C`, 12 GB); four of those run user work.
-
-| Node | vCPU | RAM | GPU | Role |
-|---|---|---|---|---|
-| `caios_server` | 3 | 34 GB | 1 slice | Control plane: Nomad and Consul servers, Keycloak, Vault, PAPI, dashboard |
-| `caios_edge` | 3 | 34 GB | 1 slice | Ingress: Traefik, one subdomain per deployment |
-| `caios_site_a`, `_b`, `_c` | 3 each | 34 GB each | 1 slice each | GPU compute — the three "hospital sites" |
-| `caios_llm` | 3 | 34 GB | 1 slice | GPU compute — private language models |
-| `caios_oscar` | 16 | 58 GB | — | Serverless inference: Kubernetes (K3s), OSCAR, MinIO |
-
-A separate proxy VM holds the public address. How it all fits together, and why:
-[docs/infrastructure.md](docs/infrastructure.md).
-
----
-
-## Start here
-
-| If you want to | Read |
+| | |
 |---|---|
-| Understand the seven nodes and how they fit together | [docs/infrastructure.md](docs/infrastructure.md) |
-| Know what we are working on now | [docs/demo-plan.md](docs/demo-plan.md) |
-| Know why something is the way it is | [docs/decisions.md](docs/decisions.md) |
-| Know exactly what is in MVP and what is V1 | [docs/scope.md](docs/scope.md) |
-| See what has actually been done so far | [docs/progress.md](docs/progress.md) |
-| Understand Nomad, Consul and Traefik | [docs/concepts.md](docs/concepts.md) |
-| Operate or debug a running cluster | [docs/runbook.md](docs/runbook.md) |
-| Give the cluster SSH access to itself | [docs/ssh-setup.md](docs/ssh-setup.md) |
+| **No code** | Pick an open language model from the catalogue, fill in a short form, and chat with it at its own private address. |
+| **Low code** | Publish a model as a serverless endpoint that only runs when a request arrives. |
+| **High code** | Open the same model as a JupyterLab workspace, with its own code and environment. |
+| **Federated learning** | Train one model across three hospital sites. Each site's scans stay on its own machine; only model weights move. |
 
----
+## Demo
 
-## Getting from here to a running cluster
+https://github.com/user-attachments/assets/49959347-6380-4238-ae78-7c371c5055c3
 
-The sequence that built this cluster, and rebuilds it from scratch.
+A four-minute narrated walkthrough, recorded on the live platform. Full-resolution
+files and captions are on the [release page](https://github.com/AlirezaAbedinii/CAIOS/releases/tag/demo-2026-09),
+and every word is in the [transcript](demo/recording/transcript.md). The video is
+made by a script, so any beat can be re-recorded with one command
+([how](demo/recording/README.md)).
+
+Measured on this cluster, brain tumour MRI classification: **0.853** accuracy
+federated across the three sites, against **0.806** for the best hospital on its
+own and **0.865** with every scan pooled centrally ([how](demo/fl/README.md)).
+
+## How it works
+
+```mermaid
+flowchart LR
+    R([Researcher]) --> P[Public proxy]
+    P --> C[Caddy]
+    P --> T[Traefik<br/>a subdomain per deployment]
+    subgraph CP [Control plane]
+        C --> D[Dashboard]
+        C --> A[PAPI<br/>platform API]
+        C --> K[Keycloak<br/>sign-in, approval]
+        A --> N[Nomad and Consul]
+    end
+    N --> H[Three hospital sites<br/>workspaces, federated clients]
+    N --> L[LLM node<br/>vLLM, Open WebUI]
+    A --> O[OSCAR on K3s<br/>serverless]
+    T --> H
+    T --> L
+```
+
+- **Nomad, not Kubernetes.** Every deployment is a Nomad job rendered by PAPI, the
+  platform API. PAPI is the only component holding cluster credentials, and the
+  dashboard talks only to PAPI.
+- **Seven VMs on Arbutus.** A control plane, an ingress node, three hospital sites
+  and an LLM node, each with a slice of an NVIDIA H100, plus a 16-core node for
+  serverless inference.
+- **Upstream, not a fork.** Every change to AI4OS is configuration in `configs/` or
+  a documented patch in `patches/`, applied to pinned upstream sources.
+
+More in [infrastructure](docs/infrastructure.md), [concepts](docs/concepts.md) and
+[decisions](docs/decisions.md).
+
+## Quick start
+
+CAIOS runs on OpenStack VMs (Ubuntu 22.04, from a GPU-enabled snapshot) and is
+deployed from the control-plane node, which needs SSH access to the others
+([setup](docs/ssh-setup.md)).
 
 ```bash
-# 0. One-time: give caios_server SSH access to the others (docs/ssh-setup.md)
-bash scripts/check-ssh.sh
+git clone https://github.com/AlirezaAbedinii/CAIOS.git && cd CAIOS
+cp configs/env/caios.env.template configs/env/caios.env   # hosts, domain, secrets
 
-# 1. Pin and fetch upstream (read-only, into vendor/)
-bash scripts/clone-vendor.sh
-
-# 2. Apply our patches into build/ — vendor/ is never modified
-bash scripts/apply-patches.sh
-
-# 3. Render config templates that need the real hostnames
+bash scripts/clone-vendor.sh        # pinned upstream, read-only, into vendor/
+bash scripts/apply-patches.sh       # our patches, into build/
 bash scripts/render-configs.sh
-
-# 4. Wildcard certificate for deployments
 bash scripts/make-traefik-certs.sh
 
-# 5. Cluster.  WARNING: playbook-nomad.yml reformats /dev/vdb on the three
-#    site nodes, erasing their /mnt. See ansible/inventory/hosts.ini.
-cd ansible
-ansible-galaxy install grycap.docker
-ansible-playbook playbook-control-plane.yml   # Docker on caios_server
-ansible-playbook playbook-consul.yml
-ansible-playbook playbook-nomad.yml
-cd ..
+cd ansible && ansible-galaxy install grycap.docker
+ansible-playbook playbook-control-plane.yml playbook-consul.yml playbook-nomad.yml
+cd .. && bash scripts/verify-cluster.sh   # can the cluster schedule anything?
 
-# 6. Confirm the cluster can actually schedule anything
-bash scripts/verify-cluster.sh
-
-# 7. Control plane
 bash scripts/build-dashboard.sh
 cd compose && docker compose --env-file ../configs/env/caios.env up -d
 ```
 
----
+> [!WARNING]
+> `playbook-nomad.yml` formats `/dev/vdb` on the three site nodes, erasing their
+> `/mnt`. Read `ansible/inventory/hosts.ini` first.
 
-## Layout
+Then sign in to the dashboard and deploy from the catalogue. The
+[runbook](docs/runbook.md) covers day-to-day operation and the federated demo, and
+`bash scripts/run-tests.sh` runs the unit tests offline.
 
-```
-ansible/       Inventory, group_vars and playbook entrypoints for the cluster
-compose/       Docker Compose control plane: Keycloak, Vault, PAPI, dashboard, Caddy
-configs/       Config we own, copied out of upstream and edited: PAPI, dashboard, Keycloak
-patches/       Upstream source edits that cannot be configuration, each one explained
-nomad-jobs/    Hand-written jobs, starting with the Stage 1 smoke test
-catalog/       Curated medical module list
-demo/          The federated learning demo, the high-code notebook, module test results
-docs/          Infrastructure, plan, decisions, runbook
-scripts/       Re-runnable helpers — pinning, patching, rendering, certs, verification
-vendor/        Upstream clones. Read-only, gitignored. Never edit anything here.
-build/         Patched copies of upstream. Disposable, gitignored.
-```
+## Documentation
 
----
+[Runbook](docs/runbook.md) · [Infrastructure](docs/infrastructure.md) ·
+[Decisions](docs/decisions.md) · [Demo script](docs/demo-script.md) ·
+[All documents](docs/README.md) · [Contributing](CONTRIBUTING.md) ·
+[Security](SECURITY.md)
 
-## Two things worth knowing before you debug anything
+## License
 
-**PAPI is the only component holding Nomad credentials.** If it is misconfigured, the
-dashboard still renders perfectly and every button fails quietly. Check PAPI first.
-
-**A Nomad node reporting `ready` tells you almost nothing.** Every deployment is
-constrained on `meta.status=ready`, `meta.type=compute`, a matching `meta.namespace` and
-`region = "global"`. A node failing any of them looks healthy and silently never receives
-work. `scripts/verify-cluster.sh` checks all four in one go, and is the right first move
-whenever a job is stuck pending.
-
----
-
-## Licence
-
-CAIOS is licensed under the **Apache License 2.0** — see [`LICENSE`](LICENSE).
-
-It deploys the [AI4OS](https://github.com/ai4os) stack, which is Apache-2.0 as
-well; [`NOTICE`](NOTICE) carries the required attribution and names `patches/` as
-this project's statement of changes. `docs/licensing.md` explains what is
-inherited, what is required, and what the catalogue's models are licensed under
-— which is **not** this licence, and varies per model.
+Apache 2.0, see [LICENSE](LICENSE). CAIOS is a project of PACS Lab, York
+University, built on [AI4OS](https://github.com/ai4os) by the AI4EOSC project,
+also Apache 2.0; [NOTICE](NOTICE) carries the attribution. Models in the catalogue
+keep their own licences ([details](docs/licensing.md)).

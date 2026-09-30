@@ -49,23 +49,12 @@ own and **0.865** with every scan pooled centrally ([how](demo/fl/README.md)).
 
 ## How it works
 
-```mermaid
-flowchart LR
-    R([Researcher]) --> P[Public proxy]
-    P --> C[Caddy]
-    P --> T[Traefik<br/>a subdomain per deployment]
-    subgraph CP [Control plane]
-        C --> D[Dashboard]
-        C --> A[PAPI<br/>platform API]
-        C --> K[Keycloak<br/>sign-in, approval]
-        A --> N[Nomad and Consul]
-    end
-    N --> H[Three hospital sites<br/>workspaces, federated clients]
-    N --> L[LLM node<br/>vLLM, Open WebUI]
-    A --> O[OSCAR on K3s<br/>serverless]
-    T --> H
-    T --> L
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.png">
+    <img alt="Architecture: a researcher reaches a public proxy, which routes the dashboard, API and sign-in to the control plane (Dashboard, PAPI, Nomad and Consul, Keycloak, Vault, Caddy) and deployments to Traefik; PAPI schedules jobs on the compute nodes: three hospital sites joined by federated learning, an LLM node, and a serverless node" src="docs/assets/architecture-light.png" width="880">
+  </picture>
+</p>
 
 - **Nomad, not Kubernetes.** Every deployment is a Nomad job rendered by PAPI, the
   platform API. PAPI is the only component holding cluster credentials, and the

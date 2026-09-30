@@ -53,7 +53,7 @@ case "${1:-}" in
     readme-media)
         recorder python3 readme_media.py "${@:2}"
         mkdir -p "$ROOT/docs/assets"
-        for f in demo-preview.gif caios-logo-light.png caios-logo-dark.png; do
+        for f in demo-preview.gif caios-logo-light.png caios-logo-dark.png architecture-light.png architecture-dark.png; do
             [[ -f "$HERE/out/final/$f" ]] && cp "$HERE/out/final/$f" "$ROOT/docs/assets/"
         done
         true

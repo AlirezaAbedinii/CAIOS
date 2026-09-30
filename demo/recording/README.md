@@ -34,7 +34,8 @@ What comes out, in `out/final/` (gitignored, like everything in `out/`):
 and `transcript.md` here, committed, with each line's timecode.
 
 `readme-media` also writes `docs/assets/demo-preview.gif` (the README's 20-second
-loop, one labelled moment per tier), the two README logos, and
+loop, one labelled moment per tier), the two README logos, the architecture
+diagram (`cards/architecture.html`, light and dark), and
 `out/final/caios-demo-720p.mp4`: the captioned video under 10 MB. GitHub plays a
 video inline in a README only when it was uploaded through its own editor, and
 caps that upload at 10 MB, so that file is what goes in: open the release's edit

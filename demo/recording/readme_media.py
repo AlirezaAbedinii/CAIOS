@@ -7,6 +7,7 @@ Runs in the caios/recorder image, after assemble.py:
 Writes (run.sh copies the logo and preview into docs/assets/ afterwards,
 because the container sees the rest of the repository read-only)
     out/final/caios-logo-{light,dark}.png   the README header
+    out/final/architecture-{light,dark}.png the README's How it works diagram
     out/final/demo-preview.gif        about 20 s, silent, one labelled moment per tier
     out/final/caios-demo-720p.mp4     the narrated walkthrough with captions burned
                                       in, under 10 MB, the most GitHub's editor
@@ -65,23 +66,34 @@ def preview():
     print(f"  {GIF.relative_to(WORK)}  {GIF.stat().st_size / 1e6:.1f} MB")
 
 
-def logo():
-    """The README header, light and dark, drawn with the dashboard's typeface."""
+def draw(card, name, width):
+    """A card from cards/, light and dark, at 2x, on a transparent background."""
     import asyncio
     from playwright.async_api import async_playwright
 
-    async def draw():
+    async def go():
         async with async_playwright() as pw:
             browser = await pw.chromium.launch()
-            page = await browser.new_page(device_scale_factor=2, viewport={"width": 900, "height": 200})
+            page = await browser.new_page(device_scale_factor=2, viewport={"width": width, "height": 400})
             for theme in ("light", "dark"):
-                await page.goto(f"file://{WORK}/cards/logo.html?theme={theme}")
-                await page.wait_for_timeout(400)
-                dst = OUT / "final" / f"caios-logo-{theme}.png"
+                await page.goto(f"file://{WORK}/cards/{card}?theme={theme}")
+                await page.evaluate("document.fonts.ready")
+                await page.wait_for_timeout(500)
+                dst = OUT / "final" / f"{name}-{theme}.png"
                 await page.locator("body").screenshot(path=str(dst), omit_background=True)
                 print(f"  {dst.relative_to(WORK)}")
             await browser.close()
-    asyncio.run(draw())
+    asyncio.run(go())
+
+
+def logo():
+    """The README header, drawn with the dashboard's typeface."""
+    draw("logo.html", "caios-logo", 900)
+
+
+def architecture():
+    """The README's How it works diagram."""
+    draw("architecture.html", "architecture", 1240)
 
 
 def light():
@@ -103,9 +115,11 @@ def light():
 
 
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["logo", "preview", "light"]
+    which = sys.argv[1:] or ["logo", "architecture", "preview", "light"]
     if "logo" in which:
         logo()
+    if "architecture" in which:
+        architecture()
     if "preview" in which:
         preview()
     if "light" in which:

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CAIOS architecture</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  /* Rendered to docs/assets/architecture-{light,dark}.png by readme_media.py.
+     ?theme=dark switches palettes. The page background is transparent; label
+     chips use GitHub's own page colour so a line appears to pass behind them. */
+  body.light {
+    --page: #ffffff; --panel: #f7f5f2; --panel-line: rgba(11, 32, 39, 0.14);
+    --card: #ffffff; --card-line: rgba(11, 32, 39, 0.16); --ink: #0b2027; --ink-2: #3d545a;
+    --ink-3: #6e858a; --accent: #0b6c7c; --accent-soft: rgba(11, 108, 124, 0.08);
+    --wire: #6e858a; --warm: #a8452c; --warm-soft: rgba(168, 69, 44, 0.07);
+  }
+  body.dark {
+    --page: #0d1117; --panel: #111820; --panel-line: #263039;
+    --card: #161d25; --card-line: #2b3640; --ink: #e6edf3; --ink-2: #aab8c2;
+    --ink-3: #7d8d99; --accent: #37cfe4; --accent-soft: rgba(55, 207, 228, 0.10);
+    --wire: #7d8d99; --warm: #e0876b; --warm-soft: rgba(224, 135, 107, 0.08);
+  }
+  html, body { background: transparent; overflow: visible; height: auto; }
+  body { width: 1200px; padding: 20px; color: var(--ink); position: relative; }
+  #stage { position: relative; width: 1160px; }
+  svg#wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+
+  .row { display: flex; justify-content: center; }
+  .gap-s { height: 46px; } .gap-m { height: 64px; }
+
+  .node { background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
+          padding: 12px 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  .node b { display: block; font-size: 15px; font-weight: 600; letter-spacing: 0.005em; }
+  .node span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+  .node.entry { display: flex; align-items: center; gap: 12px; padding: 12px 20px; }
+  .node.entry svg { width: 22px; height: 22px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.8;
+                    stroke-linecap: round; stroke-linejoin: round; }
+  .node.key { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--card); }
+
+  .panel { background: var(--panel); border: 1px solid var(--panel-line); border-radius: 14px; padding: 16px 18px 18px; }
+  .panel header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+  .host { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+
+  .tier { display: grid; grid-template-columns: 760px 1fr; gap: 24px; }
+  .cp-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 34px; }
+  .cp-row + .cp-row { margin-top: 12px; }
+  .cp-row.services { grid-template-columns: 1fr 1fr 1fr; }
+  .note { font-size: 12px; color: var(--ink-3); line-height: 1.4; }
+
+  .compute { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 14px; }
+  .compute .node b { font-size: 14.5px; }
+  .compute .node i { display: block; margin-top: 8px; font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .fed { position: relative; grid-column: 1 / span 3; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+         border: 1.5px dashed var(--warm); border-radius: 12px; padding: 30px 10px 10px; background: var(--warm-soft); }
+  .solo { grid-column: 4 / span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+          border: 1.5px solid transparent; padding: 30px 0 10px; }
+  .fed-label { position: absolute; top: 8px; left: 12px; font-family: var(--mono); font-size: 11px;
+               letter-spacing: 0.14em; text-transform: uppercase; color: var(--warm); }
+  .gpu { margin-top: 12px; display: flex; gap: 22px; }
+  .gpu .note::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+                       margin-right: 7px; background: var(--accent); vertical-align: 1px; }
+  .gpu .note.warm::before { background: transparent; border: 1.5px dashed var(--warm); width: 7px; height: 7px; }
+
+  .label { position: absolute; transform: translate(-50%, -50%); background: var(--page); padding: 2px 8px;
+           font-family: var(--mono); font-size: 11px; color: var(--ink-2); white-space: nowrap; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="wires" aria-hidden="true">
+    <defs>
+      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--wire)"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <div class="row">
+    <div class="node entry" id="user">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+      <div><b>Researcher</b><span>any browser, or code in a notebook</span></div>
+    </div>
+  </div>
+  <div class="gap-s"></div>
+  <div class="row">
+    <div class="node entry" id="proxy">
+      <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+      <div><b>Public proxy</b><span>one public address, TLS</span></div>
+    </div>
+  </div>
+  <div class="gap-m"></div>
+
+  <div class="tier">
+    <section class="panel" id="cp">
+      <header><span class="kicker">Control plane</span><span class="host">caios_server</span></header>
+      <div class="cp-row">
+        <div class="node" id="dash"><b>Dashboard</b><span>Angular; talks only to PAPI</span></div>
+        <div class="node key" id="papi"><b>PAPI</b><span>platform API; the only holder of cluster credentials</span></div>
+        <div class="node" id="nomad"><b>Nomad and Consul</b><span>schedule and discover every deployment</span></div>
+      </div>
+      <div class="cp-row services">
+        <div class="node" id="kc"><b>Keycloak</b><span>sign-in, registration, approval</span></div>
+        <div class="node" id="vault"><b>Vault</b><span>secrets that deployments are issued</span></div>
+        <div class="node" id="caddy"><b>Caddy</b><span>the private entry point for all four</span></div>
+      </div>
+    </section>
+    <section class="panel" id="ingress">
+      <header><span class="kicker">Ingress</span><span class="host">caios_edge</span></header>
+      <div class="node" id="traefik"><b>Traefik</b><span>one subdomain for every deployment, from its Consul entry</span></div>
+      <p class="note" style="margin-top:12px">Every workspace, chat and model API gets its own address, created and removed with the deployment.</p>
+    </section>
+  </div>
+
+  <div class="gap-m"></div>
+
+  <section class="panel" id="compute">
+    <header><span class="kicker">Compute</span><span class="host">Nomad clients, and one K3s node</span></header>
+    <div class="compute">
+      <div class="fed">
+        <span class="fed-label">Federated learning: weights move, data does not</span>
+        <div class="node" id="sa"><b>Hospital site A</b><span>JupyterLab workspaces, federated client, its own data</span><i>caios_site_a</i></div>
+        <div class="node" id="sb"><b>Hospital site B</b><span>JupyterLab workspaces, federated client, its own data</span><i>caios_site_b</i></div>
+        <div class="node" id="sc"><b>Hospital site C</b><span>JupyterLab workspaces, federated client, its own data</span><i>caios_site_c</i></div>
+      </div>
+      <div class="solo">
+      <div class="node" id="llm"><b>LLM node</b><span>vLLM engine and Open WebUI chat, private to the cluster</span><i>caios_llm</i></div>
+      <div class="node" id="oscar"><b>Serverless node</b><span>OSCAR on K3s, called through PAPI; runs a model only on request</span><i>caios_oscar</i></div>
+      </div>
+    </div>
+    <div class="gpu">
+      <span class="note">four GPU nodes, each with a slice of an NVIDIA H100</span>
+      <span class="note warm">a federated server combines their updates; no site sees another's data</span>
+    </div>
+  </section>
+</div>
+
+<script>
+  document.body.className = new URLSearchParams(location.search).get('theme') || 'light';
+  const stage = document.getElementById('stage');
+  const svg = document.getElementById('wires');
+  const R = 10;
+  const box = (id) => {
+    const s = stage.getBoundingClientRect(), r = document.getElementById(id).getBoundingClientRect();
+    return {l: r.left - s.left, r: r.right - s.left, t: r.top - s.top, b: r.bottom - s.top,
+            cx: (r.left + r.right) / 2 - s.left, cy: (r.top + r.bottom) / 2 - s.top};
+  };
+  const path = (d, dashed) => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'var(--wire)');
+    p.setAttribute('stroke-width', '1.6'); p.setAttribute('marker-end', 'url(#head)');
+    if (dashed) p.setAttribute('stroke-dasharray', '4 4');
+    svg.appendChild(p);
+  };
+  const label = (x, y, text) => {
+    const el = document.createElement('div'); el.className = 'label'; el.textContent = text;
+    el.style.left = x + 'px'; el.style.top = y + 'px'; stage.appendChild(el);
+  };
+  // Down from (x1, y1), across at yMid, down to (x2, y2), with rounded corners.
+  const elbow = (x1, y1, x2, y2, yMid) => {
+    if (Math.abs(x1 - x2) < 1) return `M ${x1} ${y1} L ${x2} ${y2}`;
+    const dir = x2 > x1 ? 1 : -1;
+    return `M ${x1} ${y1} L ${x1} ${yMid - R} Q ${x1} ${yMid} ${x1 + dir * R} ${yMid} ` +
+           `L ${x2 - dir * R} ${yMid} Q ${x2} ${yMid} ${x2} ${yMid + R} L ${x2} ${y2}`;
+  };
+  const across = (a, b) => {
+    const A = box(a), B = box(b), y = A.cy;
+    path(`M ${A.r + 4} ${y} L ${B.l - 4} ${y}`);
+  };
+
+  document.fonts.ready.then(() => {
+    const u = box('user'), p = box('proxy'), cp = box('cp'), ing = box('ingress'), c = box('compute');
+    const nomad = box('nomad'), traefik = box('traefik'), papi = box('papi'), oscar = box('oscar'), llm = box('llm');
+
+    path(`M ${u.cx} ${u.b + 3} L ${p.cx} ${p.t - 3}`);
+    label(u.cx, (u.b + p.t) / 2, 'HTTPS');
+
+    const split = (p.b + cp.t) / 2;
+    const cpx = box('dash').cx;
+    path(elbow(p.cx, p.b + 3, cpx, cp.t - 3, split));
+    path(elbow(p.cx, p.b + 3, ing.cx, ing.t - 3, split));
+    label((p.cx + cpx) / 2, split, 'dashboard, API, sign-in');
+    label((p.cx + ing.cx) / 2 + 20, split, 'deployments, by subdomain');
+
+    across('dash', 'papi');
+    across('papi', 'nomad');
+
+    const low = (cp.b + c.t) / 2;
+    path(`M ${nomad.cx} ${cp.b + 3} L ${nomad.cx} ${c.t - 3}`);
+    label(nomad.cx, low, 'schedules jobs');
+    path(`M ${traefik.cx} ${ing.b + 3} L ${traefik.cx} ${c.t - 3}`);
+    label(traefik.cx, low, 'routes traffic');
+
+    svg.setAttribute('viewBox', `0 0 ${stage.offsetWidth} ${stage.offsetHeight}`);
+    document.body.dataset.ready = '1';
+  });
+</script>
+</body>
+</html>

@@ -35,7 +35,7 @@ across three simulated hospital sites.
 
 ## Demo
 
-https://github.com/user-attachments/assets/49959347-6380-4238-ae78-7c371c5055c3
+https://github.com/user-attachments/assets/f36b1e7f-66b1-4969-ad23-d51326ee3f9a
 
 A four-minute narrated walkthrough, recorded on the live platform. Full-resolution
 files and captions are on the [release page](https://github.com/AlirezaAbedinii/CAIOS/releases/tag/demo-2026-09),

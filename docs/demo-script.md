@@ -9,6 +9,10 @@ The three tiers use the home page's own words, under *How you work with it*:
 **No code**, **Low code**, **High code**. The recording shows each in turn,
 then federated learning, then where it all runs.
 
+**The narrated recording is made by `demo/recording/`** (its README says how).
+Its words are `demo/recording/narration.yaml`, the *Say* blocks below revised
+for a synthetic voice, and its transcript is `demo/recording/transcript.md`.
+
 Setup that is not specific to the recording lives in `docs/runbook.md`. The
 25-minute live walkthrough this replaces is in git history:
 `git show 2370f10:docs/demo-script.md`. Its questions section is carried over

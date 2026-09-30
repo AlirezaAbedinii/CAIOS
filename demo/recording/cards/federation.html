@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Federated learning</title>
+<link rel="stylesheet" href="card.css">
+<style>
+  body { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px; padding: 18px; }
+  .pane { display: flex; flex-direction: column; background: var(--console); border-radius: 4px; overflow: hidden;
+          box-shadow: 0 10px 30px rgba(11, 32, 39, 0.18); }
+  .bar { display: flex; align-items: baseline; gap: 12px; padding: 10px 16px 9px;
+         border-bottom: 1px solid rgba(163, 214, 224, 0.18); }
+  .bar b { font-weight: 500; color: var(--ink-lit); font-size: 16px; }
+  .bar span { font-family: var(--mono); font-size: 12.5px; color: var(--ink-lit-3); margin-left: auto; }
+  .bar .kind { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+               color: var(--accent-lit); }
+  .pane.server .bar .kind { color: #e8c170; }
+  iframe { flex: 1; border: 0; width: 100%; background: var(--console); padding: 8px 0 0 10px; }
+</style>
+</head>
+<body>
+  <script>
+    // ?p=<port>|<label>|<node>|<kind>, repeated, in order.
+    const q = new URLSearchParams(location.search);
+    for (const spec of q.getAll('p')) {
+      const [port, label, node, kind] = spec.split('|');
+      const el = document.createElement('div');
+      el.className = 'pane ' + kind;
+      el.innerHTML = `<div class="bar"><b></b><i class="kind"></i><span></span></div><iframe></iframe>`;
+      el.querySelector('b').textContent = label;
+      el.querySelector('.kind').textContent = kind === 'server' ? 'aggregates' : 'trains locally';
+      el.querySelector('span').textContent = node;
+      el.querySelector('iframe').src = 'http://127.0.0.1:' + port + '/';
+      el.querySelector('iframe').id = 'p' + port;
+      document.body.appendChild(el);
+    }
+  </script>
+</body>
+</html>

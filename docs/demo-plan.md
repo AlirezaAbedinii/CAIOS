@@ -182,7 +182,7 @@ What it changes about the steps:
 | 4 | Low code re-walked | the GUI guide followed literally, timings re-measured, guide fixed | **done 2026-09-27** — answers are JSON now; the browser walk is the rehearsal's |
 | 5 | Names and logos | `check-branding.sh` asserts the list in finding 6 on the served API; two modules dimmed | **done 2026-09-28** — what the demo's screens say is ours, checked in a browser |
 | 6 | The script | `docs/demo-script.md` rewritten around the three tiers, timed | **done 2026-09-29** — 329 words, 2:12 of speech; the pre-pull split by node role, and pinned |
-| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | **in progress** — the platform rehearsed end to end and staged for recording, 2026-09-29; the read-throughs and the takes are a person's |
+| 7 | Rehearse, then record | two timed read-throughs, the second with no correction | **recorded 2026-09-30**: `demo/recording/`, 4:03, narrated and captioned (D-88); a person watches it and chooses how CAIOS is said |
 
 Order, revised for the five-minute cut and then by step 3's spike: 0, 1, the
 step-3 spike, 2, the rest of 3, 4, 5, 6, **7**. Step 2 moved up because the

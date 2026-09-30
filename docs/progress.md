@@ -49,6 +49,52 @@ Two things a person still has to judge, which no script settles:
 
 ---
 
+## 2026-09-30, Step 7: the narrated recording is made
+
+**The walkthrough is recorded, narrated and captioned: 4:03.** It is made by a
+script, `demo/recording/`, on the live platform: a real Chromium on a virtual
+1080p display recorded by ffmpeg, a synthetic voice (Kokoro-82M, run on
+`caios_server`) reading `demo/recording/narration.yaml`, and an edit that cuts
+the waits and places each line where its cue landed. Output in
+`demo/recording/out/final/` (gitignored): the video with a switchable caption
+track, the same with captions burned in, and `.srt`/`.vtt`. The transcript,
+with timecodes, is `demo/recording/transcript.md`.
+
+Every beat of `docs/demo-script.md` is in it, done for real: a colleague signs
+up and is approved, the chat summarises the radiology note, one serverless
+request from a terminal, the YOLO notebook run cell by cell, ten federated
+rounds across the three hospital machines (sped up 2x), the chart, Statistics.
+Speech recognition on the finished voice track gives back the script almost
+word for word.
+
+**What recording it found:**
+
+- **"KAY-oss" is heard as "chaos".** Recognition wrote "This is chaos, the
+  Canadian...". The voice now spells C-A-I-O-S; how the team says it is a
+  person's decision (`demo/recording/README.md`, *Choices that are yours*).
+- **The 2B model sometimes declines the task.** One take in four answered
+  "as an AI model, I am unable to process radiology notes". The chat take now
+  checks the answer and retakes itself.
+- **Five things a visitor's browser shows that we did not choose**, hidden in
+  the recording and listed with their fixes in the README: AI4EOSC's Jenkins
+  badge reading *aborted* on the module page (and its README images, from
+  `raw.githubusercontent.com`), Open WebUI's update banner, a red tqdm warning
+  in the notebook. Two more are avoided rather than hidden: the Statistics
+  *Datacenters* map renders *API KEY REQUIRED* (tiles from `carto.com`), and a
+  pending user who opens a deploy page gets *No storage providers available*.
+  The deployments list's status badges also come from `img.shields.io`.
+- **The admin page names real people**, with their addresses, under
+  *Decided*. Blurred in the recording.
+
+**Left for a person:** watch it, choose how CAIOS is said, and decide whether
+the voice is good enough for the panel or a person should read
+`transcript.md` (the edit takes their WAVs line by line the same way).
+
+**Tests:** 361 unit (7 new, `tests/test_recording.py`: the narration, the
+takes' cues and the edit agree, and nothing spoken or shown has a dash).
+
+---
+
 ## 2026-09-29 — Step 7: the platform is rehearsed and staged for recording
 
 Everything in the script's checklist was done for real, as `researcher`:

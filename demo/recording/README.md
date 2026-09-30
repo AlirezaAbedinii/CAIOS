@@ -37,10 +37,11 @@ and `transcript.md` here, committed, with each line's timecode.
 loop, one labelled moment per tier), the two README logos, and
 `out/final/caios-demo-720p.mp4`: the captioned video under 10 MB. GitHub plays a
 video inline in a README only when it was uploaded through its own editor, and
-caps that upload at 10 MB, so that file is what goes in: drop it into a release's
-notes or an issue comment on github.com, and put the `user-attachments` link it
-produces on a line of its own in the README (D-89). The attachment stays private
-until something public references it, so publish the release first.
+caps that upload at 10 MB, so that file is what goes in: open the release's edit
+page on github.com, drop the file into its notes, save the release, and put the
+`user-attachments` link on a line of its own in the README (D-89). An attachment
+stays private until the form it was uploaded into is saved; one uploaded into a
+form that was abandoned answers 404 however many public pages link to it.
 
 ---
 

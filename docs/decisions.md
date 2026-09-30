@@ -1443,7 +1443,8 @@ link; it plays a video inline only when it was uploaded through its own editor,
 at most 10 MB. So the top of the README is a 20-second GIF, one labelled moment
 per tier, which moves before anyone presses anything, and the Demo section is
 the narrated walkthrough re-encoded at 720p to 9.3 MB and uploaded as an
-attachment. The 1080p files and captions are assets of the `demo-2026-09`
+attachment, in the release's own edit form: an upload stays private until the
+form it went into is saved, and linking it from the README does not change that. The 1080p files and captions are assets of the `demo-2026-09`
 release. Rejected: one GIF per tier (four loops of what the video already shows,
 about 12 MB of page, and a longer README), and committing the 1080p video
 (27 MB in history for ever, and it would still only render as a link).

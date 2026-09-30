@@ -11,7 +11,6 @@ the image of (D-86). `ansible/files/caios-pin.sh` is run here against a fake
 docker, because the real one is on the nodes.
 """
 
-import configparser
 import json
 import os
 import re
@@ -102,11 +101,24 @@ def test_no_llm_image_goes_to_a_hospital(by_role):
 # --- every node resolves to a role ----------------------------------------
 
 
+def inventory_group(path, group):
+    """The hosts of one INI inventory group: the first word of each line, as
+    Ansible reads it. configparser with a space delimiter parsed this until
+    Python 3.10.21 changed how it splits such a line."""
+    hosts, current = [], None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith((";", "#")):
+            continue
+        if line.startswith("["):
+            current = line.strip("[]")
+        elif current == group:
+            hosts.append(line.split()[0])
+    return hosts
+
+
 def test_every_gpu_node_has_a_list(root, play, by_role):
-    ini = configparser.ConfigParser(allow_no_value=True, delimiters=(" ",))
-    ini.optionxform = str
-    ini.read(root / "ansible/inventory/hosts.ini")
-    hosts = list(ini["nomad_gpu_clients"])
+    hosts = inventory_group(root / "ansible/inventory/hosts.ini", "nomad_gpu_clients")
     assert "caios_llm" in hosts and len(hosts) == 4
 
     # One line, not the whole file: all.yml carries tags only Ansible reads.

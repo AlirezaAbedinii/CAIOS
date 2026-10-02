@@ -115,6 +115,10 @@ def light():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["card"]:
+        # readme_media.py card <file.html> <output-name> <width>: any card, light and dark
+        draw(sys.argv[2], sys.argv[3], int(sys.argv[4]))
+        sys.exit(0)
     which = sys.argv[1:] or ["logo", "architecture", "preview", "light"]
     if "logo" in which:
         logo()

@@ -5,73 +5,87 @@
 <title>CAIOS architecture</title>
 <link rel="stylesheet" href="card.css">
 <style>
-  /* Rendered to docs/assets/architecture-{light,dark}.png by readme_media.py.
-     ?theme=dark switches palettes. The page background is transparent; label
-     chips use GitHub's own page colour so a line appears to pass behind them. */
+  /* Rendered to docs/assets/architecture-{light,dark}.png by readme_media.py;
+     ?theme=dark switches palettes. Drawn like a page of a printed manual rather
+     than an app screen: square corners, solid outlines, hard offset shadows,
+     tiers named by a solid tab, the federation on a hatched band, and plain
+     labels that knock out the line behind them. */
   body.light {
-    --page: #ffffff; --panel: #f7f5f2; --panel-line: rgba(11, 32, 39, 0.14);
-    --card: #ffffff; --card-line: rgba(11, 32, 39, 0.16); --ink: #0b2027; --ink-2: #3d545a;
-    --ink-3: #6e858a; --accent: #0b6c7c; --accent-soft: rgba(11, 108, 124, 0.08);
-    --wire: #6e858a; --warm: #a8452c; --warm-soft: rgba(168, 69, 44, 0.07);
+    --page: #ffffff; --panel: #f4f1ea; --dot: rgba(11, 32, 39, 0.13); --card: #ffffff;
+    --ink: #0b2027; --ink-2: #3d545a; --ink-3: #5f777c; --line: #0b2027; --shadow: #0b2027;
+    --tab: #0b2027; --on-tab: #ffffff; --accent: #0b6c7c; --on-accent: #ffffff;
+    --warm: #a8452c; --hatch: rgba(168, 69, 44, 0.16); --on-warm: #ffffff;
   }
   body.dark {
-    --page: #0d1117; --panel: #111820; --panel-line: #263039;
-    --card: #161d25; --card-line: #2b3640; --ink: #e6edf3; --ink-2: #aab8c2;
-    --ink-3: #7d8d99; --accent: #37cfe4; --accent-soft: rgba(55, 207, 228, 0.10);
-    --wire: #7d8d99; --warm: #e0876b; --warm-soft: rgba(224, 135, 107, 0.08);
+    --page: #0d1117; --panel: #111a21; --dot: rgba(230, 237, 243, 0.08); --card: #161d25;
+    --ink: #e6edf3; --ink-2: #b4c2cb; --ink-3: #8a9ba6; --line: #c9d4da; --shadow: #2c7d8b;
+    --tab: #e6edf3; --on-tab: #0d1117; --accent: #37cfe4; --on-accent: #0d1117;
+    --warm: #e0876b; --hatch: rgba(224, 135, 107, 0.16); --on-warm: #0d1117;
   }
   html, body { background: transparent; overflow: visible; height: auto; }
-  body { width: 1200px; padding: 20px; color: var(--ink); position: relative; }
-  #stage { position: relative; width: 1160px; }
+  body { width: 1200px; padding: 22px 22px 26px; color: var(--ink); position: relative; }
+  #stage { position: relative; width: 1156px; }
   svg#wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 
   .row { display: flex; justify-content: center; }
-  .gap-s { height: 46px; } .gap-m { height: 64px; }
+  .gap-s { height: 50px; } .gap-m { height: 74px; }
 
-  .node { background: var(--card); border: 1px solid var(--card-line); border-radius: 10px;
-          padding: 12px 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  .node b { display: block; font-size: 15px; font-weight: 600; letter-spacing: 0.005em; }
-  .node span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
-  .node.entry { display: flex; align-items: center; gap: 12px; padding: 12px 20px; }
-  .node.entry svg { width: 22px; height: 22px; flex: none; stroke: var(--accent); fill: none; stroke-width: 1.8;
-                    stroke-linecap: round; stroke-linejoin: round; }
-  .node.key { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--card); }
+  .node { position: relative; background: var(--card); border: 2px solid var(--line); border-radius: 0;
+          padding: 12px 16px 13px; box-shadow: 5px 5px 0 var(--shadow); }
+  .node b { display: block; font-family: 'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+            font-size: 18px; font-weight: 600; letter-spacing: 0.01em; line-height: 1.15; }
+  .node span { display: block; margin-top: 4px; font-size: 13px; color: var(--ink-2); line-height: 1.38; }
+  .node.entry { display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 18px; }
+  .node.entry svg { width: 24px; height: 24px; flex: none; stroke: var(--accent); fill: none; stroke-width: 2;
+                    stroke-linecap: square; stroke-linejoin: miter; }
+  .node.key { background: var(--accent); }
+  .node.key b, .node.key span { color: var(--on-accent); }
 
-  .panel { background: var(--panel); border: 1px solid var(--panel-line); border-radius: 14px; padding: 16px 18px 18px; }
-  .panel header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
-  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
-  .host { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .panel { position: relative; background-color: var(--panel); border: 2px solid var(--line); border-radius: 0;
+           background-image: radial-gradient(var(--dot) 1px, transparent 1.2px); background-size: 14px 14px;
+           padding: 34px 20px 22px; }
+  .panel header { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); display: flex;
+                  align-items: baseline; gap: 10px; background: var(--tab); color: var(--on-tab);
+                  padding: 6px 14px 6px; white-space: nowrap; }
+  .kicker { font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 14px; font-weight: 700;
+            letter-spacing: 0.1em; text-transform: uppercase; }
+  .host { font-family: 'IBM Plex Mono', monospace; font-size: 12px; opacity: 0.72; }
 
-  .tier { display: grid; grid-template-columns: 760px 1fr; gap: 24px; }
-  .cp-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 34px; }
-  .cp-row + .cp-row { margin-top: 12px; }
+  .tier { display: grid; grid-template-columns: 760px 1fr; gap: 30px; }
+  .cp-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; }
+  .cp-row + .cp-row { margin-top: 18px; }
   .cp-row.services { grid-template-columns: 1fr 1fr 1fr; }
-  .note { font-size: 12px; color: var(--ink-3); line-height: 1.4; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.45; }
 
-  .compute { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 14px; }
-  .compute .node b { font-size: 14.5px; }
-  .compute .node i { display: block; margin-top: 8px; font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
-  .fed { position: relative; grid-column: 1 / span 3; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
-         border: 1.5px dashed var(--warm); border-radius: 12px; padding: 30px 10px 10px; background: var(--warm-soft); }
-  .solo { grid-column: 4 / span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
-          border: 1.5px solid transparent; padding: 30px 0 10px; }
-  .fed-label { position: absolute; top: 8px; left: 12px; font-family: var(--mono); font-size: 11px;
-               letter-spacing: 0.14em; text-transform: uppercase; color: var(--warm); }
-  .gpu { margin-top: 12px; display: flex; gap: 22px; }
-  .gpu .note::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 2px;
-                       margin-right: 7px; background: var(--accent); vertical-align: 1px; }
-  .gpu .note.warm::before { background: transparent; border: 1.5px dashed var(--warm); width: 7px; height: 7px; }
+  .compute { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 18px; }
+  .compute .node b { font-size: 17px; }
+  .compute .node i { display: block; margin-top: 10px; font-style: normal; font-family: 'IBM Plex Mono', monospace;
+                     font-size: 11.5px; color: var(--ink-3); }
+  .fed { position: relative; grid-column: 1 / span 3; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px;
+         border: 2px solid var(--warm); padding: 30px 14px 16px;
+         background: repeating-linear-gradient(-45deg, var(--hatch) 0 2px, transparent 2px 9px); }
+  .solo { grid-column: 4 / span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+          border: 2px solid transparent; padding: 30px 0 16px; }
+  .fed-label { position: absolute; top: -13px; left: 14px; background: var(--warm); color: var(--on-warm);
+               padding: 4px 10px; font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 13px;
+               font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .gpu { margin-top: 18px; display: flex; gap: 30px; }
+  .gpu .note::before { content: ""; display: inline-block; width: 11px; height: 11px; margin-right: 8px;
+                       background: var(--accent); vertical-align: -1px; }
+  .gpu .note.warm::before { background: repeating-linear-gradient(-45deg, var(--warm) 0 1.5px, transparent 1.5px 4px);
+                            outline: 1.5px solid var(--warm); outline-offset: -1.5px; }
 
-  .label { position: absolute; transform: translate(-50%, -50%); background: var(--page); padding: 2px 8px;
-           font-family: var(--mono); font-size: 11px; color: var(--ink-2); white-space: nowrap; border-radius: 4px; }
+  .label { position: absolute; transform: translate(-50%, -50%); background: var(--page); padding: 1px 8px;
+           font-family: 'IBM Plex Sans Condensed', sans-serif; font-size: 14px; font-weight: 600;
+           color: var(--ink); white-space: nowrap; }
 </style>
 </head>
 <body>
 <div id="stage">
   <svg id="wires" aria-hidden="true">
     <defs>
-      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--wire)"/>
+      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)"/>
       </marker>
     </defs>
   </svg>
@@ -147,8 +161,8 @@
   };
   const path = (d, dashed) => {
     const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'var(--wire)');
-    p.setAttribute('stroke-width', '1.6'); p.setAttribute('marker-end', 'url(#head)');
+    p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'var(--line)');
+    p.setAttribute('stroke-width', '2.5'); p.setAttribute('stroke-linejoin', 'miter'); p.setAttribute('marker-end', 'url(#head)');
     if (dashed) p.setAttribute('stroke-dasharray', '4 4');
     svg.appendChild(p);
   };
@@ -156,40 +170,39 @@
     const el = document.createElement('div'); el.className = 'label'; el.textContent = text;
     el.style.left = x + 'px'; el.style.top = y + 'px'; stage.appendChild(el);
   };
-  // Down from (x1, y1), across at yMid, down to (x2, y2), with rounded corners.
-  const elbow = (x1, y1, x2, y2, yMid) => {
-    if (Math.abs(x1 - x2) < 1) return `M ${x1} ${y1} L ${x2} ${y2}`;
-    const dir = x2 > x1 ? 1 : -1;
-    return `M ${x1} ${y1} L ${x1} ${yMid - R} Q ${x1} ${yMid} ${x1 + dir * R} ${yMid} ` +
-           `L ${x2 - dir * R} ${yMid} Q ${x2} ${yMid} ${x2} ${yMid + R} L ${x2} ${y2}`;
-  };
+  // Down from (x1, y1), across at yMid, down to (x2, y2): square corners.
+  const elbow = (x1, y1, x2, y2, yMid) =>
+    Math.abs(x1 - x2) < 1 ? `M ${x1} ${y1} L ${x2} ${y2}` : `M ${x1} ${y1} L ${x1} ${yMid} L ${x2} ${yMid} L ${x2} ${y2}`;
   const across = (a, b) => {
     const A = box(a), B = box(b), y = A.cy;
-    path(`M ${A.r + 4} ${y} L ${B.l - 4} ${y}`);
+    path(`M ${A.r + 2} ${y} L ${B.l - 3} ${y}`);
   };
 
   document.fonts.ready.then(() => {
     const u = box('user'), p = box('proxy'), cp = box('cp'), ing = box('ingress'), c = box('compute');
     const nomad = box('nomad'), traefik = box('traefik'), papi = box('papi'), oscar = box('oscar'), llm = box('llm');
 
-    path(`M ${u.cx} ${u.b + 3} L ${p.cx} ${p.t - 3}`);
+    path(`M ${u.cx} ${u.b + 5} L ${p.cx} ${p.t - 3}`);
     label(u.cx, (u.b + p.t) / 2, 'HTTPS');
 
-    const split = (p.b + cp.t) / 2;
-    const cpx = box('dash').cx;
-    path(elbow(p.cx, p.b + 3, cpx, cp.t - 3, split));
-    path(elbow(p.cx, p.b + 3, ing.cx, ing.t - 3, split));
-    label((p.cx + cpx) / 2, split, 'dashboard, API, sign-in');
-    label((p.cx + ing.cx) / 2 + 20, split, 'deployments, by subdomain');
+    const split = (p.b + cp.t) / 2 - 6;
+    const tabTop = (id) => box(id).t - 15;
+    path(elbow(p.cx, p.b + 5, cp.cx, tabTop('cp') - 3, split));
+    path(elbow(p.cx, p.b + 5, ing.cx, tabTop('ingress') - 3, split));
+    label((p.cx + cp.cx) / 2, split, 'dashboard, API, sign-in');
+    label((p.cx + ing.cx) / 2, split, 'deployments, by subdomain');
 
     across('dash', 'papi');
     across('papi', 'nomad');
 
-    const low = (cp.b + c.t) / 2;
-    path(`M ${nomad.cx} ${cp.b + 3} L ${nomad.cx} ${c.t - 3}`);
+    // An arrow that lands where the compute tier's tab sits stops at the tab.
+    const tab = document.querySelector('#compute header').getBoundingClientRect(), st = stage.getBoundingClientRect();
+    const landing = (x) => (x > tab.left - st.left - 4 && x < tab.right - st.left + 4) ? tab.top - st.top - 3 : c.t - 3;
+    const low = (cp.b + landing(nomad.cx)) / 2;
+    path(`M ${nomad.cx} ${cp.b + 2} L ${nomad.cx} ${landing(nomad.cx)}`);
     label(nomad.cx, low, 'schedules jobs');
-    path(`M ${traefik.cx} ${ing.b + 3} L ${traefik.cx} ${c.t - 3}`);
-    label(traefik.cx, low, 'routes traffic');
+    path(`M ${traefik.cx} ${ing.b + 2} L ${traefik.cx} ${landing(traefik.cx)}`);
+    label(traefik.cx, (ing.b + landing(traefik.cx)) / 2, 'routes traffic');
 
     svg.setAttribute('viewBox', `0 0 ${stage.offsetWidth} ${stage.offsetHeight}`);
     document.body.dataset.ready = '1';

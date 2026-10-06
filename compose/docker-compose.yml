@@ -210,7 +210,7 @@ services:
         envsubst < etc/main_tmp.yaml > etc/main.yaml
         exec /root/.local/bin/ai4papi-run --host 127.0.0.1 --port 8000
     environment:
-      # NOT optional, and not what CLAUDE.md's gotcha 1 implies: PAPI's own
+      # NOT optional, although conf.py defaults it to false: PAPI's own
       # Dockerfile sets `ENV IS_PROD=True`. Leaving it "unset" in compose
       # inherits True from the image, and PAPI then refuses to start because
       # Harbor/Jenkins/provenance/LiteLLM tokens are missing — with an error

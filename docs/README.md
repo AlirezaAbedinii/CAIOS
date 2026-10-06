@@ -29,13 +29,7 @@
 | Document | What it is for |
 |---|---|
 | [decisions.md](decisions.md) | Every settled decision, with what was rejected (append-only) |
-| [progress.md](progress.md) | The running log of what was done and verified |
 
-## Plans
-
-Working plans, kept for the reasoning they record. The current one is
-[demo-plan.md](demo-plan.md); the next is [certificate-plan.md](certificate-plan.md).
-
-[mvp-plan.md](mvp-plan.md) · [llm-plan.md](llm-plan.md) · [llm-risks.md](llm-risks.md) ·
-[oscar-plan.md](oscar-plan.md) · [oscar-demo.md](oscar-demo.md) ·
-[frontend-plan.md](frontend-plan.md) · [finalization-plan.md](finalization-plan.md)
+The team's working plans and progress log are kept outside this repository.
+Where a comment cites one of them (`docs/demo-plan.md`, `docs/progress.md` and
+the like), the decision it records is in [decisions.md](decisions.md).

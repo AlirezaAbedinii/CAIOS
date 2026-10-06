@@ -71,7 +71,6 @@ bash scripts/check-llm-catalogue.sh          # all of them, about an hour
 bash scripts/check-llm-deploy.sh <model-id>  # just one
 ```
 
-`catalogue-results-BROKEN-HARNESS.tsv` is a first pass kept deliberately: it
-reported three healthy models as timeouts because the harness cached PAPI's
-endpoint while it still contained a literal `${meta.domain}`. Kept as a reminder
-that a red result is a claim about the test as much as about the thing tested.
+A first pass reported three healthy models as timeouts, because the harness
+cached PAPI's endpoint while it still contained a literal `${meta.domain}`. A
+red result is a claim about the test as much as about the thing tested.

@@ -1,4 +1,8 @@
-# CAIOS public edge on jump-server (FLOATING_IP=134.87.8.230).
+# CAIOS public edge on jump-server (FLOATING_IP=${CAIOS_PUBLIC_IP}).
+#
+# Saved off the proxy on 2026-09-23. The public IP is written as
+# ${CAIOS_PUBLIC_IP}; render-nginx-config.sh --diff and
+# tests/test_jumpserver_config.py fill it in from configs/env/caios.env.
 #
 # nginx terminates public TLS and forwards by Host: to Caddy (.181) and
 # Traefik (.105). Traefik's routes change with Nomad jobs — this file never
@@ -29,10 +33,10 @@ server {
     listen 443 ssl http2 default_server;
     listen [::]:443 ssl http2 default_server;
 
-    server_name dashboard.134.87.8.230.sslip.io
-                api.134.87.8.230.sslip.io
-                auth.134.87.8.230.sslip.io
-                vault.134.87.8.230.sslip.io;
+    server_name dashboard.${CAIOS_PUBLIC_IP}.sslip.io
+                api.${CAIOS_PUBLIC_IP}.sslip.io
+                auth.${CAIOS_PUBLIC_IP}.sslip.io
+                vault.${CAIOS_PUBLIC_IP}.sslip.io;
 
     ssl_certificate     /etc/nginx/certs/caios-public.pem;
     ssl_certificate_key /etc/nginx/certs/caios-public.key;

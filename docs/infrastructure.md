@@ -224,7 +224,7 @@ Full plan: `docs/oscar-plan.md`.
 
 Every hostname derives from `configs/env/caios.env`.
 
-**Changed 2026-08-25.** A floating IP (`134.87.8.230`) was attached to
+**Changed 2026-08-25.** A floating IP (`${CAIOS_PUBLIC_IP}`) was attached to
 `caios_server`, so the four control-plane hostnames now derive from
 `CAIOS_PUBLIC_IP` rather than from the private `CAIOS_CTRL_IP`. The private
 addresses are unchanged and still wire PAPI to Nomad over loopback.
@@ -232,10 +232,10 @@ See `docs/public-access.md`.
 
 | Hostname | Resolves to | Serves |
 |---|---|---|
-| `dashboard.134.87.8.230.sslip.io` | caios_server | The web UI |
-| `api.134.87.8.230.sslip.io` | caios_server | PAPI |
-| `auth.134.87.8.230.sslip.io` | caios_server | Keycloak |
-| `vault.134.87.8.230.sslip.io` | caios_server | Vault (admin only) |
+| `dashboard.${CAIOS_PUBLIC_IP}.sslip.io` | caios_server | The web UI |
+| `api.${CAIOS_PUBLIC_IP}.sslip.io` | caios_server | PAPI |
+| `auth.${CAIOS_PUBLIC_IP}.sslip.io` | caios_server | Keycloak |
+| `vault.${CAIOS_PUBLIC_IP}.sslip.io` | caios_server | Vault (admin only) |
 | `*.pacs-deployments.192.168.104.105.sslip.io` | caios_edge | **Every deployment** |
 
 ### Why hostnames at all, when everything is private

@@ -1,7 +1,7 @@
 # Decisions
 
-Append-only log. Newest at the bottom of each section. Claude Code should add an entry
-whenever it makes a choice future-us would want explained.
+Append-only log. Newest at the bottom of each section. Add an entry whenever a
+choice is made that future-us would want explained.
 
 Format: **D-nn** for settled, **Q-nn** for open.
 
@@ -422,8 +422,8 @@ outside, however tight the loop. See R-22.
 
 ## Settled on 2026-08-22 — carried over from Stage L4b
 
-Written in `docs/llm-plan.md` when L4b shipped and cited in `CLAUDE.md`, but
-never appended here. Recorded now so the numbering means something.
+Written in `docs/llm-plan.md` when L4b shipped and cited in the project notes,
+but never appended here. Recorded now so the numbering means something.
 
 **D-38 — `running` means "a user can open it", not "a container started".**
 Every readiness signal in this stack is about the first container, and this
@@ -455,7 +455,7 @@ correctly is a page that breaks in the room where we demo it. The analytics
 beacon (D-27) was the same argument about a different resource.
 
 The rule going forward: if the dashboard fetches it, we serve it. Gotcha 6 in
-`CLAUDE.md` lists the places upstream reaches out; `check-branding.sh` is where
+the project notes lists the places upstream reaches out; `check-branding.sh` is where
 a new one gets caught.
 
 **D-41 — An identifier is carried, never reconstructed.**
@@ -859,7 +859,7 @@ and a variable the federated bundles print was never defined.
 **D-77 — `caios_server` gets no SSH key on the proxy VM, and the proxy is
 therefore not Ansible-managed.**
 Every other machine in the architecture is configured by a playbook, and this
-one will not be. `134.87.8.230` is the jumpserver: humans reach every instance
+one will not be. `${CAIOS_PUBLIC_IP}` is the jumpserver: humans reach every instance
 through it, so it is the bastion, and trust flows one way by design. Giving
 `caios_server` a key there closes the loop — a bug in PAPI, Keycloak, Caddy or
 the dashboard would reach the cluster key, then the bastion, then everything
@@ -871,8 +871,8 @@ Restricting it (`from=`, `no-port-forwarding`, `no-agent-forwarding`) narrows
 it without changing the answer: an attacker holding `caios_server` is coming
 from exactly that address.
 
-CLAUDE.md prefers idempotent automation to hand-SSH, and that rule still
-holds inside the trust boundary. This is the boundary.
+`CONTRIBUTING.md` prefers idempotent automation to hand-SSH, and that rule
+still holds inside the trust boundary. This is the boundary.
 
 What replaces it costs little: `scripts/render-nginx-config.sh` generates the
 config from the same `CAIOS_PUBLIC_DOMAIN` everything else derives from, and
@@ -939,8 +939,8 @@ in a browser. And the scroll reveal was one browser away from a blank page:
 D-59 is that, generalised.
 
 **2026-08-12** — Verified all six upstream repositories at HEAD. Recorded D-10 through
-D-18, revised D-02, D-04 and D-06, and closed Q-01. Corrections to `CLAUDE.md` and
-the project notes made in the same change. Scaffold for MVP Stage 0 committed.
+D-18, revised D-02, D-04 and D-06, and closed Q-01. Corrections to the project
+notes made in the same change. Scaffold for MVP Stage 0 committed.
 
 **2026-08-15** — Stage 4 gate passed: a federated training across three hospital
 nodes, 0.853 against 0.806 for the best single site and 0.865 for pooling
@@ -1097,7 +1097,7 @@ The certificates and every certificate script stay in the tree for the same
 reason.
 
 **D-69 — There is a proxy VM, and `/etc/hosts` on `caios_server` hid it.**
-Found on 2026-09-02. `134.87.8.230` is a separate machine running nginx 1.18.0
+Found on 2026-09-02. `${CAIOS_PUBLIC_IP}` is a separate machine running nginx 1.18.0
 and is the public front door for both tiers. `docs/public-access.md` had said
 for a week that no such machine existed and that the floating IP DNATs straight
 to `caios_server`.
@@ -1465,3 +1465,35 @@ hashes, and a rotated password is worthless.
 The same pass untracked two supervisor-meeting notes,
 `docs/presentation-2026-08-19.md` and `-08-26.md`, that `.gitignore` already says
 are never committed; they predate the rule. They remain in history.
+
+**2026-10-06**: a tidy of the public tree. Recorded D-92.
+
+**D-92: The public tree holds how the platform works, not how the work went.**
+The working plans (`demo-plan`, `certificate-plan`, `finalization-plan`,
+`frontend-plan`, `llm-plan`, `llm-risks`, `mvp-plan`, `oscar-plan`,
+`oscar-demo`) and `progress.md` are gitignored, like `context.md` before them:
+kept on disk and shared between us directly. They were about 450 KB, and a
+visitor met them before the runbook. What they settled is recorded here.
+Comments elsewhere still cite them by path; `docs/README.md` says where those
+decisions went. Earlier versions remain in history, which is not rewritten
+(D-90).
+
+The public IP is `${CAIOS_PUBLIC_IP}` in the documentation and in the proxy
+config saved under `ops/jumpserver/`: the variable that holds it in
+`configs/env/caios.env`. The runbook's commands still run as written once that
+file is sourced, and `render-nginx-config.sh --diff` and
+`test_jumpserver_config.py` substitute the value before comparing, so the saved
+copy is still checked line for line. Two places still hold it, both on purpose:
+the inventory's `ansible_host`, because Ansible reads that file directly and
+`test_inventory.py` requires an address there, and every earlier commit. While
+`CAIOS_PUBLIC_DOMAIN` is an sslip.io name the IP is also part of every public
+hostname, so this keeps it out of the repository's prose, not out of the
+platform's URLs; the move to a real domain does that.
+
+The project notes are gitignored, so a citation of them by file name led
+nowhere; those now say "the project notes", or cite `CONTRIBUTING.md` where it
+states the same rule. And `demo/llm/catalogue-results-BROKEN-HARNESS.tsv` is
+removed. It was kept from 2026-08-20 as the record of a harness bug, but a file
+of wrong results with an unfinished-looking name reads as abandoned work to
+anyone who has not found the README paragraph that explains it. That paragraph
+keeps the lesson.

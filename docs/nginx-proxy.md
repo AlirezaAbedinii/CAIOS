@@ -1,6 +1,6 @@
 # The proxy VM — the public front door, and how to change it
 
-`134.87.8.230` is a **separate machine** running Ubuntu's nginx 1.18.0. It is
+`${CAIOS_PUBLIC_IP}` is a **separate machine** running Ubuntu's nginx 1.18.0. It is
 the public front door for the whole platform, and it is also the jumpserver:
 humans reach every instance through it over OpenVPN.
 
@@ -106,7 +106,7 @@ template is faithful before it is asked to carry a new name.
 From a workstation that already has jumpserver access:
 
 ```bash
-scp build/jumpserver/caios.conf ubuntu@134.87.8.230:/tmp/caios.conf
+scp build/jumpserver/caios.conf ubuntu@${CAIOS_PUBLIC_IP}:/tmp/caios.conf
 ```
 
 Then, on the proxy — back up, install, **test, and only then reload**:
@@ -194,7 +194,7 @@ gRPC.
 **This page used to say the federated demo was unaffected**, because its three
 clients run inside the cluster and reach Traefik directly. That was not
 measured, and it was wrong. The server's name is
-`fedserver-<uuid>.pacs-deployments.134.87.8.230.sslip.io`, and public DNS
+`fedserver-<uuid>.pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io`, and public DNS
 resolves it to this machine from everywhere, the hospital workspaces included.
 On 2026-09-29, the first federated run through the cluster since the
 deployment domain became public, every client came through here and had its

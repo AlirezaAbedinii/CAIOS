@@ -112,7 +112,9 @@ if [[ "${1:-}" == "--diff" ]]; then
     echo
     echo "=== vs $LIVE (directives only; comments differ by design) ==="
     strip() { grep -vE '^\s*#|^\s*$' "$1"; }
-    if diff -u <(strip "$LIVE") <(strip "$TARGET"); then
+    # The saved copy writes the public IP as ${CAIOS_PUBLIC_IP}, so it can be
+    # committed without it. Substitute that variable only, as above.
+    if diff -u <(envsubst '${CAIOS_PUBLIC_IP}' < "$LIVE" | strip /dev/stdin) <(strip "$TARGET"); then
         echo "identical — the template reproduces what is running"
     else
         echo

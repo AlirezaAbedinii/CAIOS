@@ -1,6 +1,6 @@
 """The proxy VM's nginx config is generated, and it reproduces what is running.
 
-C1 of docs/certificate-plan.md. 134.87.8.230 is the public front door for the
+C1 of docs/certificate-plan.md. The proxy VM is the public front door for the
 whole platform and was the only machine in the architecture configured by
 hand. These tests cover the two things that make generating it safe:
 
@@ -51,7 +51,14 @@ def test_it_reproduces_the_running_config(root):
     live = sorted((root / "ops" / "jumpserver").glob("caios.conf.live-*"))
     assert live, "no saved copy of the live config under ops/jumpserver/"
     rendered = _render(root)
-    assert _directives(rendered) == _directives(live[-1].read_text()), (
+    # The saved copy writes the public IP as ${CAIOS_PUBLIC_IP}, so that it
+    # can be committed without it.
+    public_ip = subprocess.run(
+        ["bash", "-c", 'set -a; . configs/env/caios.env; printf %s "$CAIOS_PUBLIC_IP"'],
+        cwd=root, capture_output=True, text=True, check=True).stdout
+    assert public_ip, "CAIOS_PUBLIC_IP is empty in configs/env/caios.env"
+    saved = live[-1].read_text().replace("${CAIOS_PUBLIC_IP}", public_ip)
+    assert _directives(rendered) == _directives(saved), (
         "the rendered config no longer matches what is running on the proxy. "
         "Run: bash scripts/render-nginx-config.sh --diff"
     )

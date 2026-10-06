@@ -20,13 +20,13 @@ Read with `docs/infrastructure.md` (what each node is) and `docs/runbook.md`
 > wrong when it was written.** The correction is below; the rest of this
 > document is accurate.
 
-There **is** a separate proxy VM. `134.87.8.230` is a machine of its own
+There **is** a separate proxy VM. `${CAIOS_PUBLIC_IP}` is a machine of its own
 running Ubuntu's nginx 1.18.0, and it is the public front door for both tiers.
 
 ```
                     Internet
                        │
-                134.87.8.230        ← a SEPARATE VM. nginx 1.18.0 (Ubuntu).
+              ${CAIOS_PUBLIC_IP}    ← a SEPARATE VM. nginx 1.18.0 (Ubuntu).
                        │              Not caios_server, not caios_edge, and
                        │              not configured from this repository.
                        │
@@ -50,8 +50,8 @@ running Ubuntu's nginx 1.18.0, and it is the public front door for both tiers.
 to `192.168.104.181`:
 
 ```
-192.168.104.181  dashboard.134.87.8.230.sslip.io api.134.87.8.230.sslip.io \
-                 auth.134.87.8.230.sslip.io vault.134.87.8.230.sslip.io
+192.168.104.181  dashboard.${CAIOS_PUBLIC_IP}.sslip.io api.${CAIOS_PUBLIC_IP}.sslip.io \
+                 auth.${CAIOS_PUBLIC_IP}.sslip.io vault.${CAIOS_PUBLIC_IP}.sslip.io
 ```
 
 So **every curl run from that node bypasses the proxy entirely** and talks to
@@ -63,8 +63,8 @@ Caddy was expected.
 To test what a visitor actually gets, force the resolution:
 
 ```bash
-curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
-     https://dashboard.134.87.8.230.sslip.io/ -o /dev/null
+curl -sD- --resolve dashboard.${CAIOS_PUBLIC_IP}.sslip.io:443:${CAIOS_PUBLIC_IP} \
+     https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/ -o /dev/null
 ```
 
 `Server: nginx/1.18.0 (Ubuntu)` means you reached the proxy. `Server: Caddy` or
@@ -75,7 +75,7 @@ The two machines are different — confirmed by SSH host key, which is the check
 that does not depend on any of the above:
 
 ```bash
-ssh-keyscan -t ed25519 134.87.8.230      # ...INamBkLeUhrl/t77MJv6kMi3A3U9…
+ssh-keyscan -t ed25519 ${CAIOS_PUBLIC_IP}      # ...INamBkLeUhrl/t77MJv6kMi3A3U9…
 ssh-keyscan -t ed25519 192.168.104.181   # ...IJWscFqCFhjQ2iXlTTx0SSN6omT1…
 ```
 
@@ -102,7 +102,7 @@ from it:
 ```bash
 CAIOS_CTRL_IP=192.168.104.181     # unchanged — PAPI still reaches Nomad here
 CAIOS_EDGE_IP=192.168.104.105     # unchanged
-CAIOS_PUBLIC_IP=134.87.8.230      # new
+CAIOS_PUBLIC_IP=<floating IP>     # new
 
 CAIOS_DASHBOARD_HOST=dashboard.${CAIOS_PUBLIC_IP}.sslip.io
 CAIOS_API_HOST=api.${CAIOS_PUBLIC_IP}.sslip.io
@@ -126,8 +126,8 @@ system:
 
 | Certificate | SANs |
 |---|---|
-| Control plane (Caddy, `.181`) | `dashboard/api/auth/vault.134.87.8.230.sslip.io`, `localhost`, IP `192.168.104.181`, IP `127.0.0.1` |
-| Deployment wildcard (Traefik, `.105`) | `*.pacs-deployments.134.87.8.230.sslip.io`, `pacs-deployments.134.87.8.230.sslip.io` |
+| Control plane (Caddy, `.181`) | `dashboard/api/auth/vault.${CAIOS_PUBLIC_IP}.sslip.io`, `localhost`, IP `192.168.104.181`, IP `127.0.0.1` |
+| Deployment wildcard (Traefik, `.105`) | `*.pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io`, `pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io` |
 
 ---
 
@@ -139,17 +139,17 @@ Verified by reading listening sockets and Traefik's live routing table.
 
 | Public hostname | → upstream | Service | Notes |
 |---|---|---|---|
-| `dashboard.134.87.8.230.sslip.io` | `127.0.0.1:8081` | Angular dashboard | Also serves `/caios-ca.pem` and `/fl/*` directly from Caddy |
-| `api.134.87.8.230.sslip.io` | `127.0.0.1:8000` | PAPI | Swagger at `/docs`. **PAPI emits its own CORS headers** — never add them in a proxy, duplicates are rejected by browsers |
-| `auth.134.87.8.230.sslip.io` | `127.0.0.1:8180` | Keycloak | Needs `X-Forwarded-Proto: https` or it mints `http://` issuers and everything 401s |
-| `vault.134.87.8.230.sslip.io` | `127.0.0.1:8200` | Vault | Admin only. **Consider whether this should be public at all** |
+| `dashboard.${CAIOS_PUBLIC_IP}.sslip.io` | `127.0.0.1:8081` | Angular dashboard | Also serves `/caios-ca.pem` and `/fl/*` directly from Caddy |
+| `api.${CAIOS_PUBLIC_IP}.sslip.io` | `127.0.0.1:8000` | PAPI | Swagger at `/docs`. **PAPI emits its own CORS headers** — never add them in a proxy, duplicates are rejected by browsers |
+| `auth.${CAIOS_PUBLIC_IP}.sslip.io` | `127.0.0.1:8180` | Keycloak | Needs `X-Forwarded-Proto: https` or it mints `http://` issuers and everything 401s |
+| `vault.${CAIOS_PUBLIC_IP}.sslip.io` | `127.0.0.1:8200` | Vault | Admin only. **Consider whether this should be public at all** |
 
 ### Tier 2 — Deployments · Traefik on `caios_edge`
 
 Dynamic: Traefik learns routes from Consul tags as Nomad jobs start and stop.
 
 ```
-*.pacs-deployments.134.87.8.230.sslip.io      ← what PAPI now issues
+*.pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io      ← what PAPI now issues
 *.pacs-deployments.192.168.104.105.sslip.io   ← what older deployments still carry
 ```
 
@@ -183,7 +183,7 @@ Dynamic: Traefik learns routes from Consul tags as Nomad jobs start and stop.
 **Only 80 and 443 should be reachable on the floating IP.** Check it:
 
 ```bash
-nmap -Pn -p 22,80,443,4646,8500,8200 134.87.8.230
+nmap -Pn -p 22,80,443,4646,8500,8200 ${CAIOS_PUBLIC_IP}
 ```
 
 ---
@@ -203,7 +203,7 @@ nmap -Pn -p 22,80,443,4646,8500,8200 134.87.8.230
 **The control plane is public and working. Deployments are not, and the reason
 is one missing site block.**
 
-PAPI now issues deployment URLs under `deployments.134.87.8.230.sslip.io`. That
+PAPI now issues deployment URLs under `deployments.${CAIOS_PUBLIC_IP}.sslip.io`. That
 name resolves to the floating IP, which DNATs to `caios_server` — where **Caddy
 has only the four fixed vhosts and nothing matching the wildcard**. Traefik,
 which does have the right routes and the right certificate, is on `caios_edge`
@@ -270,9 +270,9 @@ it.
 
 ```bash
 # deploy something new, then:
-bash scripts/deploy-fl-demo.sh --status     # endpoints should now read 134.87.8.230
+bash scripts/deploy-fl-demo.sh --status     # endpoints should now read ${CAIOS_PUBLIC_IP}
 curl -sS -o /dev/null -w 'HTTP %{http_code}\n' --cacert caios-ca.pem \
-  https://ide-<uuid>.pacs-deployments.134.87.8.230.sslip.io/
+  https://ide-<uuid>.pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io/
 ```
 
 WebSocket and SSE behaviour is worth checking explicitly, because both fail
@@ -306,7 +306,7 @@ platform is genuinely public it is the highest-value half-day left.
 
 ### Until then, visitors install the CA
 
-`https://dashboard.134.87.8.230.sslip.io/caios-ca.pem`, served by Caddy.
+`https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/caios-ca.pem`, served by Caddy.
 
 This is functional, not cosmetic: the dashboard is served from `dashboard.…`
 but calls `api.…` from JavaScript, and a background fetch cannot prompt for an
@@ -320,7 +320,7 @@ Firefox keeps its own trust store and needs a separate import.
 The threat model changed the moment the floating IP was attached. Previously
 everything was behind a VPN and the honest description was "nothing is exposed".
 
-- [ ] **Vault** — `vault.134.87.8.230.sslip.io` is publicly resolvable. It runs
+- [ ] **Vault** — `vault.${CAIOS_PUBLIC_IP}.sslip.io` is publicly resolvable. It runs
       in **dev mode**: in-memory, auto-unsealed, with a fixed root token
       (D-14). That was a reasonable choice for a VPN-only demo and is a
       different proposition on a public address. Either restrict it or move it
@@ -360,7 +360,7 @@ Either the visitor has not installed `caios-ca.pem`, or `API_SERVER` still
 points somewhere else. Check what the running page believes:
 
 ```bash
-curl -s https://dashboard.134.87.8.230.sslip.io/assets/config/config.json
+curl -s https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/assets/config/config.json
 ```
 
 `apiURL` must be public **and end in `/v1`**.
@@ -377,7 +377,7 @@ Issuer mismatch. The token records which Keycloak issued it and PAPI compares
 character by character; `http` vs `https` or a trailing slash is enough.
 
 **A deployment URL 404s.**
-If it is a *new* deployment on a `134.87.8.230` hostname, that is the gap above.
+If it is a *new* deployment on a `${CAIOS_PUBLIC_IP}` hostname, that is the gap above.
 If it is an *old* one, it still lives on its `192.168.104.105` hostname and is
 VPN-only until redeployed.
 

@@ -88,6 +88,20 @@ docs/presentation.md
 # repository documentation — they go stale the day after the meeting and
 # nothing in the build or the runbook reads them.
 docs/presentation-*.md
+# Working plans and the running progress log. Shared between us directly, not
+# through git: they record how the work went, not how the platform works. What
+# they settled is in docs/decisions.md. Untracked 2026-10-06, D-92; earlier
+# versions remain in history.
+docs/progress.md
+docs/demo-plan.md
+docs/certificate-plan.md
+docs/finalization-plan.md
+docs/frontend-plan.md
+docs/llm-plan.md
+docs/llm-risks.md
+docs/mvp-plan.md
+docs/oscar-plan.md
+docs/oscar-demo.md
 
 # Catch-all for internal notes: anything ending in .local.md, and a private/
 # directory for whatever does not fit a rule above. Prefer these over

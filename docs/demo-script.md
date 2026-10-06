@@ -119,7 +119,7 @@ It prints the server's `fedserver-…` address. Then, in each hospital's
 JupyterLab terminal, with that site's name and that address:
 
 ```bash
-curl -k -sSL https://dashboard.134.87.8.230.sslip.io/fl/bootstrap.sh | bash -s site_a <fedserver-host>
+curl -k -sSL https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/fl/bootstrap.sh | bash -s site_a <fedserver-host>
 ```
 
 **Give it the address.** With it, the bootstrap pins the server's name to the

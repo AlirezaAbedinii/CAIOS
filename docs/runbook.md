@@ -17,10 +17,10 @@ If these addresses look wrong, read that file rather than trusting this table.
 
 | What | Where |
 |---|---|
-| Dashboard | `https://dashboard.134.87.8.230.sslip.io` |
-| API (PAPI) | `https://api.134.87.8.230.sslip.io` — Swagger at `/docs` |
-| Login (Keycloak) | `https://auth.134.87.8.230.sslip.io` |
-| Vault | `https://vault.134.87.8.230.sslip.io` |
+| Dashboard | `https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io` |
+| API (PAPI) | `https://api.${CAIOS_PUBLIC_IP}.sslip.io` — Swagger at `/docs` |
+| Login (Keycloak) | `https://auth.${CAIOS_PUBLIC_IP}.sslip.io` |
+| Vault | `https://vault.${CAIOS_PUBLIC_IP}.sslip.io` |
 | Deployments | `https://<service>-<uuid>.pacs-deployments.192.168.104.105.sslip.io` |
 | Nomad UI | `https://192.168.104.181:4646` (subnet only) |
 | Registration console | `<dashboard>/admin` — sign in as `platform-admin` |
@@ -37,7 +37,7 @@ cd compose && docker compose --env-file ../configs/env/caios.env up -d
 ```
 
 > **It is `https` and must stay `https`** until the nginx proxy VM at
-> `134.87.8.230` stops redirecting `:80` to `:443`. Its redirect and Caddy's
+> `${CAIOS_PUBLIC_IP}` stops redirecting `:80` to `:443`. Its redirect and Caddy's
 > bounce would form a loop on the hostname the demo opens on.
 > `docs/nginx-proxy.md` has the change and the flip procedure.
 
@@ -46,8 +46,8 @@ cd compose && docker compose --env-file ../configs/env/caios.env up -d
 `192.168.104.181`, so curl reaches Caddy and never the proxy. Force it:
 
 ```bash
-curl -sD- --resolve dashboard.134.87.8.230.sslip.io:443:134.87.8.230 \
-     https://dashboard.134.87.8.230.sslip.io/ -o /dev/null | head -1
+curl -sD- --resolve dashboard.${CAIOS_PUBLIC_IP}.sslip.io:443:${CAIOS_PUBLIC_IP} \
+     https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/ -o /dev/null | head -1
 ```
 
 `Server: nginx/1.18.0 (Ubuntu)` is the proxy. `Server: Caddy` means you never
@@ -245,7 +245,7 @@ perfect-looking UI in which nothing works.
 
 ```bash
 docker compose logs --tail=100 papi
-curl -sk https://api.134.87.8.230.sslip.io/v1/catalog/modules | head -c 300
+curl -sk https://api.${CAIOS_PUBLIC_IP}.sslip.io/v1/catalog/modules | head -c 300
 ```
 
 If PAPI is not running at all, check `IS_PROD` first. Its Dockerfile sets
@@ -348,7 +348,7 @@ Check `config.json` first — it is served at
 `/assets/config/config.json` and shows exactly what the running page believes:
 
 ```bash
-curl -s https://dashboard.134.87.8.230.sslip.io/assets/config/config.json | python3 -m json.tool
+curl -s https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/assets/config/config.json | python3 -m json.tool
 ```
 
 `apiURL` and `issuer` are the two that matter. A wrong `issuer` produces a login
@@ -395,7 +395,7 @@ and is safe to email, paste or commit anywhere. The private half is
 Open this in the browser that has the problem and save the file:
 
 ```
-https://dashboard.134.87.8.230.sslip.io/caios-ca.pem
+https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/caios-ca.pem
 ```
 
 You will have to click past the certificate warning once to reach it, which is
@@ -408,8 +408,8 @@ Visit each hostname once and click through its warning, so the browser holds a
 separate exception for each:
 
 ```
-https://api.134.87.8.230.sslip.io/docs
-https://auth.134.87.8.230.sslip.io/realms/caios
+https://api.${CAIOS_PUBLIC_IP}.sslip.io/docs
+https://auth.${CAIOS_PUBLIC_IP}.sslip.io/realms/caios
 ```
 
 Then reload the dashboard. This works, but the exceptions are per-browser and
@@ -542,7 +542,7 @@ In each site workspace's terminal, with that site's name and the server's
 hostname (the `fedserver-...` address from `--status`):
 
 ```bash
-curl -k -sSL https://dashboard.134.87.8.230.sslip.io/fl/bootstrap.sh | bash -s site_a <the fedserver-... host from --status>
+curl -k -sSL https://dashboard.${CAIOS_PUBLIC_IP}.sslip.io/fl/bootstrap.sh | bash -s site_a <the fedserver-... host from --status>
 cd ~/caios-fl && ./run.sh
 ```
 
@@ -586,7 +586,7 @@ and the server sits at *Requesting initial parameters*.** The clients went
 through the public proxy, which resets gRPC. Their workspaces were bootstrapped
 without the server's address, from a bundle older than 2026-09-29, or they
 restarted since. From inside a site, `getent hosts <fedserver-host>` must print
-`CAIOS_EDGE_IP`, not `134.87.8.230`. Rerun the bootstrap with the address, or
+`CAIOS_EDGE_IP`, not `CAIOS_PUBLIC_IP`. Rerun the bootstrap with the address, or
 `bash scripts/check-fl-cluster.sh --bootstrap`. D-87.
 
 **Clients connect but nothing happens.** The server needs all three. Check
@@ -633,7 +633,7 @@ get the current `lb.domain`:
 | | hostname base |
 |---|---|
 | Deployments created before 2026-08-25 | `pacs-deployments.192.168.104.105.sslip.io` |
-| Deployments created after | `pacs-deployments.134.87.8.230.sslip.io` |
+| Deployments created after | `pacs-deployments.${CAIOS_PUBLIC_IP}.sslip.io` |
 
 Both are correct; nothing rewrites the old ones. **Always take an endpoint from
 `deploy-fl-demo.sh --status` or the dashboard rather than typing a base domain
